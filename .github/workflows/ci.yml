@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    # The same wlroots, Qt and compiler as the Arch packages are built with.
+    container: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: >
+          pacman -Syu --noconfirm --needed
+          gcc pkgconf cmake ninja git wlroots0.20 wayland wayland-protocols wlr-protocols libxkbcommon
+          pango cairo pam libcanberra qt6-base qt6-svg qt6-wayland layer-shell-qt lua shared-mime-info
+      # libtde is not in the Arch repositories; built and installed from its sources.
+      - name: Install libtde
+        run: |
+          git clone --depth 1 https://github.com/zskamljic/libtde.git /tmp/libtde
+          cmake -S /tmp/libtde -B /tmp/libtde/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build /tmp/libtde/build
+          cmake --install /tmp/libtde/build
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  format:
+    name: Formatting
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install clang-format
+        run: pacman -Syu --noconfirm --needed clang git
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: git ls-files '*.cpp' '*.hpp' | xargs clang-format --dry-run --Werror
