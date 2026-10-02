@@ -1,0 +1,9 @@
+[Unit]
+Description=Follow the size of the QEMU window
+
+[Service]
+ExecStart=/usr/local/bin/follow-window-size
+Restart=always
+
+[Install]
+WantedBy=default.target

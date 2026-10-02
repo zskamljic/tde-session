@@ -1,0 +1,196 @@
+#!/bin/bash
+# Arch Linux test machine for the TDE session, running under QEMU.
+#
+#   tools/vm create            download the Arch cloud image and set the machine up
+#   tools/vm run [--headless]  start the machine with a window (GDM logs straight into TDE)
+#   tools/vm ssh [command]     shell or command on the machine
+#   tools/vm deploy            install this checkout of the session on the machine
+#   tools/vm install FILE...   install packages built on the host (e.g. libtde, tde-ariadne)
+#   tools/vm screenshot FILE   save what the machine shows as a PNG
+#   tools/vm reset             throw the machine away, keeping the downloaded image
+#
+# Everything lives in ${TDE_VM_DIR:-~/.cache/tde-vm}. The user is "tde", password "tde".
+
+set -euo pipefail
+
+dir=${TDE_VM_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/tde-vm}
+source_dir=$(cd "$(dirname "$0")/.." && pwd)
+image_url=https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
+base=$dir/Arch-Linux-x86_64-cloudimg.qcow2
+disk=$dir/tde.qcow2
+seed=$dir/seed.iso
+key=$dir/id_ed25519
+port=${TDE_VM_SSH_PORT:-2222}
+
+packages=(
+    base-devel git cmake ninja rsync
+    gdm wlroots0.20 swaybg grim wtype wlr-randr ghostty gnome-text-editor xorg-xwayland xorg-xeyes xterm pango libnotify libcanberra sound-theme-freedesktop pipewire pipewire-pulse wireplumber layer-shell-qt wayland-protocols wlr-protocols
+    mesa noto-fonts adwaita-icon-theme
+    qt6-base qt6-svg qt6-wayland qt6-imageformats lua libarchive
+    gvfs udisks2 bubblewrap librsvg
+)
+
+ssh_options=(-i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+             -o LogLevel=ERROR -o ConnectTimeout=5)
+
+vm_ssh() { ssh "${ssh_options[@]}" -p "$port" tde@127.0.0.1 "$@"; }
+
+qemu() {
+    local display=$1
+    shift
+    qemu-system-x86_64 -name TDE -machine q35,accel=kvm -cpu host -smp 4 -m 4G \
+        -drive file="$disk",if=virtio,discard=unmap \
+        -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:"$port"-:22 \
+        -device virtio-tablet-pci -device virtio-keyboard-pci \
+        -audiodev pipewire,id=sound -device ich9-intel-hda -device hda-output,audiodev=sound \
+        -chardev socket,id=console,path="$dir/console.sock",server=on,wait=off,logfile="$dir/console.log" \
+        -serial chardev:console \
+        "$display" "$@"
+}
+
+wait_for_ssh() {
+    for _ in $(seq 120); do
+        vm_ssh true 2>/dev/null && return 0
+        sleep 5
+    done
+    echo "the machine did not come up" >&2
+    return 1
+}
+
+write_seed() {
+    local layout timezone
+    layout=$(localectl status | sed -n 's/.*X11 Layout: //p')
+    timezone=$(timedatectl show -p Timezone --value)
+    mkdir -p "$dir/seed"
+    cat >"$dir/seed/meta-data" <<EOF
+instance-id: tde
+local-hostname: tde
+EOF
+    cat >"$dir/seed/user-data" <<EOF
+#cloud-config
+users:
+  - name: tde
+    plain_text_passwd: tde
+    lock_passwd: false
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - $(cat "$key.pub")
+timezone: ${timezone:-UTC}
+write_files:
+  - path: /etc/gdm/custom.conf
+    content: |
+      [daemon]
+      AutomaticLoginEnable=True
+      AutomaticLogin=tde
+      WaylandEnable=true
+  - path: /var/lib/AccountsService/users/tde
+    content: |
+      [User]
+      Session=tde
+      SessionType=wayland
+  - path: /etc/X11/xorg.conf.d/00-keyboard.conf
+    content: |
+      Section "InputClass"
+          Identifier "keyboard"
+          MatchIsKeyboard "on"
+          Option "XkbLayout" "${layout:-us}"
+      EndSection
+  - path: /etc/environment
+    append: true
+    content: |
+      XKB_DEFAULT_LAYOUT=${layout:-us}
+      # virgl offers OpenGL 4.2 and terminals such as Ghostty want 4.3; what they use works.
+      MESA_GL_VERSION_OVERRIDE=4.3
+      MESA_GLSL_VERSION_OVERRIDE=430
+bootcmd:
+  - [systemctl, enable, --now, --no-block, sshd.service]
+runcmd:
+  - >-
+    pacman-key --init && pacman-key --populate archlinux &&
+    pacman -Syu --noconfirm --needed ${packages[*]} &&
+    systemctl enable gdm.service && touch /var/lib/tde-ready
+EOF
+    mkisofs -quiet -output "$seed" -volid cidata -joliet -rock "$dir/seed/user-data" "$dir/seed/meta-data"
+}
+
+create() {
+    mkdir -p "$dir"
+    if [[ ! -f $base ]]; then
+        curl -fL -o "$base.part" "$image_url"
+        curl -fsSL -o "$base.SHA256" "$image_url.SHA256"
+        # Checked before it takes its place, so a broken download is never taken for the image.
+        if [[ $(sha256sum "$base.part" | cut -d' ' -f1) != $(cut -d' ' -f1 "$base.SHA256") ]]; then
+            echo "the downloaded image does not match its checksum" >&2
+            rm -f "$base.part"
+            exit 1
+        fi
+        mv "$base.part" "$base"
+    fi
+    [[ -f $disk ]] && { echo "$disk already exists; use reset first" >&2; exit 1; }
+    [[ -f $key ]] || ssh-keygen -q -t ed25519 -N '' -C tde-vm -f "$key"
+    write_seed
+    qemu-img create -q -f qcow2 -F qcow2 -b "$base" "$disk" 30G
+
+    echo "setting the machine up, this downloads a few hundred megabytes of packages"
+    qemu -display none -drive file="$seed",media=cdrom,readonly=on -daemonize -pidfile "$dir/qemu.pid"
+    wait_for_ssh
+    until vm_ssh test -e /var/lib/tde-ready 2>/dev/null; do
+        vm_ssh 'sudo cloud-init status' 2>/dev/null | grep -q error && {
+            echo "set up failed, see: tools/vm ssh sudo cat /var/log/cloud-init-output.log" >&2
+            exit 1
+        }
+        sleep 10
+    done
+    deploy
+    vm_ssh sudo poweroff || true
+    while [[ -f $dir/qemu.pid ]] && kill -0 "$(cat "$dir/qemu.pid")" 2>/dev/null; do sleep 1; done
+    echo "ready: tools/vm run"
+}
+
+deploy() {
+    rsync -a --delete --exclude .git --exclude build -e "ssh ${ssh_options[*]} -p $port" \
+        "$source_dir/" tde@127.0.0.1:tde-session/
+    # Packages first: machines made before some were added get them, and builds need them. A
+    # whole upgrade, as Arch has no partial ones; errors stay in sight.
+    vm_ssh 'set -o pipefail
+            sudo pacman -Syu --noconfirm --needed '"${packages[*]}"' 2>&1 >/dev/null |
+                { grep -v "is up to date -- skipping" >&2 || true; } &&
+            cmake -S tde-session -B tde-session/build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr >/dev/null &&
+            cmake --build tde-session/build >/dev/null &&
+            sudo cmake --install tde-session/build >/dev/null &&
+            sudo install -m755 tde-session/tools/guest/follow-window-size /usr/local/bin/ &&
+            sudo install -m644 tde-session/tools/guest/follow-window-size.service /etc/systemd/user/ &&
+            sudo systemctl --global enable follow-window-size.service 2>/dev/null &&
+            { systemctl --user daemon-reload; systemctl --user restart follow-window-size.service; true; }'
+    echo "deployed; log out (Ctrl+Alt+Delete) or restart the machine to use it"
+}
+
+install_packages() {
+    (($#)) || { echo "usage: tools/vm install FILE..." >&2; exit 1; }
+    local names=()
+    for file in "$@"; do
+        scp -q "${ssh_options[@]}" -P "$port" "$file" tde@127.0.0.1:/tmp/
+        names+=("/tmp/$(basename "$file")")
+    done
+    vm_ssh sudo pacman -U --noconfirm "${names[@]}"
+}
+
+case ${1:-} in
+    create) create ;;
+    run)
+        gpu=(-device virtio-vga-gl,xres=1280,yres=768)
+        if [[ ${2:-} == --headless ]]; then
+            qemu -display egl-headless "${gpu[@]}" -daemonize -pidfile "$dir/qemu.pid"
+        else
+            qemu -display gtk,gl=on,show-cursor=on,grab-on-hover=on,zoom-to-fit=off "${gpu[@]}"
+        fi ;;
+    ssh) shift; vm_ssh "$@" ;;
+    deploy) deploy ;;
+    install) shift; install_packages "$@" ;;
+    screenshot)
+        [[ -n ${2:-} ]] || { echo "usage: tools/vm screenshot FILE" >&2; exit 1; }
+        vm_ssh 'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 grim -' >"$2" ;;
+    reset) rm -f "$disk" "$seed" ;;
+    *) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 1 ;;
+esac

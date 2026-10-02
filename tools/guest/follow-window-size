@@ -1,0 +1,28 @@
+#!/bin/bash
+# Part of the test machine, not of TDE: when the QEMU window is resized, the virtual GPU offers
+# the new size as its preferred mode; this switches the screen to it.
+
+set -u
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+
+apply() {
+    local status mode name
+    for status in /sys/class/drm/card*-*/status; do
+        [[ $(<"$status") == connected ]] || continue
+        mode=$(head -n1 "${status%/status}/modes")
+        name=${status%/status}
+        name=${name##*/card[0-9]-}
+        [[ -n $mode ]] && wlr-randr --output "$name" --custom-mode "$mode" 2>/dev/null
+    done
+}
+
+apply_everywhere() {
+    for socket in "$runtime"/wayland-[0-9]; do
+        [[ -S $socket ]] && WAYLAND_DISPLAY=${socket##*/} apply
+    done
+}
+
+apply_everywhere
+udevadm monitor --kernel --subsystem-match=drm | while read -r line; do
+    [[ $line == *change* ]] && apply_everywhere
+done
