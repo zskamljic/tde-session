@@ -24,7 +24,7 @@ port=${TDE_VM_SSH_PORT:-2222}
 
 packages=(
     base-devel git cmake ninja rsync
-    gdm wlroots0.20 swaybg grim wtype wlr-randr ghostty gnome-text-editor xorg-xwayland xorg-xeyes xterm pango libnotify libcanberra polkit-qt6 sound-theme-freedesktop pipewire pipewire-pulse wireplumber layer-shell-qt wayland-protocols wlr-protocols
+    gdm wlroots0.20 swaybg grim wtype wlr-randr ghostty gnome-text-editor xorg-xwayland xorg-xeyes xterm pango libnotify libcanberra libpulse polkit-qt6 sound-theme-freedesktop pipewire pipewire-pulse wireplumber layer-shell-qt wayland-protocols wlr-protocols
     mesa noto-fonts adwaita-icon-theme
     qt6-base qt6-svg qt6-wayland qt6-imageformats lua libarchive
     gvfs udisks2 bubblewrap librsvg

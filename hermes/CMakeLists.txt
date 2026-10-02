@@ -4,6 +4,7 @@ find_package(PolkitQt6-1 REQUIRED)
 find_package(Tde 0.2 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CANBERRA REQUIRED IMPORTED_TARGET libcanberra)
+pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
 
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
@@ -26,13 +27,16 @@ target_link_libraries(hermes-core PUBLIC tde-shell Qt6::Widgets Qt6::DBus)
 
 add_executable(tde-hermes
     src/main.cpp
+    src/Audio.cpp
     src/AuthDialog.cpp
     src/Bar.cpp
     src/Locking.cpp
     src/NotificationViews.cpp
     src/PolkitAgent.cpp
+    src/QuickSettings.cpp
     src/Sounds.cpp
     src/StatusNotifier.cpp
+    src/SystemStatus.cpp
     src/Taskbar.cpp
     src/Tray.cpp
     ${idle_header}
@@ -41,8 +45,8 @@ add_executable(tde-hermes
 target_include_directories(tde-hermes PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-hermes PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tde-hermes PRIVATE
-    hermes-core Qt6::Gui Qt6::Widgets Qt6::DBus LayerShellQt::Interface Tde::Tde PolkitQt6-1::Agent PkgConfig::CANBERRA
-    PkgConfig::WAYLAND_CLIENT)
+    hermes-core Qt6::Gui Qt6::Widgets Qt6::DBus LayerShellQt::Interface Tde::Tde PolkitQt6-1::Agent
+    PkgConfig::CANBERRA PkgConfig::PULSE PkgConfig::WAYLAND_CLIENT)
 install(TARGETS tde-hermes)
 
 if(TDE_SESSION_BUILD_TESTS)

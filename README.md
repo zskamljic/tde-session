@@ -73,7 +73,7 @@ cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
 sudo cmake --install build
 ```
 
-Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
+Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, libpulse, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
 The session runs swaybg for the background, a terminal, and Ariadne for files.
 
 ## Changing it

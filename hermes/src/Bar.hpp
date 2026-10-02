@@ -1,7 +1,9 @@
 #pragma once
 
+#include "Audio.hpp"
 #include "Notifications.hpp"
 #include "Sounds.hpp"
+#include "SystemStatus.hpp"
 
 #include <Windows.hpp>
 
@@ -25,8 +27,9 @@ class Taskbar;
 class Tray;
 
 // The bar along the top of the screen: the applications on the left, the clock in the
-// middle, with the calendar and the notifications behind it, the tray icons and the menu to
-// log out or shut down on the right. Notifications also show as banners below it.
+// middle, with the calendar and the notifications behind it, and on the right the tray
+// icons and the status of sound, network and battery, behind which are the quick settings. Notifications also show as
+// banners below it.
 class Bar : public QWidget {
     Q_OBJECT
 
@@ -44,7 +47,8 @@ protected:
 private:
     void updateClock();
     void layOut();
-    QMenu* createSystemMenu();
+    QMenu* createQuickSettings();
+    void updateStatusIcon();
     void pickAction(uint id, const QString& action);
     void raiseWindowOf(const QString& desktopEntry, const QString& appName);
 
@@ -57,7 +61,11 @@ private:
     Taskbar* m_taskbar = nullptr;
     QToolButton* m_clock = nullptr;
     Tray* m_tray = nullptr;
-    QToolButton* m_system = nullptr;
+    QToolButton* m_system = nullptr; // the status icons, which open the quick settings
+    Audio m_audio;
+    Brightness m_brightness;
+    Network m_network;
+    Battery m_battery;
     QTimer m_tick;
 };
 

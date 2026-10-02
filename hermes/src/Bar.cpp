@@ -4,6 +4,7 @@
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
 #include "PolkitAgent.hpp"
+#include "QuickSettings.hpp"
 #include "Taskbar.hpp"
 #include "Tray.hpp"
 
@@ -28,6 +29,8 @@
 #include <QTextCharFormat>
 #include <QToolButton>
 #include <QWidgetAction>
+
+#include <functional>
 
 using namespace Qt::StringLiterals;
 
@@ -158,13 +161,14 @@ Bar::Bar(QWidget* parent)
 
     m_system = new QToolButton(this);
     m_system->setAutoRaise(true);
-    m_system->setIconSize(QSize(16, 16));
-    m_system->setIcon(
-        shell::tintedIcon(u"system-shutdown-symbolic"_s, m_system->iconSize(), devicePixelRatioF(), colors.text));
-    m_system->setToolTip(u"Log Out, Restart or Shut Down"_s);
+    m_system->setToolTip(u"Sound, Network, Battery and Power"_s);
     m_system->setPopupMode(QToolButton::InstantPopup);
-    m_system->setStyleSheet(buttonStyle(u"padding: 0 8px;"_s));
-    m_system->setMenu(createSystemMenu());
+    m_system->setStyleSheet(buttonStyle(u"padding: 0 10px;"_s));
+    m_system->setMenu(createQuickSettings());
+    connect(&m_audio, &Audio::changed, this, &Bar::updateStatusIcon);
+    connect(&m_network, &Network::changed, this, &Bar::updateStatusIcon);
+    connect(&m_battery, &Battery::changed, this, &Bar::updateStatusIcon);
+    updateStatusIcon();
 
     // The clock moves on at the start of every minute.
     m_tick.setSingleShot(true);
@@ -219,29 +223,69 @@ void Bar::raiseWindowOf(const QString& desktopEntry, const QString& appName)
     }
 }
 
-QMenu* Bar::createSystemMenu()
+QMenu* Bar::createQuickSettings()
 {
     auto* menu = new QMenu(this);
-    menu->addAction(QIcon::fromTheme(u"system-lock-screen-symbolic"_s), u"Lock"_s, this, [this] { m_locking->lock(); });
-    menu->addAction(
-        QIcon::fromTheme(u"media-playback-pause-symbolic"_s), u"Suspend"_s, this, [] { power(u"Suspend"_s); });
-    menu->addAction(QIcon::fromTheme(u"system-reboot-symbolic"_s), u"Restart…"_s, this, [] {
-        if (tde::Dialog::confirm(nullptr, u"Restart"_s, u"Restart the computer?"_s,
-                u"Programs that are still open will be closed, and unsaved work in them is lost."_s, u"Restart"_s))
+    auto* panel = new QuickSettings(m_audio, m_brightness, m_network, m_battery, menu);
+    auto* action = new QWidgetAction(menu);
+    action->setDefaultWidget(panel);
+    menu->addAction(action);
+    connect(menu, &QMenu::aboutToShow, panel, &QuickSettings::refresh);
+
+    // Each after the menu has closed, so a question asked is not under it.
+    const auto then = [this, menu](std::function<void()> act) {
+        return [menu, act = std::move(act)] {
+            menu->close();
+            QTimer::singleShot(0, menu, act);
+        };
+    };
+    const QString unsaved = u"Programs that are still open will be closed, and unsaved work in them is lost."_s;
+    connect(panel, &QuickSettings::lockRequested, this, then([this] { m_locking->lock(); }));
+    connect(panel, &QuickSettings::suspendRequested, this, then([] { power(u"Suspend"_s); }));
+    connect(panel, &QuickSettings::restartRequested, this, then([unsaved] {
+        if (tde::Dialog::confirm(nullptr, u"Restart"_s, u"Restart the computer?"_s, unsaved, u"Restart"_s))
             power(u"Reboot"_s);
-    });
-    menu->addAction(QIcon::fromTheme(u"system-shutdown-symbolic"_s), u"Shut Down…"_s, this, [] {
-        if (tde::Dialog::confirm(nullptr, u"Shut Down"_s, u"Shut down the computer?"_s,
-                u"Programs that are still open will be closed, and unsaved work in them is lost."_s, u"Shut Down"_s))
+    }));
+    connect(panel, &QuickSettings::shutDownRequested, this, then([unsaved] {
+        if (tde::Dialog::confirm(nullptr, u"Shut Down"_s, u"Shut down the computer?"_s, unsaved, u"Shut Down"_s))
             power(u"PowerOff"_s);
-    });
-    menu->addSeparator();
-    menu->addAction(QIcon::fromTheme(u"system-log-out-symbolic"_s), u"Log Out…"_s, this, [] {
-        if (tde::Dialog::confirm(nullptr, u"Log Out"_s, u"Log out of this session?"_s,
-                u"Programs that are still open will be closed, and unsaved work in them is lost."_s, u"Log Out"_s))
+    }));
+    connect(panel, &QuickSettings::logOutRequested, this, then([unsaved] {
+        if (tde::Dialog::confirm(nullptr, u"Log Out"_s, u"Log out of this session?"_s, unsaved, u"Log Out"_s))
             logOut();
-    });
+    }));
     return menu;
+}
+
+// The icons of the network, the sound and the battery, side by side, as far as there are.
+void Bar::updateStatusIcon()
+{
+    QStringList names;
+    if (m_network.isAvailable())
+        names << m_network.iconName();
+    if (m_audio.isAvailable())
+        names << volumeIconName(m_audio.volume(), m_audio.isMuted());
+    if (m_battery.isPresent() && !m_battery.iconName().isEmpty())
+        names << m_battery.iconName();
+    if (names.isEmpty())
+        names << u"system-shutdown-symbolic"_s;
+
+    constexpr int Size = 16;
+    constexpr int Gap = 8;
+    const qreal ratio = devicePixelRatioF();
+    const QSize size(int(names.size()) * Size + (int(names.size()) - 1) * Gap, Size);
+    QPixmap pixmap(size * ratio);
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    for (int i = 0; i < names.size(); ++i) {
+        const QIcon icon = shell::tintedIcon(names[i], QSize(Size, Size), ratio, tde::theme::colors().text);
+        icon.paint(&painter, QRect(i * (Size + Gap), 0, Size, Size));
+    }
+    painter.end();
+    m_system->setIconSize(size);
+    m_system->setIcon(QIcon(pixmap));
+    layOut();
 }
 
 void Bar::updateClock()
