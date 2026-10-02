@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=TDE
+Comment=tofiffe's desktop environment
+Exec=tde-session
+TryExec=tde-session
+Type=Application
+DesktopNames=TDE

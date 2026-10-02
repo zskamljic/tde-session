@@ -1,0 +1,27 @@
+#!/bin/sh
+# Starts the TDE session. With --terminal, starts the preferred terminal instead, running
+# the command after -- in it when there is one.
+
+if [ "$1" = --terminal ]; then
+    shift
+    for terminal in "$TERMINAL" ghostty kitty alacritty foot konsole gnome-terminal xterm; do
+        if [ -n "$terminal" ] && command -v "$terminal" >/dev/null; then
+            if [ "$1" = -- ]; then
+                shift
+                # Each terminal has its own way of being told what to run.
+                case "${terminal##*/}" in
+                kitty | foot) exec "$terminal" "$@" ;;
+                gnome-terminal | kgx | ptyxis) exec "$terminal" -- "$@" ;;
+                *) exec "$terminal" -e "$@" ;;
+                esac
+            fi
+            exec "$terminal" "$@"
+        fi
+    done
+    echo "tde-session: no terminal found, set \$TERMINAL" >&2
+    exit 1
+fi
+
+export XDG_CURRENT_DESKTOP=TDE
+export XDG_SESSION_DESKTOP=tde
+exec tde-atlas "$@"
