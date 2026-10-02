@@ -76,7 +76,10 @@ The session runs swaybg for the background, a terminal, and Ariadne for files.
 ## Changing it
 
 The programs started with the session are listed in `/usr/share/tde/autostart`; a copy in
-`~/.config/tde/autostart` takes its place. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and
+`~/.config/tde/autostart` takes its place. Programs that start at login the usual way, from
+`/etc/xdg/autostart` and `~/.config/autostart`, start too, as systemd services that
+`tde-session.target` brings up and takes down with the session; those meant only for other
+desktops do not. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and
 friends, or else from the system layout that `localectl` sets.
 
 ## Testing in a virtual machine

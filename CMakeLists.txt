@@ -16,6 +16,7 @@ configure_file(tde-session.in tde-session @ONLY)
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/tde-session DESTINATION bin)
 install(FILES tde.desktop DESTINATION share/wayland-sessions)
 install(FILES data/autostart DESTINATION share/tde)
+install(FILES data/tde-session.target DESTINATION lib/systemd/user)
 
 add_subdirectory(shell)
 add_subdirectory(atlas)

@@ -57,15 +57,25 @@ int main(int argc, char* argv[])
     wl_event_loop_add_signal(server.eventLoop, SIGTERM, terminate, &server);
     wl_event_loop_add_signal(server.eventLoop, SIGINT, terminate, &server);
 
-    // Programs started through D-Bus or systemd need to find the display too.
+    // Programs started through D-Bus or systemd need to find the display too. Then the
+    // session's target starts, and with it the programs of the XDG autostart folders, which
+    // systemd makes services of; they look at XDG_CURRENT_DESKTOP, so it has to be there first,
+    // and those added since systemd last looked are found by reloading it.
     setenv("XDG_CURRENT_DESKTOP", "TDE", false);
     setenv("XDG_SESSION_TYPE", "wayland", true);
     atlas::Server::spawn("dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP "
-                         "XDG_SESSION_TYPE XDG_SESSION_DESKTOP");
+                         "XDG_SESSION_TYPE XDG_SESSION_DESKTOP && systemctl --user daemon-reload && "
+                         "systemctl --user start tde-session.target");
     // The path as an argument of its own, whatever characters it has.
     atlas::Server::spawn("exec /bin/sh \"$1\"", autostartFile());
 
     wlr_log(WLR_INFO, "running on WAYLAND_DISPLAY=%s", server.socketName().c_str());
     server.run();
+
+    // The programs that came with the session go with it, and nothing started from now on
+    // looks for this display.
+    [[maybe_unused]] const int stopped = std::system("systemctl --user stop tde-session.target; "
+                                                     "systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY "
+                                                     "XDG_SESSION_TYPE");
     return 0;
 }

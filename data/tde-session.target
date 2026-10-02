@@ -1,0 +1,8 @@
+[Unit]
+Description=TDE session
+Documentation=https://github.com/zskamljic/tde-session
+# The graphical session runs as long as this does, and with it the programs of the XDG
+# autostart folders, which systemd makes services of.
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target xdg-desktop-autostart.target
+After=graphical-session-pre.target
