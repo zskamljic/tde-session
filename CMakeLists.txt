@@ -19,3 +19,4 @@ install(FILES data/autostart DESTINATION share/tde)
 
 add_subdirectory(shell)
 add_subdirectory(atlas)
+add_subdirectory(argus)
