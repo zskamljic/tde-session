@@ -1,5 +1,6 @@
 find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus)
 find_package(LayerShellQt 6 REQUIRED)
+find_package(PolkitQt6-1 REQUIRED)
 find_package(Tde 0.2 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CANBERRA REQUIRED IMPORTED_TARGET libcanberra)
@@ -25,9 +26,11 @@ target_link_libraries(hermes-core PUBLIC tde-shell Qt6::Widgets Qt6::DBus)
 
 add_executable(tde-hermes
     src/main.cpp
+    src/AuthDialog.cpp
     src/Bar.cpp
     src/Locking.cpp
     src/NotificationViews.cpp
+    src/PolkitAgent.cpp
     src/Sounds.cpp
     src/StatusNotifier.cpp
     src/Taskbar.cpp
@@ -38,7 +41,7 @@ add_executable(tde-hermes
 target_include_directories(tde-hermes PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-hermes PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tde-hermes PRIVATE
-    hermes-core Qt6::Gui Qt6::Widgets Qt6::DBus LayerShellQt::Interface Tde::Tde PkgConfig::CANBERRA
+    hermes-core Qt6::Gui Qt6::Widgets Qt6::DBus LayerShellQt::Interface Tde::Tde PolkitQt6-1::Agent PkgConfig::CANBERRA
     PkgConfig::WAYLAND_CLIENT)
 install(TARGETS tde-hermes)
 

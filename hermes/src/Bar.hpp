@@ -20,6 +20,7 @@ using shell::Windows;
 
 class Banners;
 class Locking;
+class PolkitAgent;
 class Taskbar;
 class Tray;
 
@@ -52,6 +53,7 @@ private:
     std::unique_ptr<Banners> m_banners; // a window of its own
     Sounds m_sounds;
     Locking* m_locking = nullptr;
+    PolkitAgent* m_polkit = nullptr;
     Taskbar* m_taskbar = nullptr;
     QToolButton* m_clock = nullptr;
     Tray* m_tray = nullptr;

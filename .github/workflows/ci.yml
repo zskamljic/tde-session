@@ -16,7 +16,7 @@ jobs:
         run: >
           pacman -Syu --noconfirm --needed
           gcc pkgconf cmake ninja git wlroots0.20 wayland wayland-protocols wlr-protocols libxkbcommon
-          pango cairo pam libcanberra qt6-base qt6-svg qt6-wayland layer-shell-qt lua shared-mime-info
+          pango cairo pam libcanberra polkit-qt6 qt6-base qt6-svg qt6-wayland layer-shell-qt lua shared-mime-info
       # libtde is not in the Arch repositories; built and installed from its sources.
       - name: Install libtde
         run: |

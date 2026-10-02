@@ -27,6 +27,9 @@ a program such as a video player asks it to stay on), before the computer sleeps
 `/etc/pam.d/tde-cerberus`, as at the login prompt. Should the lock screen ever quit without
 unlocking, the session stays covered and a new one is started.
 
+Hermes is also the polkit agent: when a program asks to do something that needs a password,
+such as mounting a disk, it asks for it in a dialog, as GNOME does.
+
 Tray icons are status notifier items, which most programs with one use (through Qt,
 libappindicator or Electron). Programs that still use the old X11 tray can be shown with
 `xembedsniproxy` from KDE's plasma-workspace.
@@ -70,7 +73,7 @@ cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
 sudo cmake --install build
 ```
 
-Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, PAM, xkbcommon, Qt 6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
+Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
 The session runs swaybg for the background, a terminal, and Ariadne for files.
 
 ## Changing it

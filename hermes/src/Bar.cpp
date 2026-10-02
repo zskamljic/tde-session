@@ -3,6 +3,7 @@
 #include "Groups.hpp"
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
+#include "PolkitAgent.hpp"
 #include "Taskbar.hpp"
 #include "Tray.hpp"
 
@@ -132,6 +133,9 @@ Bar::Bar(QWidget* parent)
 
     m_tray = new Tray(this);
     m_locking = new Locking(this);
+    m_polkit = new PolkitAgent(this);
+    if (!m_polkit->start())
+        qWarning("tde-hermes: another program asks for passwords for polkit already");
     m_locking->setIdleMinutes(tde::desktop().lock.after);
     // Edits to the desktop's config take effect at once.
     auto* watcher = new tde::ConfigWatcher({tde::desktopConfigPath()}, this);
