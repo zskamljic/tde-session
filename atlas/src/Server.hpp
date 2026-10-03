@@ -204,7 +204,6 @@ private:
 
     // Window switching with Alt+Tab: the order is kept while cycling, and settled on release.
     bool m_cycling = false;
-    uint32_t m_cycleModifier = 0;
     std::vector<View*> m_cycle;
     size_t m_cycleIndex = 0;
 

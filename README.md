@@ -5,7 +5,7 @@ The desktop session of TDE, tofiffe's desktop environment:
 - **Atlas** (`tde-atlas`), the Wayland compositor, built on
   [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots);
 - **Argus** (`tde-argus`), the overview of every open window, shown with Super, which also
-  finds and starts applications;
+  finds and starts applications, and Flip 3D, shown with Super+Tab;
 - **Hermes** (`tde-hermes`), the bar along the top: the applications, the clock, the tray
   icons and the quick settings; it also shows the notifications;
 - **Cerberus** (`tde-cerberus`), the lock screen.
@@ -52,7 +52,8 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 | Super | Argus, the overview of all windows (arrows and Enter pick one, Delete closes it, Escape goes back); typing searches applications |
 | Super+A | All applications |
 | Super+L | Lock the screen |
-| Alt+Tab, Super+Tab | Switch windows |
+| Alt+Tab | Switch windows |
+| Super+Tab | Flip through the windows in 3D, as Windows 7 did; letting go of Super picks the one in front |
 | Alt+\` | Switch between windows of the same application |
 | Super+Up / Super+Down | Maximize / restore |
 | Super+Left / Super+Right | Fill the left / right half of the screen |

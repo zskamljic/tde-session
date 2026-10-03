@@ -13,6 +13,7 @@
 #include <fstream>
 #include <regex>
 #include <set>
+#include <string_view>
 #include <utility>
 
 namespace atlas {
@@ -68,12 +69,18 @@ bool isAlt(xkb_keysym_t sym)
     return sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R;
 }
 
-// Asks the bar to do `method`, or runs `otherwise` when the bar is not there.
-void hermes(const char* method, const char* otherwise)
+// Calls a method of a part of the shell over the session bus, or runs `otherwise` when that
+// part is not there.
+void callShell(std::string_view object, std::string_view call, std::string_view otherwise)
 {
-    Server::spawn(std::format("busctl --user call io.github.zskamljic.Hermes /io/github/zskamljic/Hermes "
-                              "io.github.zskamljic.Hermes {} 2>/dev/null || {}",
-        method, otherwise));
+    Server::spawn(std::format("busctl --user call {} {} 2>/dev/null || {}", object, call, otherwise));
+}
+
+// Asks the bar to do `method`.
+void hermes(std::string_view method, std::string_view otherwise)
+{
+    callShell("io.github.zskamljic.Hermes /io/github/zskamljic/Hermes",
+        std::format("io.github.zskamljic.Hermes {}", method), otherwise);
 }
 
 } // namespace
@@ -264,9 +271,7 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
         for (int i = 0; i < count; ++i) {
             if (isSuper(syms[i]) && m_superAlone)
                 spawn("tde-argus --toggle");
-            if (m_cycling
-                && ((isAlt(syms[i]) && m_cycleModifier == WLR_MODIFIER_ALT)
-                    || (isSuper(syms[i]) && m_cycleModifier == WLR_MODIFIER_LOGO)))
+            if (m_cycling && isAlt(syms[i]))
                 finishCycling();
         }
         m_superAlone = false;
@@ -299,13 +304,21 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
     // Switching windows; Shift goes backwards.
     if ((modifiers & ~Shift) == Alt || (modifiers & ~Shift) == Super) {
         if (sym == XKB_KEY_Tab || sym == XKB_KEY_ISO_Left_Tab) {
-            m_cycleModifier = modifiers & ~Shift;
+            // With Super, the windows flip through in 3D, drawn by the overview; once it shows,
+            // the keys are its own.
+            if ((modifiers & ~Shift) == Super) {
+                if (keyboardHeldByLayer())
+                    return false;
+                const bool backwards = modifiers & Shift;
+                callShell("io.github.zskamljic.Argus /io/github/zskamljic/Argus/Flip",
+                    std::format("io.github.zskamljic.Argus.Flip Show b {}", backwards), "exec tde-argus --flip");
+                return true;
+            }
             cycleWindows(modifiers & Shift, false);
             return true;
         }
         // The key above Tab, whatever it prints.
         if (keycode == KEY_GRAVE && (modifiers & ~Shift) == Alt) {
-            m_cycleModifier = Alt;
             cycleWindows(modifiers & Shift, true);
             return true;
         }

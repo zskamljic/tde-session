@@ -28,6 +28,7 @@ endforeach()
 add_executable(tde-argus
     src/main.cpp
     src/AppGrid.cpp
+    src/Flip.cpp
     src/Overview.cpp
     src/Toplevels.cpp
     ${protocol_sources}
