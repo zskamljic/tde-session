@@ -22,6 +22,14 @@ Server::~Server()
 {
     if (!display)
         return;
+    // wlroots wants nobody listening to what it destroys.
+    for (Listener* listener : {&m_newOutput, &m_layoutChange, &m_outputManagerApply, &m_outputManagerTest,
+             &m_newToplevel, &m_newPopup, &m_newDecoration, &m_newLock, &m_newLayerSurface, &m_newInput,
+             &m_newVirtualKeyboard, &m_newVirtualPointer, &m_cursorMotion, &m_cursorMotionAbsolute, &m_cursorButton,
+             &m_cursorAxis, &m_cursorFrame, &m_requestCursor, &m_requestCursorShape, &m_requestSelection,
+             &m_requestPrimarySelection, &m_requestStartDrag, &m_startDrag, &m_dragIconDestroy, &m_requestActivate,
+             &m_newInhibitor, &m_newCaptureSource, &m_newXwaylandSurface, &m_xwaylandReady})
+        listener->disconnect();
     wl_display_destroy_clients(display);
     m_popups.clear();
     m_views.clear();
