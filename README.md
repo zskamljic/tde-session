@@ -7,7 +7,7 @@ The desktop session of TDE, tofiffe's desktop environment:
 - **Argus** (`tde-argus`), the overview of every open window, shown with Super, which also
   finds and starts applications;
 - **Hermes** (`tde-hermes`), the bar along the top: the applications, the clock, the tray
-  icons and the menu to log out, restart or shut down; it also shows the notifications;
+  icons and the quick settings; it also shows the notifications;
 - **Cerberus** (`tde-cerberus`), the lock screen.
 
 The bar shows the running applications the way Windows 7 did, a button each with a dot below
@@ -15,13 +15,18 @@ for every window. A click switches to the application's window or, when it is ac
 minimizes it; with several windows, clicks go through them. A middle click opens another
 window, and a right click lists the windows.
 
+The status icons on the right open the quick settings: the volume, the brightness of a laptop's
+screen, the network, with a switch for Wi-Fi, and the battery, and buttons to lock the screen,
+log out, restart or shut down. The volume and brightness keys show their level near the bottom
+of the screen for a moment.
+
 Notifications show in the top right corner, below the bar, for five seconds, or until they
 are dealt with when urgent; the pointer over one keeps it. They sound as they arrive, from the
 freedesktop sound theme. A click on one opens what it is about and brings its program's window
 forward, and its buttons do what they say. Those that time out wait behind the clock, which shows
 a dot meanwhile, until they are dismissed.
 
-The screen locks with Super+L, from the bar's menu, after five minutes without input (unless
+The screen locks with Super+L, from the quick settings, after five minutes without input (unless
 a program such as a video player asks it to stay on), before the computer sleeps, and when
 `loginctl lock-session` asks. The password is checked through PAM, by
 `/etc/pam.d/tde-cerberus`, as at the login prompt. Should the lock screen ever quit without
@@ -56,6 +61,7 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 | Alt+F10 | Maximize or restore |
 | Ctrl+Alt+T | Terminal (`$TERMINAL`, else the first one installed) |
 | Super+E | Files |
+| Volume and brightness keys | Change them, showing the level |
 | Ctrl+Alt+Delete | Log out |
 | Ctrl+Alt+F1…F12 | Switch to another virtual terminal |
 
