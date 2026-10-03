@@ -1,4 +1,5 @@
 #include "Bar.hpp"
+#include "Osd.hpp"
 
 #include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
@@ -23,7 +24,7 @@ int main(int argc, char* argv[])
     parser.process(app);
 
     // One bar per session.
-    if (!QDBusConnection::sessionBus().registerService(u"io.github.zskamljic.Hermes"_s)) {
+    if (!QDBusConnection::sessionBus().registerService(QString::fromLatin1(hermes::BusService))) {
         qWarning("tde-hermes: already running");
         return 0;
     }

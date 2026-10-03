@@ -32,6 +32,7 @@ add_executable(tde-hermes
     src/Bar.cpp
     src/Locking.cpp
     src/NotificationViews.cpp
+    src/Osd.cpp
     src/PolkitAgent.cpp
     src/QuickSettings.cpp
     src/Sounds.cpp

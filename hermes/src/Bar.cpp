@@ -3,6 +3,7 @@
 #include "Groups.hpp"
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
+#include "Osd.hpp"
 #include "PolkitAgent.hpp"
 #include "QuickSettings.hpp"
 #include "Taskbar.hpp"
@@ -140,6 +141,8 @@ Bar::Bar(QWidget* parent)
     if (!m_polkit->start())
         qWarning("tde-hermes: another program asks for passwords for polkit already");
     m_locking->setIdleMinutes(tde::desktop().lock.after);
+    QDBusConnection::sessionBus().registerObject(QString::fromLatin1(BusPath),
+        new MediaKeys(m_audio, m_brightness, this), QDBusConnection::ExportScriptableSlots);
     // Edits to the desktop's config take effect at once.
     auto* watcher = new tde::ConfigWatcher({tde::desktopConfigPath()}, this);
     connect(watcher, &tde::ConfigWatcher::changed, this, [this] {
