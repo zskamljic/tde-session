@@ -3,11 +3,13 @@
 #include "ext-foreign-toplevel-list-v1-client-protocol.h"
 #include "ext-image-capture-source-v1-client-protocol.h"
 #include "ext-image-copy-capture-v1-client-protocol.h"
+#include "tde-window-info-v1-client-protocol.h"
 
 #include <Windows.hpp>
 
 #include <QImage>
 #include <QObject>
+#include <QRect>
 #include <QString>
 
 #include <cstdint>
@@ -25,6 +27,8 @@ SHELL_PROXY(ext_image_capture_source_v1, ext_image_capture_source_v1_destroy);
 SHELL_PROXY(ext_image_copy_capture_manager_v1, ext_image_copy_capture_manager_v1_destroy);
 SHELL_PROXY(ext_image_copy_capture_session_v1, ext_image_copy_capture_session_v1_destroy);
 SHELL_PROXY(ext_image_copy_capture_frame_v1, ext_image_copy_capture_frame_v1_destroy);
+SHELL_PROXY(tde_window_info_manager_v1, tde_window_info_manager_v1_destroy);
+SHELL_PROXY(tde_window_info_v1, tde_window_info_v1_destroy);
 
 namespace argus {
 
@@ -46,9 +50,14 @@ struct Toplevel {
     QString title;
     QString appId;
     QImage preview;
+    // Where it is on the screen, in the coordinates of the output layout; empty when not known.
+    QRect frame;
+    int recency = -1; // 0 for the window used last; -1 when not known
+    bool minimized = false;
 
     ListEntry* entry = nullptr; // its half from ext-foreign-toplevel-list, once paired
     std::unique_ptr<Capture> capture;
+    Proxy<tde_window_info_v1> info; // while asking where it is
 };
 
 // A window as ext-foreign-toplevel-list announces it.
@@ -80,12 +89,15 @@ public:
     void activate(quint64 id);
     void close(quint64 id);
 
-    // Captures what every window shows; previewChanged follows for each one that succeeds.
-    void capturePreviews();
+    // Captures what every window shows and asks where each one is; previewChanged follows for
+    // each picture taken, and refreshed once all are answered.
+    void refresh();
+    bool isRefreshing() const;
 
 signals:
     void windowsChanged();
     void previewChanged(quint64 id);
+    void refreshed();
 
 private:
     friend class Capture;
@@ -99,6 +111,8 @@ private:
     void listEntryClosed(ListEntry& entry);
     void pair();
     void captured(Toplevel& window, QImage image);
+    void located(Toplevel& window, const QRect& frame, int recency, bool minimized);
+    void checkRefreshed();
     void flush();
 
     Toplevel* byId(quint64 id);
@@ -110,6 +124,7 @@ private:
     Proxy<ext_foreign_toplevel_list_v1> m_list;
     Proxy<ext_foreign_toplevel_image_capture_source_manager_v1> m_sources;
     Proxy<ext_image_copy_capture_manager_v1> m_copier;
+    Proxy<tde_window_info_manager_v1> m_info;
 
     std::vector<std::unique_ptr<Toplevel>> m_shown;
     std::vector<std::unique_ptr<ListEntry>> m_entries;

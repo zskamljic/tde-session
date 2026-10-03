@@ -13,6 +13,7 @@ set(protocols
     ${WAYLAND_PROTOCOLS}/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-image-capture-source/ext-image-capture-source-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml
+    ${PROJECT_SOURCE_DIR}/protocols/tde-window-info-v1.xml
 )
 set(protocol_sources)
 foreach(xml ${protocols})

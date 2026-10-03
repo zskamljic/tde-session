@@ -7,12 +7,14 @@
 
 #include <LayerShellQt/Window>
 
+#include <QGraphicsOpacityEffect>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScreen>
 #include <QToolButton>
 
 #include <algorithm>
@@ -31,6 +33,13 @@ constexpr int SearchWidth = 360;
 constexpr int SearchHeight = 38;
 constexpr int ButtonSize = 48;
 const QSize PlaceholderSize(480, 320); // for windows not captured yet
+constexpr int AnimationTime = 250; // ms, all the way
+constexpr int Patience = 150; // ms to wait for pictures of the windows before opening
+
+QRectF interpolate(const QRectF& from, const QRectF& to, double t)
+{
+    return QRectF(from.topLeft() + (to.topLeft() - from.topLeft()) * t, from.size() + (to.size() - from.size()) * t);
+}
 
 } // namespace
 
@@ -109,11 +118,14 @@ std::vector<QRect> layOut(const std::vector<QSize>& sizes, const QRect& area, in
     return rects;
 }
 
-Overview::Overview(QWidget* parent)
+Overview::Overview(Toplevels& toplevels, QWidget* parent)
     : QWidget(parent)
+    , m_toplevels(toplevels)
 {
     setWindowTitle(u"Overview"_s);
     setMouseTracking(true);
+    // The windows show through while it opens and closes.
+    setAttribute(Qt::WA_TranslucentBackground);
 
     // Typing anywhere goes to the search field, which hands the keys that move around on to us.
     m_search = new QLineEdit(this);
@@ -173,11 +185,39 @@ Overview::Overview(QWidget* parent)
         if (isVisible())
             relayout();
     });
+
+    for (QWidget* widget : std::initializer_list<QWidget*> {m_search, m_appsButton, m_grid}) {
+        auto* fade = new QGraphicsOpacityEffect(widget);
+        widget->setGraphicsEffect(fade);
+        m_fades.push_back(fade);
+    }
+    m_animation.setEasingCurve(QEasingCurve::OutCubic);
+    connect(&m_animation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        m_shown = value.toDouble();
+        for (auto* fade : m_fades)
+            fade->setOpacity(m_shown);
+        update();
+    });
+    connect(&m_animation, &QVariantAnimation::finished, this, [this] {
+        if (m_closing) {
+            m_closing = false;
+            hide();
+        }
+    });
+
+    // It opens once the windows are pictured and placed, or a moment later without them.
+    m_patience.setSingleShot(true);
+    m_patience.setInterval(Patience);
+    connect(&m_patience, &QTimer::timeout, this, &Overview::appear);
+    connect(&m_toplevels, &Toplevels::refreshed, this, [this] {
+        if (m_opening)
+            appear();
+    });
 }
 
 void Overview::Toggle()
 {
-    if (isVisible())
+    if ((isVisible() && !m_closing) || m_opening)
         Hide();
     else
         Show();
@@ -185,26 +225,78 @@ void Overview::Toggle()
 
 void Overview::Show()
 {
-    if (isVisible())
+    // Closing, it turns around.
+    if (m_closing) {
+        m_closing = false;
+        m_chosen = 0;
+        animateTo(1);
+        return;
+    }
+    if (isVisible() || m_opening)
         return;
     m_hovered = 0;
     m_hoveringClose = false;
+    m_chosen = 0;
     m_search->clear();
     m_appsButton->setChecked(false);
-    m_toplevels.capturePreviews();
+    m_opening = true;
+    m_patience.start();
+    m_toplevels.refresh();
+}
+
+void Overview::appear()
+{
+    if (!m_opening)
+        return;
+    m_opening = false;
+    m_patience.stop();
     relayout();
+    m_shown = 0;
+    for (auto* fade : m_fades)
+        fade->setOpacity(0);
     show();
     m_search->setFocus();
+    animateTo(1);
 }
 
 void Overview::Hide()
 {
-    hide();
+    closeOnto(0);
+}
+
+void Overview::closeOnto(quint64 chosen)
+{
+    if (m_opening) {
+        m_opening = false;
+        m_patience.stop();
+    }
+    if (!isVisible())
+        return;
+    m_closing = true;
+    m_chosen = chosen;
+    m_hovered = 0;
+    animateTo(0);
+}
+
+void Overview::animateTo(double shown)
+{
+    m_animation.stop();
+    m_animation.setDuration(std::max(1, int(AnimationTime * std::abs(shown - m_shown))));
+    m_animation.setStartValue(m_shown);
+    m_animation.setEndValue(shown);
+    m_animation.start();
+}
+
+QRect Overview::frameOf(const Toplevel& window) const
+{
+    if (window.frame.isEmpty() || window.minimized)
+        return {};
+    return window.frame.translated(-(screen() ? screen()->geometry().topLeft() : QPoint()));
 }
 
 void Overview::ToggleApplications()
 {
-    if (isVisible() && m_appsButton->isChecked() && m_search->text().isEmpty()) {
+    if (isVisible() && !m_closing && m_appsButton->isChecked() && m_search->text().isEmpty()) {
         Hide();
         return;
     }
@@ -289,49 +381,74 @@ void Overview::paintEvent(QPaintEvent*)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    painter.fillRect(rect(), colors.header.darker(140));
+    QColor background = colors.header.darker(140);
+    background.setAlphaF(float(m_shown));
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(rect(), background);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     if (showingApps())
         return;
 
-    for (const Slot& slot : m_slots) {
+    // The window it closes onto goes last, above the others.
+    std::vector<const Slot*> order;
+    for (const Slot& slot : m_slots)
+        order.push_back(&slot);
+    std::ranges::stable_partition(order, [this](const Slot* slot) { return slot->id != m_chosen; });
+
+    for (const Slot* slot : order) {
         const auto it
-            = std::ranges::find_if(m_toplevels.windows(), [&](const auto& window) { return window->id == slot.id; });
+            = std::ranges::find_if(m_toplevels.windows(), [&](const auto& window) { return window->id == slot->id; });
         if (it == m_toplevels.windows().end())
             continue;
         const Toplevel& window = **it;
-        const bool hovered = slot.id == m_hovered;
+        const bool hovered = slot->id == m_hovered && settled();
+
+        // From where the window is to its place; those not on the screen grow in its place.
+        QRectF start = frameOf(window);
+        double opacity = 1;
+        if (start.isEmpty()) {
+            const QRectF target(slot->preview);
+            start = QRectF(QPointF(), target.size() * 0.85);
+            start.moveCenter(target.center());
+            opacity = m_shown;
+        }
+        const QRectF preview = interpolate(start, QRectF(slot->preview), m_shown);
+        const double radius = Radius * m_shown;
+        painter.setOpacity(opacity);
 
         if (hovered) {
             painter.setPen(QPen(colors.accent, 3));
             painter.setBrush(Qt::NoBrush);
-            painter.drawRoundedRect(QRectF(slot.preview).adjusted(-4, -4, 4, 4), Radius + 3, Radius + 3);
+            painter.drawRoundedRect(preview.adjusted(-4, -4, 4, 4), Radius + 3, Radius + 3);
         }
 
         QPainterPath shape;
-        shape.addRoundedRect(QRectF(slot.preview), Radius, Radius);
+        shape.addRoundedRect(preview, radius, radius);
         if (window.preview.isNull()) {
             painter.fillPath(shape, colors.window);
             const QIcon icon = shell::applicationIcon(nullptr, window.appId.toLower());
-            const int size = std::min({96, slot.preview.width() / 2, slot.preview.height() / 2});
-            icon.paint(&painter, QRect(slot.preview.center() - QPoint(size / 2, size / 2), QSize(size, size)));
+            const int size = int(std::min({96.0, preview.width() / 2, preview.height() / 2}));
+            icon.paint(&painter, QRect(preview.center().toPoint() - QPoint(size / 2, size / 2), QSize(size, size)));
         } else {
             painter.save();
             painter.setClipPath(shape);
-            painter.drawImage(QRectF(slot.preview), window.preview);
+            painter.drawImage(preview, window.preview);
             painter.restore();
         }
 
+        painter.setOpacity(m_shown);
         const QString title = window.title.isEmpty() ? window.appId : window.title;
         painter.setPen(hovered ? colors.text : colors.dimText);
         painter.drawText(
-            slot.title, Qt::AlignCenter, painter.fontMetrics().elidedText(title, Qt::ElideRight, slot.title.width()));
+            slot->title, Qt::AlignCenter, painter.fontMetrics().elidedText(title, Qt::ElideRight, slot->title.width()));
+        painter.setOpacity(1);
 
         if (hovered) {
             painter.setPen(Qt::NoPen);
             painter.setBrush(m_hoveringClose ? colors.closeHover : colors.header);
-            painter.drawEllipse(slot.closeButton);
+            painter.drawEllipse(slot->closeButton);
             painter.setPen(QPen(m_hoveringClose ? Qt::white : colors.text, 1.5, Qt::SolidLine, Qt::RoundCap));
-            const QPointF c = QRectF(slot.closeButton).center();
+            const QPointF c = QRectF(slot->closeButton).center();
             constexpr qreal s = 4.0;
             painter.drawLine(c + QPointF(-s, -s), c + QPointF(s, s));
             painter.drawLine(c + QPointF(-s, s), c + QPointF(s, -s));
@@ -367,6 +484,8 @@ void Overview::setHovered(quint64 id)
 
 void Overview::mouseMoveEvent(QMouseEvent* event)
 {
+    if (m_closing)
+        return;
     const Slot* slot = slotAt(event->position().toPoint());
     const bool onClose = slot && slot->closeButton.contains(event->position().toPoint());
     if (onClose != m_hoveringClose) {
@@ -383,7 +502,7 @@ void Overview::leaveEvent(QEvent*)
 
 void Overview::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (event->button() != Qt::LeftButton && event->button() != Qt::MiddleButton)
+    if (m_closing || (event->button() != Qt::LeftButton && event->button() != Qt::MiddleButton))
         return;
     const Slot* slot = slotAt(event->position().toPoint());
     if (!slot && showingApps()) {
@@ -412,6 +531,8 @@ bool Overview::eventFilter(QObject* watched, QEvent* event)
 // Keys that select and open things; everything else is typed into the search.
 bool Overview::handleKey(QKeyEvent* event)
 {
+    if (m_closing)
+        return true;
     if (event->key() == Qt::Key_Escape) {
         // Back one step: from a search, from all applications, then out of the overview.
         if (!m_search->text().isEmpty())
@@ -481,8 +602,9 @@ bool Overview::handleKey(QKeyEvent* event)
 
 void Overview::activate(quint64 id)
 {
-    Hide();
+    // The window comes forward behind the overview, which closes onto it.
     m_toplevels.activate(id);
+    closeOnto(id);
 }
 
 } // namespace argus

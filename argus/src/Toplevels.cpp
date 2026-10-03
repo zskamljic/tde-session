@@ -215,6 +215,8 @@ void Toplevels::global(void* data, wl_registry* registry, uint32_t name, const c
     } else if (std::strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) == 0) {
         self->m_copier.reset(
             bind.operator()<ext_image_copy_capture_manager_v1>(ext_image_copy_capture_manager_v1_interface, 1));
+    } else if (std::strcmp(interface, tde_window_info_manager_v1_interface.name) == 0) {
+        self->m_info.reset(bind.operator()<tde_window_info_manager_v1>(tde_window_info_manager_v1_interface, 1));
     }
 }
 
@@ -243,6 +245,7 @@ void Toplevels::sync()
     }
     pair();
     emit windowsChanged();
+    checkRefreshed();
 }
 
 void Toplevels::addListEntry(ext_foreign_toplevel_handle_v1* handle)
@@ -284,9 +287,11 @@ void Toplevels::listEntryClosed(ListEntry& entry)
 {
     if (entry.window) {
         entry.window->capture.reset();
+        entry.window->info.reset();
         entry.window->entry = nullptr;
     }
     std::erase_if(m_entries, [&](const auto& e) { return e.get() == &entry; });
+    checkRefreshed();
 }
 
 void Toplevels::pair()
@@ -320,28 +325,64 @@ void Toplevels::close(quint64 id)
     m_windows.close(id);
 }
 
-void Toplevels::capturePreviews()
+void Toplevels::refresh()
 {
-    if (!m_sources || !m_copier || !m_shm)
-        return;
+    static const tde_window_info_v1_listener listener {
+        .info =
+            [](void* data, tde_window_info_v1*, int32_t x, int32_t y, uint32_t width, uint32_t height, uint32_t recency,
+                uint32_t flags) {
+                auto* window = static_cast<Toplevel*>(data);
+                window->entry->owner->located(*window, QRect(x, y, int(width), int(height)), int(recency),
+                    flags & TDE_WINDOW_INFO_V1_FLAGS_MINIMIZED);
+            },
+    };
     for (const auto& window : m_shown) {
-        if (!window->entry || window->capture)
+        if (!window->entry)
             continue;
-        auto* source = ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
-            m_sources.get(), window->entry->handle.get());
-        window->capture = std::make_unique<Capture>(*this, *window, source);
+        if (!window->capture && m_sources && m_copier && m_shm) {
+            auto* source = ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+                m_sources.get(), window->entry->handle.get());
+            window->capture = std::make_unique<Capture>(*this, *window, source);
+        }
+        if (!window->info && m_info) {
+            window->info.reset(tde_window_info_manager_v1_get_info(m_info.get(), window->entry->handle.get()));
+            tde_window_info_v1_add_listener(window->info.get(), &listener, window.get());
+        }
     }
     flush();
+    checkRefreshed();
+}
+
+bool Toplevels::isRefreshing() const
+{
+    return std::ranges::any_of(m_shown, [](const auto& window) { return window->capture || window->info; });
+}
+
+void Toplevels::checkRefreshed()
+{
+    if (!isRefreshing())
+        emit refreshed();
 }
 
 void Toplevels::captured(Toplevel& window, QImage image)
 {
     // Destroys the capture that called; nothing of it may run after this.
     window.capture.reset();
-    if (image.isNull())
-        return;
-    window.preview = std::move(image);
-    emit previewChanged(window.id);
+    if (!image.isNull()) {
+        window.preview = std::move(image);
+        emit previewChanged(window.id);
+    }
+    checkRefreshed();
+}
+
+void Toplevels::located(Toplevel& window, const QRect& frame, int recency, bool minimized)
+{
+    // The compositor is done with the object; this lets go of it too.
+    window.info.reset();
+    window.frame = frame;
+    window.recency = frame.isEmpty() ? -1 : recency;
+    window.minimized = minimized;
+    checkRefreshed();
 }
 
 void Toplevels::flush()

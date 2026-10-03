@@ -51,11 +51,12 @@ int main(int argc, char* argv[])
     tde::setDesktop(tde::loadDesktopConfig());
     tde::theme::apply(app, tde::desktop().appearance);
 
-    argus::Overview overview;
-    if (!overview.isSupported()) {
+    argus::Toplevels toplevels;
+    if (!toplevels.isSupported()) {
         qCritical("tde-argus: the compositor does not let programs list windows");
         return 1;
     }
+    argus::Overview overview(toplevels);
     bus.registerObject(Path, &overview, QDBusConnection::ExportScriptableSlots);
     if (applications)
         overview.ToggleApplications();
