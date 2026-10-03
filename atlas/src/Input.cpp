@@ -9,6 +9,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
+#include <format>
 #include <fstream>
 #include <regex>
 #include <set>
@@ -65,6 +66,14 @@ bool isSuper(xkb_keysym_t sym)
 bool isAlt(xkb_keysym_t sym)
 {
     return sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R;
+}
+
+// Asks the bar to do `method`, or runs `otherwise` when the bar is not there.
+void hermes(const char* method, const char* otherwise)
+{
+    Server::spawn(std::format("busctl --user call io.github.zskamljic.Hermes /io/github/zskamljic/Hermes "
+                              "io.github.zskamljic.Hermes {} 2>/dev/null || {}",
+        method, otherwise));
 }
 
 } // namespace
@@ -365,20 +374,21 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
     }
 
     switch (sym) {
+    // The bar changes them and shows it; without it, they still change.
     case XKB_KEY_XF86AudioLowerVolume:
-        spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-");
+        hermes("LowerVolume", "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-");
         return true;
     case XKB_KEY_XF86AudioRaiseVolume:
-        spawn("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+");
+        hermes("RaiseVolume", "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+");
         return true;
     case XKB_KEY_XF86AudioMute:
-        spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+        hermes("ToggleMute", "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
         return true;
     case XKB_KEY_XF86MonBrightnessUp:
-        spawn("brightnessctl set +10%");
+        hermes("RaiseBrightness", "brightnessctl set +5%");
         return true;
     case XKB_KEY_XF86MonBrightnessDown:
-        spawn("brightnessctl set 10%-");
+        hermes("LowerBrightness", "brightnessctl set 5%-");
         return true;
     default:
         return false;
