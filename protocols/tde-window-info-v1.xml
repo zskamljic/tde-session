@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="tde_window_info_v1">
+  <description summary="where windows are on the screen">
+    Tells the shell where windows are and how recently they were used, so that
+    it can animate them from where they are, as the overview and window
+    switchers do. The windows are those of ext-foreign-toplevel-list.
+  </description>
+
+  <interface name="tde_window_info_manager_v1" version="1">
+    <request name="destroy" type="destructor"/>
+
+    <request name="get_info">
+      <description summary="ask about a window">
+        The info event of the new object answers once, and the object is
+        destroyed by the compositor right after.
+      </description>
+      <arg name="id" type="new_id" interface="tde_window_info_v1"/>
+      <arg name="toplevel" type="object" interface="ext_foreign_toplevel_handle_v1"/>
+    </request>
+  </interface>
+
+  <interface name="tde_window_info_v1" version="1">
+    <enum name="flags" bitfield="true">
+      <entry name="minimized" value="1"/>
+    </enum>
+
+    <event name="info" type="destructor">
+      <description summary="where the window is">
+        The window's frame in the coordinates of the output layout, title bar
+        included and shadow left out, as a picture of the window shows it.
+        Recency is 0 for the window used last, 1 for the one before it, and so
+        on. A window that is gone has a width and height of 0.
+      </description>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+      <arg name="recency" type="uint"/>
+      <arg name="flags" type="uint" enum="flags"/>
+    </event>
+  </interface>
+</protocol>

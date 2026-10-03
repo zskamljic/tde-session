@@ -134,6 +134,7 @@ private:
     void setUpProtocols();
     void setUpXwayland();
     void setUpLock();
+    void setUpWindowInfo();
     void newLock(wlr_session_lock_v1* lock);
     void coverOutputs();
 

@@ -86,6 +86,7 @@ bool Server::start()
     setUpProtocols();
     setUpXwayland();
     setUpLock();
+    setUpWindowInfo();
 
     const char* socket = wl_display_add_socket_auto(display);
     if (!socket) {

@@ -4,6 +4,7 @@ pkg_check_modules(WAYLAND_SERVER REQUIRED IMPORTED_TARGET wayland-server)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
 pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
 pkg_get_variable(WLR_PROTOCOLS wlr-protocols pkgdatadir)
+pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
 pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
 
 # The wlroots headers include the server side of layer-shell, which compositors generate.
@@ -12,6 +13,18 @@ set(layer_shell_header ${CMAKE_CURRENT_BINARY_DIR}/wlr-layer-shell-unstable-v1-p
 add_custom_command(OUTPUT ${layer_shell_header}
     COMMAND ${WAYLAND_SCANNER} server-header ${layer_shell_xml} ${layer_shell_header}
     DEPENDS ${layer_shell_xml})
+
+# TDE's own protocol, which names windows the way ext-foreign-toplevel-list does.
+set(protocol_sources)
+foreach(xml ${PROJECT_SOURCE_DIR}/protocols/tde-window-info-v1.xml
+            ${WAYLAND_PROTOCOLS}/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml)
+    get_filename_component(name ${xml} NAME_WE)
+    set(header ${CMAKE_CURRENT_BINARY_DIR}/${name}-protocol.h)
+    set(code ${CMAKE_CURRENT_BINARY_DIR}/${name}-protocol.c)
+    add_custom_command(OUTPUT ${header} COMMAND ${WAYLAND_SCANNER} server-header ${xml} ${header} DEPENDS ${xml})
+    add_custom_command(OUTPUT ${code} COMMAND ${WAYLAND_SCANNER} private-code ${xml} ${code} DEPENDS ${xml})
+    list(APPEND protocol_sources ${header} ${code})
+endforeach()
 
 add_executable(tde-atlas
     src/main.cpp
@@ -22,7 +35,9 @@ add_executable(tde-atlas
     src/Placement.cpp
     src/Server.cpp
     src/View.cpp
+    src/WindowInfo.cpp
     ${layer_shell_header}
+    ${protocol_sources}
 )
 target_include_directories(tde-atlas PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-atlas PRIVATE
