@@ -1,6 +1,7 @@
 # What the shell's programs share: the installed applications and their icons, the windows
-# open on the compositor, and owning Wayland objects.
+# open on the compositor, its displays, the session's settings, and owning Wayland objects.
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui)
+find_package(Tde 0.2 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
@@ -12,9 +13,11 @@ endif()
 
 set(CMAKE_AUTOMOC ON)
 
-# C bindings for the protocols of the window list, generated from their descriptions.
+# C bindings for the protocols of the window list and the displays, generated from their
+# descriptions.
 set(protocols
     ${WLR_PROTOCOLS}/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
+    ${WLR_PROTOCOLS}/unstable/wlr-output-management-unstable-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/xdg-activation/xdg-activation-v1.xml
 )
 set(protocol_sources)
@@ -30,12 +33,14 @@ endforeach()
 add_library(tde-shell STATIC
     src/Applications.cpp
     src/Catalog.cpp
+    src/Displays.cpp
     src/Icons.cpp
+    src/SessionConfig.cpp
     src/Windows.cpp
     ${protocol_sources}
 )
 target_include_directories(tde-shell PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(tde-shell PUBLIC Qt6::Core Qt6::Gui PkgConfig::WAYLAND_CLIENT)
+target_link_libraries(tde-shell PUBLIC Qt6::Core Qt6::Gui Tde::Tde PkgConfig::WAYLAND_CLIENT)
 
 if(TDE_SESSION_BUILD_TESTS)
     add_subdirectory(tests)
