@@ -407,6 +407,16 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
         }
     }
 
+    // Screenshots, taken by the overview: of what is picked, the screens, or the window in use.
+    if (sym == XKB_KEY_Print) {
+        const auto [method, option] = modifiers == Shift ? std::pair {"TakeScreen", "--screenshot-screen"}
+            : modifiers == Alt                           ? std::pair {"TakeWindow", "--screenshot-window"}
+                                                         : std::pair {"Show", "--screenshot"};
+        callShell("io.github.zskamljic.Argus /io/github/zskamljic/Argus/Screenshot",
+            std::format("io.github.zskamljic.Argus.Screenshot {}", method), std::format("exec tde-argus {}", option));
+        return true;
+    }
+
     switch (sym) {
     // The bar changes them and shows it; without it, they still change.
     case XKB_KEY_XF86AudioLowerVolume:
