@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+Comment=The desktop's background, switching windows and the lock screen
+Icon=preferences-desktop
+Exec=tde-daedalus
+Categories=Settings;DesktopSettings;Qt;
+Keywords=background;wallpaper;picture;switcher;alt-tab;lock;screen;idle;
+OnlyShowIn=TDE;
