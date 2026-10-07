@@ -5,8 +5,8 @@ The desktop session of TDE, tofiffe's desktop environment:
 - **Atlas** (`tde-atlas`), the Wayland compositor, built on
   [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots);
 - **Argus** (`tde-argus`), the overview of every open window, shown with Super, which also
-  finds and starts applications; the window switchers of Alt+Tab and Super+Tab; and the
-  desktop's background;
+  finds and starts applications; the window switchers of Alt+Tab and Super+Tab; screenshots;
+  and the desktop's background;
 - **Hermes** (`tde-hermes`), the bar along the top: the applications, the clock, the tray
   icons and the quick settings; it also shows the notifications;
 - **Cerberus** (`tde-cerberus`), the lock screen;
@@ -64,6 +64,8 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 | Alt+F10 | Maximize or restore |
 | Ctrl+Alt+T | Terminal (`$TERMINAL`, else the first one installed) |
 | Super+E | Files |
+| Print | Screenshot of a selection, a screen or a window, picked on the frozen screen |
+| Shift+Print / Alt+Print | Screenshot of the screens / of the window in use, at once |
 | Volume and brightness keys | Change them, showing the level |
 | Ctrl+Alt+Delete | Log out |
 | Ctrl+Alt+F1…F12 | Switch to another virtual terminal |
@@ -75,6 +77,13 @@ Typing finds applications by name, by what they are ("terminal") and by their ke
 Enter starts the first one; the button at the bottom shows all of them. Each application starts in
 a systemd scope of its own, rather than as part of Argus.
 
+Print freezes the screens for a screenshot: drawing on them selects a part, which can be moved
+and resized by its edges, and the buttons at the bottom switch to taking a whole screen or a
+window, picked with a click (S, C and W switch too). Enter or the round button takes it,
+Escape gives up. Screenshots are saved in `~/Pictures/Screenshots` and copied to the clipboard;
+the notification that says so shows the file in the file manager. Windows are taken alone, with
+their rounded corners see-through.
+
 ## Building
 
 ```sh
@@ -83,7 +92,7 @@ sudo cmake --install build
 ```
 
 Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, libpulse, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
-The session runs a terminal, and Ariadne for files.
+The session runs a terminal, Ariadne for files, and xdg-desktop-portal with its GTK and wlroots back ends.
 
 ## Changing it
 
@@ -102,6 +111,15 @@ plugged in together, and come back whenever that set is plugged in again; window
 with their display, and those on one that goes move to another. The bar, the notifications
 and the window switchers are on the primary display; every display has its background and
 its part of the overview.
+
+Files are opened and saved through xdg-desktop-portal, which `tde-portals.conf` has pick them
+in [Ariadne](https://github.com/zskamljic/tde-ariadne) when it is installed. Programs that ask the
+portal for a screenshot or a colour on the screen get them from Argus, the way Print takes
+them; the screen is shared by `xdg-desktop-portal-wlr` (which asks which display to share with
+`slurp`), and the rest is left to GTK's portals. The session sets
+`QT_QPA_PLATFORMTHEME=xdgdesktopportal` and `GTK_USE_PORTAL=1`, unless they are set already, so
+Qt and GTK 3 programs use the portal too. Atlas places the picker over the window it was opened
+for, which the program shares with it through xdg-foreign.
 
 The programs started with the session are listed in `/usr/share/tde/autostart`; a copy in
 `~/.config/tde/autostart` takes its place. Programs that start at login the usual way, from
