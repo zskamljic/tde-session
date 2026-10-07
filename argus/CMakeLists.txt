@@ -10,6 +10,7 @@ set(CMAKE_AUTOMOC ON)
 
 # C bindings for the protocols the overview speaks, generated from their descriptions.
 set(protocols
+    ${WAYLAND_PROTOCOLS}/staging/ext-data-control/ext-data-control-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-image-capture-source/ext-image-capture-source-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml
@@ -29,11 +30,13 @@ add_executable(tde-argus
     src/main.cpp
     src/AppGrid.cpp
     src/Background.cpp
+    src/Clipboard.cpp
     src/Desktop.cpp
     src/Flip.cpp
     src/ImageCopy.cpp
     src/Overview.cpp
     src/Picker.cpp
+    src/Screenshot.cpp
     src/Switcher.cpp
     src/Toplevels.cpp
     ${protocol_sources}

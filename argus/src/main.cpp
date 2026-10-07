@@ -1,6 +1,7 @@
 #include "Background.hpp"
 #include "Desktop.hpp"
 #include "Flip.hpp"
+#include "Screenshot.hpp"
 #include "Switcher.hpp"
 
 #include <SessionConfig.hpp>
@@ -56,7 +57,11 @@ int main(int argc, char* argv[])
         u"applications"_s, u"Show all applications, or hide the overview when they are shown."_s);
     const QCommandLineOption flipOption(u"flip"_s, u"Flip through the windows, or to the next one when shown."_s);
     const QCommandLineOption switchOption(u"switch"_s, u"Switch windows, or pick the next one when switching."_s);
-    parser.addOptions({toggleOption, applicationsOption, flipOption, switchOption});
+    const QCommandLineOption screenshotOption(u"screenshot"_s, u"Take a screenshot of what is picked on the screen."_s);
+    const QCommandLineOption screenOption(u"screenshot-screen"_s, u"Take a screenshot of the screens."_s);
+    const QCommandLineOption windowOption(u"screenshot-window"_s, u"Take a screenshot of the window in use."_s);
+    parser.addOptions(
+        {toggleOption, applicationsOption, flipOption, switchOption, screenshotOption, screenOption, windowOption});
     parser.process(app);
 
     std::optional<QDBusMessage> request;
@@ -68,6 +73,12 @@ int main(int argc, char* argv[])
         request = pick(u"Flip"_s);
     else if (parser.isSet(switchOption))
         request = pick(u"Switcher"_s);
+    else if (parser.isSet(screenshotOption))
+        request = call(u"Screenshot"_s, u"Show"_s);
+    else if (parser.isSet(screenOption))
+        request = call(u"Screenshot"_s, u"TakeScreen"_s);
+    else if (parser.isSet(windowOption))
+        request = call(u"Screenshot"_s, u"TakeWindow"_s);
 
     // One per session: later starts hand their request to it, and wait for the answer, so the
     // request is out before they are.
@@ -92,16 +103,19 @@ int main(int argc, char* argv[])
     argus::Desktop desktop(toplevels, wallpaper);
     argus::Flip flip(toplevels, wallpaper);
     argus::Switcher switcher(toplevels);
-    // The switchers show where the bar is.
+    argus::Screenshot screenshot(toplevels);
+    // The switchers and the screenshot's buttons show where the bar is.
     const auto placeSwitchers = [&](QScreen* screen) {
         flip.setScreen(screen);
         switcher.setScreen(screen);
+        screenshot.setPrimaryScreen(screen);
     };
     QObject::connect(&desktop, &argus::Desktop::primaryScreenChanged, placeSwitchers);
     placeSwitchers(desktop.primaryScreen());
     bus.registerObject(Path, &desktop, QDBusConnection::ExportScriptableSlots);
     bus.registerObject(Path + u"/Flip"_s, &flip, QDBusConnection::ExportScriptableSlots);
     bus.registerObject(Path + u"/Switcher"_s, &switcher, QDBusConnection::ExportScriptableSlots);
+    bus.registerObject(Path + u"/Screenshot"_s, &screenshot, QDBusConnection::ExportScriptableSlots);
 
     // The settings take effect as soon as they are saved.
     const auto applySettings = [&] {
