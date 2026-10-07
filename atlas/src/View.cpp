@@ -1,5 +1,6 @@
 #include "View.hpp"
 
+#include "Capture.hpp"
 #include "Parts.hpp"
 #include "Placement.hpp"
 
@@ -23,6 +24,7 @@ View::View(Server& server)
 View::~View()
 {
     unpublish();
+    m_capture.reset();
     m_decoration.reset();
     wlr_scene_node_destroy(&tree->node);
     wlr_scene_node_destroy(&m_captureScene->tree.node);
@@ -41,6 +43,13 @@ void View::onUnmapped()
     mapped = false;
     unpublish();
     server.viewUnmapped(*this);
+}
+
+wlr_ext_image_capture_source_v1* View::captureSource()
+{
+    if (!m_capture)
+        m_capture = std::make_unique<WindowCapture>(*this);
+    return m_capture->source();
 }
 
 void View::place()

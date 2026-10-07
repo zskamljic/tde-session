@@ -2,6 +2,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(WLROOTS REQUIRED IMPORTED_TARGET wlroots-0.20)
 pkg_check_modules(WAYLAND_SERVER REQUIRED IMPORTED_TARGET wayland-server)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
+pkg_check_modules(PIXMAN REQUIRED IMPORTED_TARGET pixman-1)
 pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
 pkg_get_variable(WLR_PROTOCOLS wlr-protocols pkgdatadir)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
@@ -28,6 +29,7 @@ endforeach()
 
 add_executable(tde-atlas
     src/main.cpp
+    src/Capture.cpp
     src/Decoration.cpp
     src/Input.cpp
     src/Lock.cpp
@@ -46,7 +48,8 @@ target_compile_definitions(tde-atlas PRIVATE
     TDE_DATA_DIR="${TDE_DATA_DIR}")
 # The wlroots headers are C; their C-isms are worked around in wlr.hpp.
 target_compile_options(tde-atlas PRIVATE -Wno-pedantic -Wno-missing-field-initializers)
-target_link_libraries(tde-atlas PRIVATE PkgConfig::WLROOTS PkgConfig::WAYLAND_SERVER PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO)
+target_link_libraries(tde-atlas PRIVATE PkgConfig::WLROOTS PkgConfig::WAYLAND_SERVER PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO
+    PkgConfig::PIXMAN)
 install(TARGETS tde-atlas)
 
 if(TDE_SESSION_BUILD_TESTS)

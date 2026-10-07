@@ -8,6 +8,8 @@
 
 namespace atlas {
 
+class WindowCapture;
+
 // An application window, of a Wayland program or an X11 one. This part decides where windows
 // go and what state they are in; the kinds of windows below tell their program about it.
 class View : public NodeOwner {
@@ -59,6 +61,8 @@ public:
     // The window alone, to take pictures of: the main scene would show whatever overlaps it.
     wlr_scene_node* captureNode() const { return &m_captureTree->node; }
     wlr_scene_tree* captureTree() const { return m_captureTree; }
+    // What copies of the window alone are taken from, made the first time one is asked for.
+    wlr_ext_image_capture_source_v1* captureSource();
 
     Server& server;
     wlr_scene_tree* tree = nullptr; // where the window is, title bar and all
@@ -94,6 +98,7 @@ private:
     void unpublish();
 
     std::unique_ptr<Decoration> m_decoration;
+    std::unique_ptr<WindowCapture> m_capture;
     wlr_foreign_toplevel_handle_v1* m_foreign = nullptr;
     wlr_output* m_foreignOutput = nullptr; // the one the handle says the window is on
     wlr_ext_foreign_toplevel_handle_v1* m_listed = nullptr;

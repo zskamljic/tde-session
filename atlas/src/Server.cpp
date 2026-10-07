@@ -753,7 +753,7 @@ void Server::setUpProtocols()
             }
         });
 
-    // Pictures of windows, for the overview.
+    // Pictures of screens and windows, for the overview and screenshots.
     wlr_ext_image_copy_capture_manager_v1_create(display, 1);
     wlr_ext_output_image_capture_source_manager_v1_create(display, 1);
     auto* sources = wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(display, 1);
@@ -762,10 +762,7 @@ void Server::setUpProtocols()
             auto* view = static_cast<View*>(request->toplevel_handle->data);
             if (!view)
                 return;
-            wlr_ext_image_capture_source_v1* source = wlr_ext_image_capture_source_v1_create_with_scene_node(
-                view->captureNode(), eventLoop, allocator, renderer);
-            if (source)
-                wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(request, source);
+            wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(request, view->captureSource());
         });
 }
 

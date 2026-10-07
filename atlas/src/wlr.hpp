@@ -31,7 +31,9 @@ extern "C" {
 #include <wlr/backend/multi.h>
 #include <wlr/backend/session.h>
 #include <wlr/interfaces/wlr_buffer.h>
+#include <wlr/interfaces/wlr_ext_image_capture_source_v1.h>
 #include <wlr/render/allocator.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
