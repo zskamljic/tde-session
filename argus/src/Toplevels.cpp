@@ -1,7 +1,15 @@
 #include "Toplevels.hpp"
 
+#include <Applications.hpp>
+#include <Icons.hpp>
+
+#include <tde/Theme.hpp>
+
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QPainter>
+#include <QPainterPath>
+#include <QScreen>
 
 #include <algorithm>
 #include <cstring>
@@ -165,6 +173,13 @@ private:
 Toplevel::Toplevel() = default;
 Toplevel::~Toplevel() = default;
 
+QRect placeOf(const Toplevel& window, const QWidget& widget)
+{
+    if (window.frame.isEmpty() || window.minimized)
+        return {};
+    return window.frame.translated(-(widget.screen() ? widget.screen()->geometry().topLeft() : QPoint()));
+}
+
 Toplevels::Toplevels(QObject* parent)
     : QObject(parent)
 {
@@ -181,7 +196,13 @@ Toplevels::Toplevels(QObject* parent)
     wl_display_roundtrip(m_display);
 
     connect(&m_windows, &shell::Windows::changed, this, &Toplevels::sync);
+    connect(&m_catalog, &shell::Catalog::changed, this, [this] { m_icons.clear(); });
     sync();
+
+    // Pictures that take longer than this are shown once they come.
+    m_patience.setSingleShot(true);
+    m_patience.setInterval(150);
+    connect(&m_patience, &QTimer::timeout, this, [this] { checkRefreshed(true); });
 }
 
 Toplevels::~Toplevels()
@@ -235,7 +256,7 @@ void Toplevels::sync()
         return gone;
     });
     for (const shell::Window* listedWindow : listed) {
-        Toplevel* window = byId(listedWindow->id);
+        Toplevel* window = find(listedWindow->id);
         if (!window) {
             window = m_shown.emplace_back(std::make_unique<Toplevel>()).get();
             window->id = listedWindow->id;
@@ -309,7 +330,7 @@ void Toplevels::pair()
     }
 }
 
-Toplevel* Toplevels::byId(quint64 id)
+Toplevel* Toplevels::find(quint64 id) const
 {
     const auto it = std::ranges::find_if(m_shown, [id](const auto& window) { return window->id == id; });
     return it == m_shown.end() ? nullptr : it->get();
@@ -325,8 +346,33 @@ void Toplevels::close(quint64 id)
     m_windows.close(id);
 }
 
-void Toplevels::refresh()
+QIcon Toplevels::iconOf(const Toplevel& window) const
 {
+    // Finding the application goes through all of them, too much to do for every frame.
+    auto [it, added] = m_icons.try_emplace(window.appId);
+    if (added) {
+        it->second = shell::applicationIcon(
+            shell::findApplication(m_catalog.applications(), window.appId), window.appId.toLower());
+    }
+    return it->second;
+}
+
+void paintPlaceholder(QPainter& painter, const QPainterPath& shape, const QIcon& icon)
+{
+    const QRectF area = shape.boundingRect();
+    painter.fillPath(shape, tde::theme::colors().window);
+    const double size = std::min({96.0, area.width() / 2, area.height() / 2});
+    QRectF place(0, 0, size, size);
+    place.moveCenter(area.center());
+    icon.paint(&painter, place.toRect());
+}
+
+void Toplevels::refresh(QObject* context, std::function<void()> ready)
+{
+    m_waiting.emplace_back(context, std::move(ready));
+    if (!m_patience.isActive())
+        m_patience.start();
+
     static const tde_window_info_v1_listener listener {
         .info =
             [](void* data, tde_window_info_v1*, int32_t x, int32_t y, uint32_t width, uint32_t height, uint32_t recency,
@@ -358,10 +404,16 @@ bool Toplevels::isRefreshing() const
     return std::ranges::any_of(m_shown, [](const auto& window) { return window->capture || window->info; });
 }
 
-void Toplevels::checkRefreshed()
+void Toplevels::checkRefreshed(bool waitedLongEnough)
 {
-    if (!isRefreshing())
-        emit refreshed();
+    if (m_waiting.empty() || (isRefreshing() && !waitedLongEnough))
+        return;
+    m_patience.stop();
+    // The callbacks may ask again.
+    for (const auto& [context, ready] : std::exchange(m_waiting, {})) {
+        if (context)
+            ready();
+    }
 }
 
 void Toplevels::captured(Toplevel& window, QImage image)

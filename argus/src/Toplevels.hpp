@@ -5,14 +5,25 @@
 #include "ext-image-copy-capture-v1-client-protocol.h"
 #include "tde-window-info-v1-client-protocol.h"
 
+#include <Catalog.hpp>
 #include <Windows.hpp>
 
+#include <QIcon>
 #include <QImage>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QString>
+#include <QTimer>
+#include <QWidget>
+
+class QPainter;
+class QPainterPath;
 
 #include <cstdint>
+#include <functional>
+#include <limits>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -46,6 +57,10 @@ struct Toplevel {
     Toplevel();
     ~Toplevel();
 
+    QString displayName() const { return title.isEmpty() ? appId : title; }
+    // How far down the stack it is: 0 for the window used last, those not known below all.
+    int depth() const { return recency < 0 ? std::numeric_limits<int>::max() : recency; }
+
     quint64 id = 0; // as the window list knows it
     QString title;
     QString appId;
@@ -59,6 +74,13 @@ struct Toplevel {
     std::unique_ptr<Capture> capture;
     Proxy<tde_window_info_v1> info; // while asking where it is
 };
+
+// Where `window` is on the screen, in the coordinates of `widget` covering it; empty when it is
+// not shown or not known.
+QRect placeOf(const Toplevel& window, const QWidget& widget);
+
+// What stands for a window not pictured yet: its outline filled, with its application's icon.
+void paintPlaceholder(QPainter& painter, const QPainterPath& shape, const QIcon& icon);
 
 // A window as ext-foreign-toplevel-list announces it.
 struct ListEntry {
@@ -89,15 +111,20 @@ public:
     void activate(quint64 id);
     void close(quint64 id);
 
+    // The installed applications, which the windows belong to.
+    const shell::Catalog& catalog() const { return m_catalog; }
+    QIcon iconOf(const Toplevel& window) const;
+
+    Toplevel* find(quint64 id) const;
+
     // Captures what every window shows and asks where each one is; previewChanged follows for
-    // each picture taken, and refreshed once all are answered.
-    void refresh();
-    bool isRefreshing() const;
+    // each picture taken. `ready` is called once all are answered, or after a moment without.
+    // `context` going first, `ready` is not called.
+    void refresh(QObject* context, std::function<void()> ready);
 
 signals:
     void windowsChanged();
     void previewChanged(quint64 id);
-    void refreshed();
 
 private:
     friend class Capture;
@@ -112,12 +139,13 @@ private:
     void pair();
     void captured(Toplevel& window, QImage image);
     void located(Toplevel& window, const QRect& frame, int recency, bool minimized);
-    void checkRefreshed();
+    bool isRefreshing() const;
+    void checkRefreshed(bool waitedLongEnough = false);
     void flush();
 
-    Toplevel* byId(quint64 id);
-
     shell::Windows m_windows;
+    shell::Catalog m_catalog;
+    mutable std::map<QString, QIcon> m_icons; // by application id, until the catalog changes
     wl_display* m_display = nullptr;
     Proxy<wl_registry> m_registry;
     Proxy<wl_shm> m_shm;
@@ -128,6 +156,8 @@ private:
 
     std::vector<std::unique_ptr<Toplevel>> m_shown;
     std::vector<std::unique_ptr<ListEntry>> m_entries;
+    std::vector<std::pair<QPointer<QObject>, std::function<void()>>> m_waiting; // for refresh() to be done
+    QTimer m_patience;
 };
 
 } // namespace argus
