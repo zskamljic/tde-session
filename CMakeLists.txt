@@ -18,6 +18,12 @@ install(FILES tde.desktop DESTINATION share/wayland-sessions)
 install(FILES data/autostart DESTINATION share/tde)
 install(FILES data/tde-session.target DESTINATION lib/systemd/user)
 install(FILES data/tde-portals.conf DESTINATION share/xdg-desktop-portal)
+# Screenshots and colours picked for other programs, by Argus.
+install(FILES data/portal/tde-argus.portal DESTINATION share/xdg-desktop-portal/portals)
+configure_file(data/dbus/org.freedesktop.impl.portal.desktop.tde.argus.service.in
+    org.freedesktop.impl.portal.desktop.tde.argus.service @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.freedesktop.impl.portal.desktop.tde.argus.service
+    DESTINATION share/dbus-1/services)
 
 add_subdirectory(shell)
 add_subdirectory(atlas)

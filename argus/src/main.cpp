@@ -2,6 +2,7 @@
 #include "Desktop.hpp"
 #include "Flip.hpp"
 #include "Screenshot.hpp"
+#include "ScreenshotPortal.hpp"
 #include "Switcher.hpp"
 
 #include <Platform.hpp>
@@ -13,7 +14,10 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDeadlineTimer>
+#include <QThread>
 
 #include <optional>
 
@@ -86,8 +90,18 @@ int main(int argc, char* argv[])
     // request is out before they are.
     auto bus = QDBusConnection::sessionBus();
     if (!bus.registerService(Service)) {
-        if (request)
+        if (request) {
             bus.call(*request);
+        } else {
+            // Started for the portal while the one running is still starting: this one stays
+            // until that one is there for it, which the portal waits for.
+            const QString portal = QString::fromLatin1(argus::ScreenshotPortal::ServiceName);
+            for (QDeadlineTimer deadline(5000); !deadline.hasExpired();) {
+                if (bus.interface()->isServiceRegistered(portal))
+                    break;
+                QThread::msleep(50);
+            }
+        }
         return 0;
     }
 
@@ -118,6 +132,10 @@ int main(int argc, char* argv[])
     bus.registerObject(Path + u"/Flip"_s, &flip, QDBusConnection::ExportScriptableSlots);
     bus.registerObject(Path + u"/Switcher"_s, &switcher, QDBusConnection::ExportScriptableSlots);
     bus.registerObject(Path + u"/Screenshot"_s, &screenshot, QDBusConnection::ExportScriptableSlots);
+    // Screenshots for other programs, through xdg-desktop-portal.
+    argus::ScreenshotPortal portal(screenshot);
+    if (!portal.registerOnBus())
+        qWarning("tde-argus: another program takes screenshots for the portal");
 
     // The settings take effect as soon as they are saved.
     const auto applySettings = [&] {
