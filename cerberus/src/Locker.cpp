@@ -49,11 +49,13 @@ std::string formatted(const char* format)
 }
 
 // The clock as the locale writes it: with AM and PM where that is usual.
-std::string timeText()
+std::string timeText(bool seconds)
 {
     const std::string_view format = nl_langinfo(T_FMT);
     const bool twelveHours = format.find("%I") != std::string_view::npos || format.find("%r") != std::string_view::npos;
-    return formatted(twelveHours ? "%-I:%M %p" : "%H:%M");
+    if (twelveHours)
+        return formatted(seconds ? "%-I:%M:%S %p" : "%-I:%M %p");
+    return formatted(seconds ? "%H:%M:%S" : "%H:%M");
 }
 
 std::string fullName(const passwd* user)
@@ -93,7 +95,10 @@ struct Buffer {
 
 class Locker {
 public:
-    Locker() = default;
+    explicit Locker(bool seconds)
+        : m_seconds(seconds)
+    {
+    }
     ~Locker();
     Locker(const Locker&) = delete;
     Locker& operator=(const Locker&) = delete;
@@ -143,6 +148,7 @@ private:
     std::unique_ptr<Authenticator> m_auth;
     Password m_password;
     Face m_face;
+    bool m_seconds = false; // shown in the clock
     bool m_locked = false;
     bool m_finished = false;
     bool m_unlocked = false;
@@ -449,7 +455,7 @@ void Locker::stopRepeat()
 
 void Locker::tickClock()
 {
-    std::string time = timeText();
+    std::string time = timeText(m_seconds);
     std::string date = formatted("%A, %-d %B");
     if (time != m_face.time || date != m_face.date) {
         m_face.time = std::move(time);
@@ -502,7 +508,7 @@ int Locker::run()
     everySecond.it_value.tv_sec = 1;
     everySecond.it_interval.tv_sec = 1;
     timerfd_settime(m_clockTimer, 0, &everySecond, nullptr);
-    m_face.time = timeText();
+    m_face.time = timeText(m_seconds);
     m_face.date = formatted("%A, %-d %B");
 
     m_lock = ext_session_lock_manager_v1_lock(m_manager.get());
@@ -572,9 +578,9 @@ int Locker::run()
 
 } // namespace
 
-int lockSession()
+int lockSession(bool seconds)
 {
-    Locker locker;
+    Locker locker(seconds);
     return locker.run();
 }
 

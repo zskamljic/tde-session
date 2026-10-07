@@ -24,6 +24,7 @@ using shell::Proxy;
 // logind is asked to, as by `loginctl lock-session`.
 class Locking : public QObject {
     Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "io.github.zskamljic.Hermes.Locking")
 
 public:
     explicit Locking(QObject* parent = nullptr);
@@ -34,6 +35,12 @@ public:
     void lock(std::function<void()> whenLocked = {});
     // How long without input until the screen locks; 0 for never.
     void setIdleMinutes(int minutes);
+    // Whether the lock screen's clock shows seconds.
+    void setClockSeconds(bool seconds) { m_seconds = seconds; }
+
+public slots:
+    // Over the session bus, as Super+L asks for it.
+    Q_SCRIPTABLE void Lock() { lock(); }
 
 private slots:
     void prepareForSleep(bool sleeping);
@@ -46,6 +53,7 @@ private:
 
     QProcess* m_locker = nullptr;
     int m_idleMinutes = 0;
+    bool m_seconds = false;
     bool m_locked = false;
     std::vector<std::function<void()>> m_waiting;
     QDBusUnixFileDescriptor m_sleepInhibitor;

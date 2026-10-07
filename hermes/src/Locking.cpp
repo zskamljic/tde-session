@@ -100,6 +100,8 @@ void Locking::lock(std::function<void()> whenLocked)
 
     m_locker = new QProcess(this);
     m_locker->setProgram(u"tde-cerberus"_s);
+    if (m_seconds)
+        m_locker->setArguments({u"--seconds"_s});
     m_locker->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     connect(m_locker, &QProcess::readyReadStandardOutput, this, [this] {
         if (m_locker->readAllStandardOutput().contains("locked")) {
