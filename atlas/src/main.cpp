@@ -63,9 +63,13 @@ int main(int argc, char* argv[])
     // and those added since systemd last looked are found by reloading it.
     setenv("XDG_CURRENT_DESKTOP", "TDE", false);
     setenv("XDG_SESSION_TYPE", "wayland", true);
+    // Qt and GTK 3 programs open and save files through xdg-desktop-portal, so in Ariadne,
+    // unless told otherwise.
+    setenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal", false);
+    setenv("GTK_USE_PORTAL", "1", false);
     atlas::Server::spawn("dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP "
-                         "XDG_SESSION_TYPE XDG_SESSION_DESKTOP && systemctl --user daemon-reload && "
-                         "systemctl --user start tde-session.target");
+                         "XDG_SESSION_TYPE XDG_SESSION_DESKTOP QT_QPA_PLATFORMTHEME GTK_USE_PORTAL && "
+                         "systemctl --user daemon-reload && systemctl --user start tde-session.target");
     // The path as an argument of its own, whatever characters it has.
     atlas::Server::spawn("exec /bin/sh \"$1\"", autostartFile());
 
@@ -76,6 +80,6 @@ int main(int argc, char* argv[])
     // looks for this display.
     [[maybe_unused]] const int stopped = std::system("systemctl --user stop tde-session.target; "
                                                      "systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY "
-                                                     "XDG_SESSION_TYPE");
+                                                     "XDG_SESSION_TYPE QT_QPA_PLATFORMTHEME GTK_USE_PORTAL");
     return 0;
 }

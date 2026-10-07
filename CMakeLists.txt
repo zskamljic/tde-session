@@ -17,6 +17,7 @@ install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/tde-session DESTINATION bin)
 install(FILES tde.desktop DESTINATION share/wayland-sessions)
 install(FILES data/autostart DESTINATION share/tde)
 install(FILES data/tde-session.target DESTINATION lib/systemd/user)
+install(FILES data/tde-portals.conf DESTINATION share/xdg-desktop-portal)
 
 add_subdirectory(shell)
 add_subdirectory(atlas)
