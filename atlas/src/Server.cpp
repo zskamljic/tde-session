@@ -585,6 +585,38 @@ View* Server::focusedView() const
     return m_layerFocus && !m_order.empty() && !m_order.front()->minimized ? m_order.front() : nullptr;
 }
 
+View* Server::importedParent(const View& view) const
+{
+    if (!view.surface())
+        return nullptr;
+    // The latest imports come first.
+    const wl_client* client = wl_resource_get_client(view.surface()->resource);
+    const wlr_xdg_toplevel* parent = nullptr;
+    wlr_xdg_imported_v2* imported;
+    wl_list_for_each(imported, &foreignV2->importer.objects, link)
+    {
+        if (imported->exported && wl_resource_get_client(imported->resource) == client) {
+            parent = imported->exported->toplevel;
+            break;
+        }
+    }
+    if (!parent) {
+        wlr_xdg_imported_v1* importedV1;
+        wl_list_for_each(importedV1, &foreignV1->importer.objects, link)
+        {
+            if (importedV1->exported && wl_resource_get_client(importedV1->resource) == client) {
+                parent = importedV1->exported->toplevel;
+                break;
+            }
+        }
+    }
+    for (View* other : m_order) {
+        if (auto* xdg = dynamic_cast<XdgView*>(other); xdg && xdg != &view && xdg->toplevel == parent)
+            return other;
+    }
+    return nullptr;
+}
+
 void Server::focus(View* view)
 {
     if (!view || !view->mapped)
@@ -704,6 +736,11 @@ void Server::setUpProtocols()
             entry->destroy.connect(inhibitor->events.destroy, [this, inhibitor] { inhibitorDestroyed(inhibitor); });
             wlr_idle_notifier_v1_set_inhibited(idleNotifier, true);
         });
+
+    // A program's dialog shown by another, as the portals show theirs, sits on its window.
+    wlr_xdg_foreign_registry* foreign = wlr_xdg_foreign_registry_create(display);
+    foreignV1 = wlr_xdg_foreign_v1_create(display, foreign);
+    foreignV2 = wlr_xdg_foreign_v2_create(display, foreign);
 
     // Programs that were started from another one, such as a link opened from a terminal,
     // come to the front.

@@ -45,18 +45,23 @@ void View::onUnmapped()
 
 void View::place()
 {
-    // Dialogs over their parent, everything else where it covers no other window, the middle
-    // of the screen when that is free.
+    // Dialogs over their parent, those another program shows for a window, such as a portal's
+    // file picker, over that window, and everything else where it covers no other window, the
+    // middle of the screen when that is free.
     wlr_box ownSize = size();
     ownSize.height += decorationHeight();
     wlr_box area = server.usableArea(server.cursor->x, server.cursor->y);
     View* parent = parentView();
+    if (!parent)
+        parent = server.importedParent(*this);
     if (parent)
         area = parent->geometry();
     int x = area.x + (area.width - ownSize.width) / 2;
     int y = area.y + (area.height - ownSize.height) / 2;
     const wlr_box usable = server.usableArea(area.x + area.width / 2.0, area.y + area.height / 2.0);
-    y = std::max(y, usable.y);
+    // On the screen even when the parent is partly off it, the top left showing when it is too big.
+    x = std::max(std::min(x, usable.x + usable.width - ownSize.width), usable.x);
+    y = std::max(std::min(y, usable.y + usable.height - ownSize.height), usable.y);
 
     if (!parent) {
         // Clear of the other windows on the screen where possible.

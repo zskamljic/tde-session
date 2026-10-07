@@ -63,6 +63,10 @@ public:
     // Focuses the window used most recently that is not minimized, if any.
     void focusTopmost();
     View* focusedView() const;
+    // The window of another program that a new one is shown for: the one its program last
+    // imported through xdg-foreign and still holds on to, as a portal's file picker does with
+    // the window of the program that asked for it. Null for the rest.
+    View* importedParent(const View& view) const;
     // Gives the keyboard to a surface that is no window, such as an X11 menu that asks for it.
     void focusSurface(wlr_surface* surface);
     const std::vector<View*>& stackingOrder() const { return m_order; }
@@ -106,6 +110,8 @@ public:
     wlr_xcursor_manager* xcursor = nullptr;
     wlr_foreign_toplevel_manager_v1* foreignToplevels = nullptr;
     wlr_ext_foreign_toplevel_list_v1* toplevelList = nullptr;
+    wlr_xdg_foreign_v1* foreignV1 = nullptr; // windows shared between programs
+    wlr_xdg_foreign_v2* foreignV2 = nullptr;
     wlr_idle_notifier_v1* idleNotifier = nullptr;
 
     // From bottom to top.
