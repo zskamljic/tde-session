@@ -1,5 +1,7 @@
 #pragma once
 
+#include <wayland-client-protocol.h>
+
 #include <memory>
 
 namespace shell {
@@ -16,3 +18,6 @@ template <typename T> using Proxy = std::unique_ptr<T, ProxyDeleter<T>>;
     template <> struct shell::ProxyDeleter<type> {                                                                     \
         void operator()(type* proxy) const { destroy(proxy); }                                                         \
     }
+
+// The registry, which every client of a protocol starts from.
+SHELL_PROXY(wl_registry, wl_registry_destroy);

@@ -13,7 +13,6 @@
 #include <memory>
 #include <vector>
 
-SHELL_PROXY(wl_registry, wl_registry_destroy);
 SHELL_PROXY(zwlr_foreign_toplevel_manager_v1, zwlr_foreign_toplevel_manager_v1_destroy);
 SHELL_PROXY(zwlr_foreign_toplevel_handle_v1, zwlr_foreign_toplevel_handle_v1_destroy);
 SHELL_PROXY(xdg_activation_v1, xdg_activation_v1_destroy);
