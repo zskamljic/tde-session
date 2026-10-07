@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Audio.hpp"
+#include "DisplayLayouts.hpp"
 #include "Notifications.hpp"
+#include "Osd.hpp"
 #include "Sounds.hpp"
 #include "SystemStatus.hpp"
 
@@ -46,6 +48,8 @@ protected:
 
 private:
     void updateClock();
+    // Puts the bar, the notifications and the level indicator on `screen`.
+    void placeOn(QScreen* screen);
     void layOut();
     QMenu* createQuickSettings();
     void updateStatusIcon();
@@ -66,7 +70,10 @@ private:
     Brightness m_brightness;
     Network m_network;
     Battery m_battery;
+    MediaKeys m_keys {m_audio, m_brightness}; // with the level indicator, a window of its own
+    DisplayLayouts m_displays;
     QTimer m_tick;
+    bool m_seconds = false; // shown in the clock
 };
 
 } // namespace hermes

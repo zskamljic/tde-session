@@ -45,6 +45,8 @@ public:
     MediaKeys(Audio& audio, Brightness& brightness, QObject* parent = nullptr);
     ~MediaKeys() override;
 
+    Osd& osd() const { return *m_osd; }
+
 public slots:
     Q_SCRIPTABLE void RaiseVolume();
     Q_SCRIPTABLE void LowerVolume();

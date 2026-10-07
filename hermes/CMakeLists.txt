@@ -30,6 +30,7 @@ add_executable(tde-hermes
     src/Audio.cpp
     src/AuthDialog.cpp
     src/Bar.cpp
+    src/DisplayLayouts.cpp
     src/Locking.cpp
     src/NotificationViews.cpp
     src/Osd.cpp

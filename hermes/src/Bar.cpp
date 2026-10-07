@@ -3,13 +3,14 @@
 #include "Groups.hpp"
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
-#include "Osd.hpp"
 #include "PolkitAgent.hpp"
 #include "QuickSettings.hpp"
 #include "Taskbar.hpp"
 #include "Tray.hpp"
 
 #include <Icons.hpp>
+#include <Layer.hpp>
+#include <SessionConfig.hpp>
 #include <tde/ConfigWatcher.hpp>
 #include <tde/DesktopConfig.hpp>
 #include <tde/Dialog.hpp>
@@ -27,6 +28,7 @@
 #include <QLocale>
 #include <QMenu>
 #include <QPainter>
+#include <QScreen>
 #include <QTextCharFormat>
 #include <QToolButton>
 #include <QWidgetAction>
@@ -141,14 +143,29 @@ Bar::Bar(QWidget* parent)
     if (!m_polkit->start())
         qWarning("tde-hermes: another program asks for passwords for polkit already");
     m_locking->setIdleMinutes(tde::desktop().lock.after);
-    QDBusConnection::sessionBus().registerObject(QString::fromLatin1(BusPath),
-        new MediaKeys(m_audio, m_brightness, this), QDBusConnection::ExportScriptableSlots);
-    // Edits to the desktop's config take effect at once.
-    auto* watcher = new tde::ConfigWatcher({tde::desktopConfigPath()}, this);
-    connect(watcher, &tde::ConfigWatcher::changed, this, [this] {
+    QDBusConnection::sessionBus().registerObject(
+        QString::fromLatin1(BusPath), &m_keys, QDBusConnection::ExportScriptableSlots);
+    QDBusConnection::sessionBus().registerObject(
+        QString::fromLatin1(BusPath) + u"/Locking"_s, m_locking, QDBusConnection::ExportScriptableSlots);
+    // Edits to the desktop's config and the session's take effect at once.
+    connect(&m_displays, &DisplayLayouts::primaryScreenChanged, this, &Bar::placeOn);
+    const auto applySession = [this] {
+        const shell::SessionConfig config = shell::loadSessionConfig();
+        m_seconds = config.clock.seconds;
+        m_locking->setClockSeconds(m_seconds);
+        m_displays.setSettings(config.displays);
+    };
+    auto* watcher = new tde::ConfigWatcher({tde::desktopConfigPath(), shell::sessionConfigPath()}, this);
+    connect(watcher, &tde::ConfigWatcher::changed, this, [this, applySession](const QString& path) {
+        if (path == shell::sessionConfigPath()) {
+            applySession();
+            updateClock();
+            return;
+        }
         tde::setDesktop(tde::loadDesktopConfig());
         m_locking->setIdleMinutes(tde::desktop().lock.after);
     });
+    applySession();
 
     if (m_notifications.start()) {
         m_banners = std::make_unique<Banners>(m_notifications);
@@ -173,10 +190,11 @@ Bar::Bar(QWidget* parent)
     connect(&m_battery, &Battery::changed, this, &Bar::updateStatusIcon);
     updateStatusIcon();
 
-    // The clock moves on at the start of every minute.
+    // The clock moves on at the start of every minute, or second.
     m_tick.setSingleShot(true);
     connect(&m_tick, &QTimer::timeout, this, &Bar::updateClock);
     updateClock();
+    placeOn(m_displays.primaryScreen());
 }
 
 bool Bar::event(QEvent* event)
@@ -263,15 +281,17 @@ QMenu* Bar::createQuickSettings()
 // The icons of the network, the sound and the battery, side by side, as far as there are.
 void Bar::updateStatusIcon()
 {
+    // An icon for each part of the quick settings, as they are now, and power last.
     QStringList names;
     if (m_network.isAvailable())
         names << m_network.iconName();
     if (m_audio.isAvailable())
         names << volumeIconName(m_audio.volume(), m_audio.isMuted());
+    if (m_brightness.isAvailable())
+        names << u"display-brightness-symbolic"_s;
     if (m_battery.isPresent() && !m_battery.iconName().isEmpty())
         names << m_battery.iconName();
-    if (names.isEmpty())
-        names << u"system-shutdown-symbolic"_s;
+    names << u"system-shutdown-symbolic"_s;
 
     constexpr int Size = 16;
     constexpr int Gap = 8;
@@ -298,11 +318,46 @@ void Bar::updateClock()
     // A dot while notifications wait in the list.
     const bool waiting = std::ranges::any_of(
         m_notifications.notifications(), [](const Notification& notification) { return !notification.banner; });
-    m_clock->setText(locale.toString(now, u"ddd d MMM"_s) + u"   "_s + locale.toString(now.time(), QLocale::ShortFormat)
+    QString timeFormat = locale.timeFormat(QLocale::ShortFormat);
+    if (m_seconds && !timeFormat.contains(u's'))
+        timeFormat.replace(u"mm"_s, u"mm:ss"_s);
+    const int width = m_clock->sizeHint().width();
+    m_clock->setText(locale.toString(now, u"ddd d MMM"_s) + u"   "_s + locale.toString(now.time(), timeFormat)
         + (waiting ? u"  •"_s : QString()));
     m_clock->setToolTip(locale.toString(now.date(), QLocale::LongFormat));
-    layOut();
-    m_tick.start(int(60'000 - now.time().second() * 1000 - now.time().msec()) + 50);
+    // Every second, mostly the same width: the bar is laid out again only when it changed.
+    if (m_clock->sizeHint().width() != width)
+        layOut();
+    const int untilNext
+        = m_seconds ? 1000 - now.time().msec() : 60'000 - now.time().second() * 1000 - now.time().msec();
+    m_tick.start(untilNext + 50);
+}
+
+namespace {
+
+// Puts a layer surface on `screen`, shown again if it was.
+void moveLayer(QWidget& widget, QScreen* screen, bool showAnyway = false)
+{
+    if (!screen)
+        return;
+    const bool shown = widget.isVisible() || showAnyway;
+    if (widget.screen() != screen) {
+        widget.hide();
+        shell::placeOnScreen(widget, screen);
+    }
+    if (shown)
+        widget.show();
+}
+
+} // namespace
+
+void Bar::placeOn(QScreen* screen)
+{
+    // The bar is closed when its screen goes, so it shows again on the new one either way.
+    moveLayer(*this, screen, true);
+    if (m_banners)
+        moveLayer(*m_banners, screen);
+    moveLayer(m_keys.osd(), screen);
 }
 
 void Bar::layOut()
