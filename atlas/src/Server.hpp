@@ -58,8 +58,7 @@ public:
 
     // Windows ---------------------------------------------------------------------------
 
-    // Gives a window the keyboard and raises it; it moves to the front of the switch order
-    // unless the switcher is cycling through windows.
+    // Gives a window the keyboard and raises it; it moves to the front of the switch order.
     void focus(View* view);
     // Focuses the window used most recently that is not minimized, if any.
     void focusTopmost();
@@ -129,6 +128,7 @@ private:
     enum class CursorMode { Passthrough, Move, Resize };
 
     void setUpOutputs();
+    void addVirtualOutputs();
     void setUpShells();
     void setUpInput();
     void setUpProtocols();
@@ -139,9 +139,13 @@ private:
     void coverOutputs();
 
     void newOutput(wlr_output* output);
-    void placeOutput(wlr_output_layout_output* placed);
+    void placeOutput(wlr_output_layout_output* placed, wlr_scene_output* made = nullptr);
+    void layoutChanged();
     void outputLayoutChanged();
     void applyOutputConfiguration(wlr_output_configuration_v1* config, bool testOnly);
+    wlr_box onScreen(const wlr_box& box) const;
+    void keepWindowsOnScreen();
+    void moveWindowsWithOutputs();
 
     // Input.cpp
     void newInput(wlr_input_device* device);
@@ -162,16 +166,16 @@ private:
 
 public: // called by Keyboard
     bool handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed);
+    void modifiersChanged(wlr_keyboard& keyboard);
 
 private:
     bool runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode);
-    void cycleWindows(bool backwards, bool sameApplication);
-    void finishCycling();
 
     std::string m_socket;
     wlr_xdg_shell* m_xdgShell = nullptr;
     wlr_layer_shell_v1* m_layerShell = nullptr;
     wlr_output_manager_v1* m_outputManager = nullptr;
+    wl_event_source* m_layoutIdle = nullptr; // to see layout changes once they are all done
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
     wlr_xwayland* m_xwayland = nullptr;
 
@@ -202,10 +206,8 @@ private:
     const View* m_titleClickView = nullptr;
     uint32_t m_titleClickTime = 0;
 
-    // Window switching with Alt+Tab: the order is kept while cycling, and settled on release.
-    bool m_cycling = false;
-    std::vector<View*> m_cycle;
-    size_t m_cycleIndex = 0;
+    // The modifier holding a window switcher of the overview open, until it is let go.
+    uint32_t m_pickingWith = 0;
 
     // Super pressed and released on its own opens the overview.
     bool m_superAlone = false;

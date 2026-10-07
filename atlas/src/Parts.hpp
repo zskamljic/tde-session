@@ -18,6 +18,7 @@ public:
     Server& server;
     wlr_output* output;
     wlr_box usable {}; // the part not taken by panels, in layout coordinates
+    wlr_box placed {}; // where it was when windows were last moved along with it
 
 private:
     Listener m_frame;

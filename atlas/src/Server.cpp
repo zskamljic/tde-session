@@ -4,7 +4,9 @@
 #include "Parts.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cstdlib>
+#include <cstring>
 
 #include <signal.h>
 #include <sys/wait.h>
@@ -30,6 +32,8 @@ Server::~Server()
              &m_requestPrimarySelection, &m_requestStartDrag, &m_startDrag, &m_dragIconDestroy, &m_requestActivate,
              &m_newInhibitor, &m_newCaptureSource, &m_newXwaylandSurface, &m_xwaylandReady})
         listener->disconnect();
+    if (m_layoutIdle)
+        wl_event_source_remove(m_layoutIdle);
     wl_display_destroy_clients(display);
     m_popups.clear();
     m_views.clear();
@@ -89,6 +93,7 @@ bool Server::start()
     layers.lock = wlr_scene_tree_create(&scene->tree);
 
     setUpOutputs();
+    addVirtualOutputs();
     setUpShells();
     setUpInput();
     setUpProtocols();
@@ -144,6 +149,24 @@ void Server::spawn(const std::string& command, const std::string& argument)
 
 // Outputs -------------------------------------------------------------------------------
 
+// Outputs that show on no screen, as many as ATLAS_VIRTUAL_OUTPUTS says: for a session seen
+// only through screenshots or screen sharing, or for trying several displays without having
+// them.
+void Server::addVirtualOutputs()
+{
+    const char* text = std::getenv("ATLAS_VIRTUAL_OUTPUTS");
+    int count = 0;
+    if (!text || std::from_chars(text, text + std::strlen(text), count).ec != std::errc {} || count <= 0)
+        return;
+    wlr_backend* headless = wlr_headless_backend_create(eventLoop);
+    if (!headless || !wlr_multi_backend_add(backend, headless)) {
+        wlr_log(WLR_ERROR, "cannot make virtual outputs");
+        return;
+    }
+    for (int i = 0; i < std::min(count, 8); ++i)
+        wlr_headless_add_output(headless, 1280, 720);
+}
+
 void Server::setUpOutputs()
 {
     outputLayout = wlr_output_layout_create(display);
@@ -151,7 +174,7 @@ void Server::setUpOutputs()
     wlr_xdg_output_manager_v1_create(display, outputLayout);
 
     m_newOutput.connect<wlr_output>(backend->events.new_output, [this](wlr_output* output) { newOutput(output); });
-    m_layoutChange.connect(outputLayout->events.change, [this] { outputLayoutChanged(); });
+    m_layoutChange.connect(outputLayout->events.change, [this] { layoutChanged(); });
 
     // Lets tools such as wlr-randr change modes, scale and positions.
     m_outputManager = wlr_output_manager_v1_create(display);
@@ -186,12 +209,12 @@ void Server::newOutput(wlr_output* output)
 
 // Shows an output that is in the layout. Its scene output goes whenever it leaves the layout,
 // as when it is turned off, so one is made each time it comes back.
-void Server::placeOutput(wlr_output_layout_output* placed)
+void Server::placeOutput(wlr_output_layout_output* placed, wlr_scene_output* made)
 {
-    if (!placed || wlr_scene_get_scene_output(scene, placed->output))
+    if (!placed || (!made && wlr_scene_get_scene_output(scene, placed->output)))
         return;
-    wlr_scene_output* sceneOutput = wlr_scene_output_create(scene, placed->output);
-    wlr_scene_output_layout_add_output(sceneLayout, placed, sceneOutput);
+    wlr_scene_output_layout_add_output(
+        sceneLayout, placed, made ? made : wlr_scene_output_create(scene, placed->output));
 }
 
 void Server::outputDestroyed(Output& output)
@@ -211,6 +234,21 @@ void Server::outputDestroyed(Output& output)
     std::erase_if(outputs, [&](const auto& o) { return o.get() == &output; });
 }
 
+// Everything the layout changes at once is seen together, once it is done.
+void Server::layoutChanged()
+{
+    if (m_layoutIdle)
+        return;
+    m_layoutIdle = wl_event_loop_add_idle(
+        eventLoop,
+        [](void* data) {
+            auto* server = static_cast<Server*>(data);
+            server->m_layoutIdle = nullptr;
+            server->outputLayoutChanged();
+        },
+        this);
+}
+
 void Server::outputLayoutChanged()
 {
     coverOutputs();
@@ -227,44 +265,143 @@ void Server::outputLayoutChanged()
     }
     wlr_output_manager_v1_set_configuration(m_outputManager, config);
 
+    moveWindowsWithOutputs();
     for (const auto& output : outputs)
         arrange(*output);
+    keepWindowsOnScreen();
+}
+
+// Windows stay on their output where it moved to, in the same place on it.
+void Server::moveWindowsWithOutputs()
+{
+    for (const auto& view : m_views) {
+        if (!view->mapped)
+            continue;
+        const wlr_box current = view->geometry();
+        const double centreX = current.x + current.width / 2.0;
+        const double centreY = current.y + current.height / 2.0;
+        for (const auto& output : outputs) {
+            const wlr_box now = output->box();
+            if (wlr_box_empty(&output->placed) || wlr_box_empty(&now)
+                || !wlr_box_contains_point(&output->placed, centreX, centreY))
+                continue;
+            const int dx = now.x - output->placed.x;
+            const int dy = now.y - output->placed.y;
+            if (dx != 0 || dy != 0) {
+                view->moveTo(current.x + dx, current.y + dy);
+                if (!wlr_box_empty(&view->restore)) {
+                    view->restore.x += dx;
+                    view->restore.y += dy;
+                }
+            }
+            break;
+        }
+    }
+    for (const auto& output : outputs)
+        output->placed = output->box();
+}
+
+// A box as it is when it shows on some output, or else moved into the nearest one, as large
+// as it was as far as it fits.
+wlr_box Server::onScreen(const wlr_box& box) const
+{
+    if (wlr_box_empty(&box) || wlr_output_layout_intersects(outputLayout, nullptr, &box))
+        return box;
+    const wlr_box area = usableArea(box.x + box.width / 2.0, box.y + box.height / 2.0);
+    if (wlr_box_empty(&area))
+        return box;
+    wlr_box moved = box;
+    moved.width = std::min(box.width, area.width);
+    moved.height = std::min(box.height, area.height);
+    moved.x = std::clamp(box.x, area.x, area.x + area.width - moved.width);
+    moved.y = std::clamp(box.y, area.y, area.y + area.height - moved.height);
+    return moved;
+}
+
+// After outputs went away or moved, no window is left where nothing shows it, and windows
+// covering their output cover it as it is now.
+void Server::keepWindowsOnScreen()
+{
+    // With every output off, there is nowhere to keep them; they stay where they were.
+    if (wl_list_empty(&outputLayout->outputs))
+        return;
+    for (const auto& view : m_views) {
+        if (!view->mapped)
+            continue;
+        view->restore = onScreen(view->restore);
+        const wlr_box current = view->geometry();
+        if (view->fullscreen) {
+            if (const Output* output = outputAt(current.x + current.width / 2.0, current.y + current.height / 2.0))
+                view->setGeometry(output->box());
+        } else if (!view->isTiled()) {
+            if (const wlr_box moved = onScreen(current); moved.x != current.x || moved.y != current.y
+                || moved.width != current.width || moved.height != current.height)
+                view->setGeometry(moved);
+        }
+    }
 }
 
 void Server::applyOutputConfiguration(wlr_output_configuration_v1* config, bool testOnly)
 {
-    // All outputs at once: either the whole configuration takes or none of it does.
+    // All outputs at once, each with a frame of the size it is to have: either the whole
+    // configuration takes or none of it does.
     std::vector<wlr_backend_output_state> states;
     wlr_output_configuration_head_v1* head;
     wl_list_for_each(head, &config->heads, link)
     {
-        wlr_backend_output_state state {};
-        state.output = head->state.output;
+        wlr_backend_output_state& state = states.emplace_back(wlr_backend_output_state {.output = head->state.output});
         wlr_output_state_init(&state.base);
         wlr_output_head_v1_state_apply(&head->state, &state.base);
-        states.push_back(state);
     }
-    const bool ok = testOnly ? wlr_backend_test(backend, states.data(), states.size())
-                             : wlr_backend_commit(backend, states.data(), states.size());
+
+    wlr_output_swapchain_manager swapchains;
+    wlr_output_swapchain_manager_init(&swapchains, backend);
+    // Outputs turned on are drawn by scene outputs made for them now, placed once they are on.
+    std::vector<std::pair<wlr_output*, wlr_scene_output*>> made;
+    bool ok = wlr_output_swapchain_manager_prepare(&swapchains, states.data(), states.size());
+    for (wlr_backend_output_state& state : states) {
+        const bool on = state.base.committed & WLR_OUTPUT_STATE_ENABLED ? state.base.enabled : state.output->enabled;
+        if (!ok || !on)
+            continue;
+        wlr_scene_output* sceneOutput = wlr_scene_get_scene_output(scene, state.output);
+        if (!sceneOutput)
+            sceneOutput = made.emplace_back(state.output, wlr_scene_output_create(scene, state.output)).second;
+        const wlr_scene_output_state_options options {
+            .swapchain = wlr_output_swapchain_manager_get_swapchain(&swapchains, state.output)};
+        ok = wlr_scene_output_build_state(sceneOutput, &state.base, &options);
+    }
+    if (ok)
+        ok = testOnly ? wlr_backend_test(backend, states.data(), states.size())
+                      : wlr_backend_commit(backend, states.data(), states.size());
+    if (ok && !testOnly)
+        wlr_output_swapchain_manager_apply(&swapchains);
+    wlr_output_swapchain_manager_finish(&swapchains);
     for (wlr_backend_output_state& state : states)
         wlr_output_state_finish(&state.base);
 
     if (ok && !testOnly) {
         wl_list_for_each(head, &config->heads, link)
         {
-            if (head->state.enabled)
-                placeOutput(wlr_output_layout_add(outputLayout, head->state.output, head->state.x, head->state.y));
-            else
+            if (!head->state.enabled) {
                 wlr_output_layout_remove(outputLayout, head->state.output);
+                continue;
+            }
+            const auto fresh
+                = std::ranges::find(made, head->state.output, &std::pair<wlr_output*, wlr_scene_output*>::first);
+            placeOutput(wlr_output_layout_add(outputLayout, head->state.output, head->state.x, head->state.y),
+                fresh == made.end() ? nullptr : fresh->second);
+            if (fresh != made.end())
+                made.erase(fresh);
         }
     }
+    // Made for a configuration that did not take, or only tried.
+    for (const auto& [output, sceneOutput] : made)
+        wlr_scene_output_destroy(sceneOutput);
     if (ok)
         wlr_output_configuration_v1_send_succeeded(config);
     else
         wlr_output_configuration_v1_send_failed(config);
     wlr_output_configuration_v1_destroy(config);
-    if (!testOnly)
-        outputLayoutChanged();
 }
 
 Output* Server::outputAt(double x, double y) const
@@ -462,10 +599,8 @@ void Server::focus(View* view)
     }
     wlr_scene_node_reparent(&view->tree->node, view->fullscreen ? layers.fullscreen : layers.views);
     wlr_scene_node_raise_to_top(&view->tree->node);
-    if (!m_cycling) {
-        std::erase(m_order, view);
-        m_order.insert(m_order.begin(), view);
-    }
+    std::erase(m_order, view);
+    m_order.insert(m_order.begin(), view);
     for (View* other : m_order) {
         if (other != view)
             other->setActivated(false);
@@ -517,9 +652,6 @@ void Server::viewUnmapped(View& view)
     forgetPointerTargets(view);
     const bool wasFocused = !m_order.empty() && m_order.front() == &view;
     std::erase(m_order, &view);
-    std::erase(m_cycle, &view);
-    if (m_cycleIndex >= m_cycle.size())
-        m_cycleIndex = 0;
     if (wasFocused || seat->keyboard_state.focused_surface == view.surface())
         focusTopmost();
 }
@@ -540,9 +672,6 @@ void Server::viewDestroyed(View& view)
     // Unmapped before, as wlroots does it; but nothing may point to it once it is gone.
     forgetPointerTargets(view);
     std::erase(m_order, &view);
-    std::erase(m_cycle, &view);
-    if (m_cycleIndex >= m_cycle.size())
-        m_cycleIndex = 0;
     if (m_grabbed == &view) {
         m_grabbed = nullptr;
         m_cursorMode = CursorMode::Passthrough;
