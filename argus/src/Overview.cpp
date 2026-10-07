@@ -1,20 +1,20 @@
 #include "Overview.hpp"
 
 #include "AppGrid.hpp"
+#include "Background.hpp"
+#include <Layer.hpp>
 
 #include <Icons.hpp>
 #include <tde/Theme.hpp>
 
-#include <LayerShellQt/Window>
-
 #include <QGraphicsOpacityEffect>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QScreen>
 #include <QToolButton>
 
 #include <algorithm>
@@ -33,8 +33,6 @@ constexpr int SearchWidth = 360;
 constexpr int SearchHeight = 38;
 constexpr int ButtonSize = 48;
 const QSize PlaceholderSize(480, 320); // for windows not captured yet
-constexpr int AnimationTime = 250; // ms, all the way
-constexpr int Patience = 150; // ms to wait for pictures of the windows before opening
 
 QRectF interpolate(const QRectF& from, const QRectF& to, double t)
 {
@@ -118,9 +116,11 @@ std::vector<QRect> layOut(const std::vector<QSize>& sizes, const QRect& area, in
     return rects;
 }
 
-Overview::Overview(Toplevels& toplevels, QWidget* parent)
+Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* screen, bool primary, QWidget* parent)
     : QWidget(parent)
     , m_toplevels(toplevels)
+    , m_wallpaper(wallpaper)
+    , m_primary(primary)
 {
     setWindowTitle(u"Overview"_s);
     setMouseTracking(true);
@@ -160,22 +160,14 @@ Overview::Overview(Toplevels& toplevels, QWidget* parent)
     connect(m_grid, &AppGrid::activated, this, &Overview::launch);
 
     // The grid points into the applications, which are new now.
-    connect(&m_catalog, &shell::Catalog::changed, this, [this] {
+    connect(&m_toplevels.catalog(), &shell::Catalog::changed, this, [this] {
         if (showingApps())
             updateMode();
     });
 
-    // A layer over everything, covering the whole screen and taking the keyboard while shown.
-    create();
-    if (auto* layer = LayerShellQt::Window::get(windowHandle())) {
-        layer->setLayer(LayerShellQt::Window::LayerOverlay);
-        layer->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layer->setExclusiveZone(-1);
-        layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layer->setScope(u"tde-argus"_s);
-    }
+    // Over everything; the primary screen's takes the keyboard while shown.
+    shell::coverScreen(*this, LayerShellQt::Window::LayerOverlay, primary, u"tde-argus"_s, screen);
+    setPrimary(primary);
 
     connect(&m_toplevels, &Toplevels::windowsChanged, this, [this] {
         if (isVisible())
@@ -191,36 +183,17 @@ Overview::Overview(Toplevels& toplevels, QWidget* parent)
         widget->setGraphicsEffect(fade);
         m_fades.push_back(fade);
     }
-    m_animation.setEasingCurve(QEasingCurve::OutCubic);
-    connect(&m_animation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-        m_shown = value.toDouble();
+    connect(&m_shown, &QVariantAnimation::valueChanged, this, [this] {
         for (auto* fade : m_fades)
-            fade->setOpacity(m_shown);
+            fade->setOpacity(m_shown.now());
         update();
     });
-    connect(&m_animation, &QVariantAnimation::finished, this, [this] {
+    connect(&m_shown, &QVariantAnimation::finished, this, [this] {
         if (m_closing) {
             m_closing = false;
             hide();
         }
     });
-
-    // It opens once the windows are pictured and placed, or a moment later without them.
-    m_patience.setSingleShot(true);
-    m_patience.setInterval(Patience);
-    connect(&m_patience, &QTimer::timeout, this, &Overview::appear);
-    connect(&m_toplevels, &Toplevels::refreshed, this, [this] {
-        if (m_opening)
-            appear();
-    });
-}
-
-void Overview::Toggle()
-{
-    if ((isVisible() && !m_closing) || m_opening)
-        Hide();
-    else
-        Show();
 }
 
 void Overview::Show()
@@ -239,9 +212,9 @@ void Overview::Show()
     m_chosen = 0;
     m_search->clear();
     m_appsButton->setChecked(false);
+    // It opens once the windows are pictured and placed, or a moment later without them.
     m_opening = true;
-    m_patience.start();
-    m_toplevels.refresh();
+    m_toplevels.refresh(this, [this] { appear(); });
 }
 
 void Overview::appear()
@@ -249,9 +222,8 @@ void Overview::appear()
     if (!m_opening)
         return;
     m_opening = false;
-    m_patience.stop();
     relayout();
-    m_shown = 0;
+    m_shown.jump(0);
     for (auto* fade : m_fades)
         fade->setOpacity(0);
     show();
@@ -259,18 +231,10 @@ void Overview::appear()
     animateTo(1);
 }
 
-void Overview::Hide()
-{
-    closeOnto(0);
-}
-
 void Overview::closeOnto(quint64 chosen)
 {
-    if (m_opening) {
-        m_opening = false;
-        m_patience.stop();
-    }
-    if (!isVisible())
+    m_opening = false;
+    if (!isVisible() || m_closing)
         return;
     m_closing = true;
     m_chosen = chosen;
@@ -280,29 +244,39 @@ void Overview::closeOnto(quint64 chosen)
 
 void Overview::animateTo(double shown)
 {
-    m_animation.stop();
-    m_animation.setDuration(std::max(1, int(AnimationTime * std::abs(shown - m_shown))));
-    m_animation.setStartValue(m_shown);
-    m_animation.setEndValue(shown);
-    m_animation.start();
+    m_shown.go(shown, int(m_animationTime * std::abs(shown - m_shown.now())));
 }
 
-QRect Overview::frameOf(const Toplevel& window) const
+void Overview::showApplications()
 {
-    if (window.frame.isEmpty() || window.minimized)
-        return {};
-    return window.frame.translated(-(screen() ? screen()->geometry().topLeft() : QPoint()));
-}
-
-void Overview::ToggleApplications()
-{
-    if (isVisible() && !m_closing && m_appsButton->isChecked() && m_search->text().isEmpty()) {
-        Hide();
-        return;
-    }
     Show();
     m_search->clear();
     m_appsButton->setChecked(true);
+}
+
+void Overview::setPrimary(bool primary)
+{
+    // Searching and the applications are there, with the keyboard.
+    m_primary = primary;
+    m_search->setVisible(primary);
+    m_appsButton->setVisible(primary);
+    if (auto* layer = LayerShellQt::Window::get(windowHandle())) {
+        layer->setKeyboardInteractivity(primary ? LayerShellQt::Window::KeyboardInteractivityExclusive
+                                                : LayerShellQt::Window::KeyboardInteractivityNone);
+    }
+}
+
+bool Overview::showsAllApplications() const
+{
+    return isOpen() && m_appsButton->isChecked() && m_search->text().isEmpty();
+}
+
+bool Overview::showsWindow(const Toplevel& window) const
+{
+    const QPoint centre = window.frame.center();
+    if (window.frame.isEmpty() || !QGuiApplication::screenAt(centre))
+        return m_primary;
+    return screen() && screen()->geometry().contains(centre);
 }
 
 bool Overview::showingApps() const
@@ -320,13 +294,13 @@ void Overview::updateMode()
     const QString query = m_search->text().trimmed();
     if (query.isEmpty()) {
         std::vector<const Application*> all;
-        for (const Application& app : m_catalog.applications()) {
+        for (const Application& app : m_toplevels.catalog().applications()) {
             if (app.inMenus)
                 all.push_back(&app);
         }
         m_grid->setApplications(std::move(all));
     } else {
-        m_grid->setApplications(shell::search(m_catalog.applications(), query));
+        m_grid->setApplications(shell::search(m_toplevels.catalog().applications(), query));
     }
     m_hovered = 0;
     m_grid->show();
@@ -337,7 +311,7 @@ void Overview::launch(const Application* app)
 {
     if (!shell::launch(*app))
         qWarning("tde-argus: could not start %s", qPrintable(app->id));
-    Hide();
+    emit closeRequested(0);
 }
 
 void Overview::relayout()
@@ -348,11 +322,15 @@ void Overview::relayout()
         Margin, Margin / 2 + SearchHeight + Spacing, -Margin, -(ButtonSize + Margin / 3 + Spacing / 2));
     m_grid->setGeometry(area);
 
-    const auto& windows = m_toplevels.windows();
+    std::vector<const Toplevel*> windows;
+    for (const auto& window : m_toplevels.windows()) {
+        if (showsWindow(*window))
+            windows.push_back(window.get());
+    }
     const qreal ratio = devicePixelRatioF();
     std::vector<QSize> sizes;
     sizes.reserve(windows.size());
-    for (const auto& window : windows) {
+    for (const Toplevel* window : windows) {
         const QSize size = window->preview.isNull() ? PlaceholderSize : (window->preview.size() / ratio);
         sizes.push_back(size.isEmpty() ? PlaceholderSize : size);
     }
@@ -378,42 +356,45 @@ void Overview::relayout()
 void Overview::paintEvent(QPaintEvent*)
 {
     const auto& colors = tde::theme::colors();
+    const double shown = m_shown.now();
     QPainter painter(this);
+    paintBackdrop(painter, *this, m_wallpaper, shown);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    QColor background = colors.header.darker(140);
-    background.setAlphaF(float(m_shown));
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.fillRect(rect(), background);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     if (showingApps())
         return;
 
-    // The window it closes onto goes last, above the others.
-    std::vector<const Slot*> order;
-    for (const Slot& slot : m_slots)
-        order.push_back(&slot);
-    std::ranges::stable_partition(order, [this](const Slot* slot) { return slot->id != m_chosen; });
+    // Stacked as they are on the screen, the one used last on top, so nothing jumps where
+    // they overlap as they leave or reach their places; the one it closes onto above them all.
+    std::vector<std::pair<const Slot*, const Toplevel*>> order;
+    for (const Slot& slot : m_slots) {
+        if (const Toplevel* window = m_toplevels.find(slot.id))
+            order.emplace_back(&slot, window);
+    }
+    std::ranges::stable_sort(order, [this](const auto& a, const auto& b) {
+        const auto depth = [this](const Toplevel* window) {
+            if (window->id == m_chosen)
+                return -1;
+            return window->depth();
+        };
+        return depth(a.second) > depth(b.second);
+    });
 
-    for (const Slot* slot : order) {
-        const auto it
-            = std::ranges::find_if(m_toplevels.windows(), [&](const auto& window) { return window->id == slot->id; });
-        if (it == m_toplevels.windows().end())
-            continue;
-        const Toplevel& window = **it;
+    for (const auto& [slot, shownWindow] : order) {
+        const Toplevel& window = *shownWindow;
         const bool hovered = slot->id == m_hovered && settled();
 
         // From where the window is to its place; those not on the screen grow in its place.
-        QRectF start = frameOf(window);
+        QRectF start = placeOf(window, *this);
         double opacity = 1;
         if (start.isEmpty()) {
             const QRectF target(slot->preview);
             start = QRectF(QPointF(), target.size() * 0.85);
             start.moveCenter(target.center());
-            opacity = m_shown;
+            opacity = shown;
         }
-        const QRectF preview = interpolate(start, QRectF(slot->preview), m_shown);
-        const double radius = Radius * m_shown;
+        const QRectF preview = interpolate(start, QRectF(slot->preview), shown);
+        const double radius = Radius * shown;
         painter.setOpacity(opacity);
 
         if (hovered) {
@@ -425,10 +406,7 @@ void Overview::paintEvent(QPaintEvent*)
         QPainterPath shape;
         shape.addRoundedRect(preview, radius, radius);
         if (window.preview.isNull()) {
-            painter.fillPath(shape, colors.window);
-            const QIcon icon = shell::applicationIcon(nullptr, window.appId.toLower());
-            const int size = int(std::min({96.0, preview.width() / 2, preview.height() / 2}));
-            icon.paint(&painter, QRect(preview.center().toPoint() - QPoint(size / 2, size / 2), QSize(size, size)));
+            paintPlaceholder(painter, shape, m_toplevels.iconOf(window));
         } else {
             painter.save();
             painter.setClipPath(shape);
@@ -436,11 +414,10 @@ void Overview::paintEvent(QPaintEvent*)
             painter.restore();
         }
 
-        painter.setOpacity(m_shown);
-        const QString title = window.title.isEmpty() ? window.appId : window.title;
+        painter.setOpacity(shown);
         painter.setPen(hovered ? colors.text : colors.dimText);
-        painter.drawText(
-            slot->title, Qt::AlignCenter, painter.fontMetrics().elidedText(title, Qt::ElideRight, slot->title.width()));
+        painter.drawText(slot->title, Qt::AlignCenter,
+            painter.fontMetrics().elidedText(window.displayName(), Qt::ElideRight, slot->title.width()));
         painter.setOpacity(1);
 
         if (hovered) {
@@ -512,7 +489,7 @@ void Overview::mouseReleaseEvent(QMouseEvent* event)
         return;
     }
     if (!slot) {
-        Hide();
+        emit closeRequested(0);
         return;
     }
     if (event->button() == Qt::MiddleButton || slot->closeButton.contains(event->position().toPoint()))
@@ -540,7 +517,7 @@ bool Overview::handleKey(QKeyEvent* event)
         else if (m_appsButton->isChecked())
             m_appsButton->setChecked(false);
         else
-            Hide();
+            emit closeRequested(0);
         return true;
     }
 
@@ -604,7 +581,7 @@ void Overview::activate(quint64 id)
 {
     // The window comes forward behind the overview, which closes onto it.
     m_toplevels.activate(id);
-    closeOnto(id);
+    emit closeRequested(id);
 }
 
 } // namespace argus

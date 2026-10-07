@@ -1,12 +1,11 @@
 #pragma once
 
 #include "Toplevels.hpp"
+#include <Tween.hpp>
 
 #include <Catalog.hpp>
 
 #include <QRect>
-#include <QTimer>
-#include <QVariantAnimation>
 #include <QWidget>
 
 #include <vector>
@@ -20,6 +19,7 @@ namespace argus {
 using shell::Application;
 
 class AppGrid;
+class Wallpaper;
 
 // Where a window goes in the overview: its preview, scaled to fit, and its title below.
 struct Slot {
@@ -33,23 +33,35 @@ struct Slot {
 // than they are, the rows centred. Exposed for testing.
 std::vector<QRect> layOut(const std::vector<QSize>& sizes, const QRect& area, int spacing, int titleHeight);
 
-// Every open window at a glance, over everything else on the screen. Click a window to switch
-// to it; Escape or a click on the background goes back. Typing searches the installed
-// applications instead, and the button at the bottom shows all of them. Windows move from
-// where they are into place as it opens, and back as it closes.
+// The open windows of one screen at a glance, over everything else on it. Click a window to
+// switch to it; Escape or a click on the background goes back. On the primary screen, typing
+// searches the installed applications instead, and the button at the bottom shows all of
+// them. Windows move from where they are into place as it opens, and back as it closes.
 class Overview : public QWidget {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "io.github.zskamljic.Argus")
 
 public:
-    explicit Overview(Toplevels& toplevels, QWidget* parent = nullptr);
+    Overview(
+        Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* screen, bool primary, QWidget* parent = nullptr);
 
-public slots:
-    Q_SCRIPTABLE void Toggle();
-    Q_SCRIPTABLE void Show();
-    Q_SCRIPTABLE void Hide();
-    // Shows all applications, or hides the overview when they are shown.
-    Q_SCRIPTABLE void ToggleApplications();
+    // How long it takes to open or close, in milliseconds.
+    void setAnimationTime(int milliseconds) { m_animationTime = milliseconds; }
+
+    bool isOpen() const { return (isVisible() && !m_closing) || m_opening; }
+    bool showsAllApplications() const;
+
+    // Whether searching and the applications are here, with the keyboard.
+    void setPrimary(bool primary);
+
+    void Show();
+    void showApplications();
+    // Closes, with the window `chosen` coming forward, above the others; 0 for none.
+    void closeOnto(quint64 chosen);
+
+signals:
+    // Something here asks to close, with `chosen` coming forward: the overviews of all
+    // screens close together.
+    void closeRequested(quint64 chosen);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -69,28 +81,28 @@ private:
     void setHovered(quint64 id);
     void activate(quint64 id);
     void appear();
-    void closeOnto(quint64 chosen);
     void animateTo(double shown);
-    // Where a window is on the screen, in this widget's coordinates; empty when not known.
-    QRect frameOf(const Toplevel& window) const;
-    bool settled() const { return m_shown >= 1 && !m_closing; }
+    // Whether `window` is shown here: those on this screen, and on the primary screen those
+    // not on any.
+    bool showsWindow(const Toplevel& window) const;
+    bool settled() const { return m_shown.now() >= 1 && !m_closing; }
 
     Toplevels& m_toplevels;
+    const Wallpaper& m_wallpaper;
+    bool m_primary;
     QLineEdit* m_search = nullptr;
     QToolButton* m_appsButton = nullptr;
     AppGrid* m_grid = nullptr;
-    shell::Catalog m_catalog;
     std::vector<Slot> m_slots;
     quint64 m_hovered = 0;
     bool m_hoveringClose = false;
 
     // How far it is shown, from 0 with the windows where they are to 1 with them in place.
-    double m_shown = 0;
-    QVariantAnimation m_animation;
+    shell::Tween m_shown;
+    int m_animationTime = 250;
     bool m_opening = false; // waiting for the pictures and places of the windows
     bool m_closing = false;
     quint64 m_chosen = 0; // the window it closes onto, drawn above the others
-    QTimer m_patience; // how long the pictures are waited for
     std::vector<QGraphicsOpacityEffect*> m_fades; // of the search, the button and the grid
 };
 

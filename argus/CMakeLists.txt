@@ -28,8 +28,12 @@ endforeach()
 add_executable(tde-argus
     src/main.cpp
     src/AppGrid.cpp
+    src/Background.cpp
+    src/Desktop.cpp
     src/Flip.cpp
     src/Overview.cpp
+    src/Picker.cpp
+    src/Switcher.cpp
     src/Toplevels.cpp
     ${protocol_sources}
 )
