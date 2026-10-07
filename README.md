@@ -5,10 +5,12 @@ The desktop session of TDE, tofiffe's desktop environment:
 - **Atlas** (`tde-atlas`), the Wayland compositor, built on
   [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots);
 - **Argus** (`tde-argus`), the overview of every open window, shown with Super, which also
-  finds and starts applications, and Flip 3D, shown with Super+Tab;
+  finds and starts applications; the window switchers of Alt+Tab and Super+Tab; and the
+  desktop's background;
 - **Hermes** (`tde-hermes`), the bar along the top: the applications, the clock, the tray
   icons and the quick settings; it also shows the notifications;
-- **Cerberus** (`tde-cerberus`), the lock screen.
+- **Cerberus** (`tde-cerberus`), the lock screen;
+- **Daedalus** (`tde-daedalus`), the settings: the background, windows, the clock and the lock screen.
 
 The bar shows the running applications the way Windows 7 did, a button each with a dot below
 for every window. A click switches to the application's window or, when it is active,
@@ -52,7 +54,7 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 | Super | Argus, the overview of all windows (arrows and Enter pick one, Delete closes it, Escape goes back); typing searches applications |
 | Super+A | All applications |
 | Super+L | Lock the screen |
-| Alt+Tab | Switch windows |
+| Alt+Tab | Switch windows, with a picture of each |
 | Super+Tab | Flip through the windows in 3D, as Windows 7 did; letting go of Super picks the one in front |
 | Alt+\` | Switch between windows of the same application |
 | Super+Up / Super+Down | Maximize / restore |
@@ -81,9 +83,25 @@ sudo cmake --install build
 ```
 
 Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, libpulse, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
-The session runs swaybg for the background, a terminal, and Ariadne for files.
+The session runs a terminal, and Ariadne for files.
 
 ## Changing it
+
+Daedalus, shown as Settings, sets the desktop's background (a picture and how it covers the
+screen, or a colour; pictures added there are kept in `~/.local/share/backgrounds`), how the
+displays are arranged and which one has the bar, what Alt+Tab shows of the windows, how long
+the animations of the overview and Flip 3D take, whether the clocks show seconds, and
+whether and when the screen locks by itself. The session's own settings are in
+`~/.config/tde/session/config.lua`, which Daedalus writes; the lock screen's are in the
+desktop config, `~/.config/tde/config.lua`, of which Daedalus changes only that value. Both
+can be edited by hand too, and take effect once saved.
+
+Display changes are tried out first, and go back after 15 seconds unless they are kept, in
+case a display shows nothing with them. Arrangements are kept for every set of displays
+plugged in together, and come back whenever that set is plugged in again; windows move along
+with their display, and those on one that goes move to another. The bar, the notifications
+and the window switchers are on the primary display; every display has its background and
+its part of the overview.
 
 The programs started with the session are listed in `/usr/share/tde/autostart`; a copy in
 `~/.config/tde/autostart` takes its place. Programs that start at login the usual way, from
@@ -102,6 +120,10 @@ tools/vm install ~/.cache/pacaur/libtde/*.pkg.tar.zst ~/.cache/pacaur/tde-ariadn
 tools/vm run                       # the screen follows the window size; --headless for none
 tools/vm deploy                    # after a change; Ctrl+Alt+Delete restarts the session
 ```
+
+Atlas makes as many displays as `ATLAS_VIRTUAL_OUTPUTS` says that show on no screen, which
+`grim` still captures; with `ATLAS_VIRTUAL_OUTPUTS=1` in the machine's `/etc/environment`,
+the session has a second display to try things on.
 
 The user is `tde` with the password `tde`. The window grabs the keyboard while the pointer is over
 it (Ctrl+Alt+G toggles it), so Super and other shortcuts go to the machine instead of the host.
