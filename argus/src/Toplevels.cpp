@@ -13,10 +13,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <optional>
-
-#include <sys/mman.h>
-#include <unistd.h>
 
 Q_LOGGING_CATEGORY(lcToplevels, "tde.argus.toplevels")
 
@@ -28,147 +24,7 @@ QString fromUtf8(const char* text)
     return QString::fromUtf8(text ? text : "");
 }
 
-// Memory shared with the compositor, which copies a window into it.
-class SharedMemory {
-public:
-    explicit SharedMemory(size_t size)
-        : m_size(size)
-    {
-        m_fd = memfd_create("tde-argus", MFD_CLOEXEC);
-        if (m_fd < 0 || ftruncate(m_fd, static_cast<off_t>(size)) < 0)
-            return;
-        void* data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
-        if (data != MAP_FAILED)
-            m_data = data;
-    }
-    ~SharedMemory()
-    {
-        if (m_data)
-            munmap(m_data, m_size);
-        if (m_fd >= 0)
-            ::close(m_fd);
-    }
-    SharedMemory(const SharedMemory&) = delete;
-    SharedMemory& operator=(const SharedMemory&) = delete;
-
-    bool isValid() const { return m_data != nullptr; }
-    int fd() const { return m_fd; }
-    const uchar* data() const { return static_cast<const uchar*>(m_data); }
-
-private:
-    size_t m_size = 0;
-    int m_fd = -1;
-    void* m_data = nullptr;
-};
-
-// The QImage format with the same layout in memory, for the 32-bit formats the compositor
-// may copy windows in.
-std::optional<QImage::Format> imageFormat(uint32_t format)
-{
-    switch (format) {
-    case WL_SHM_FORMAT_XRGB8888:
-        return QImage::Format_RGB32;
-    case WL_SHM_FORMAT_ARGB8888:
-        return QImage::Format_ARGB32_Premultiplied;
-    case WL_SHM_FORMAT_XBGR8888:
-        return QImage::Format_RGBX8888;
-    case WL_SHM_FORMAT_ABGR8888:
-        return QImage::Format_RGBA8888_Premultiplied;
-    default:
-        return std::nullopt;
-    }
-}
-
 } // namespace
-
-// One copy of what a window shows, through ext-image-copy-capture. The session first says
-// which buffers it takes, then a frame is copied into one; either way it ends in
-// Toplevels::captured, which destroys it.
-class Capture {
-public:
-    Capture(Toplevels& owner, Toplevel& window, ext_image_capture_source_v1* source)
-        : m_owner(owner)
-        , m_window(window)
-        , m_source(source)
-        , m_session(ext_image_copy_capture_manager_v1_create_session(owner.m_copier.get(), source, 0))
-    {
-        static const ext_image_copy_capture_session_v1_listener listener {
-            .buffer_size
-            = [](void* data, ext_image_copy_capture_session_v1*, uint32_t width,
-                  uint32_t height) { static_cast<Capture*>(data)->m_size = QSize(int(width), int(height)); },
-            .shm_format =
-                [](void* data, ext_image_copy_capture_session_v1*, uint32_t format) {
-                    auto* self = static_cast<Capture*>(data);
-                    const auto image = imageFormat(format);
-                    // Formats with alpha keep rounded corners and the like see-through.
-                    if (image && (!self->m_format || QImage(1, 1, *image).hasAlphaChannel()))
-                        self->m_format = format;
-                },
-            .dmabuf_device = [](void*, ext_image_copy_capture_session_v1*, wl_array*) { },
-            .dmabuf_format = [](void*, ext_image_copy_capture_session_v1*, uint32_t, wl_array*) { },
-            .done = [](void* data, ext_image_copy_capture_session_v1*) { static_cast<Capture*>(data)->copy(); },
-            .stopped = [](void* data, ext_image_copy_capture_session_v1*) { static_cast<Capture*>(data)->finish({}); },
-        };
-        ext_image_copy_capture_session_v1_add_listener(m_session.get(), &listener, this);
-    }
-
-private:
-    void copy()
-    {
-        if (m_frame)
-            return; // the buffer constraints changed while copying; the copy still fits or fails
-        if (!m_format || m_size.isEmpty()) {
-            finish({});
-            return;
-        }
-        const int stride = m_size.width() * 4;
-        m_memory = std::make_unique<SharedMemory>(size_t(stride) * size_t(m_size.height()));
-        if (!m_memory->isValid()) {
-            finish({});
-            return;
-        }
-        Proxy<wl_shm_pool> pool(wl_shm_create_pool(m_owner.m_shm.get(), m_memory->fd(), stride * m_size.height()));
-        m_buffer.reset(wl_shm_pool_create_buffer(pool.get(), 0, m_size.width(), m_size.height(), stride, *m_format));
-
-        static const ext_image_copy_capture_frame_v1_listener listener {
-            .transform = [](void*, ext_image_copy_capture_frame_v1*, uint32_t) { },
-            .damage = [](void*, ext_image_copy_capture_frame_v1*, int32_t, int32_t, int32_t, int32_t) { },
-            .presentation_time = [](void*, ext_image_copy_capture_frame_v1*, uint32_t, uint32_t, uint32_t) { },
-            .ready = [](void* data, ext_image_copy_capture_frame_v1*) { static_cast<Capture*>(data)->ready(); },
-            .failed =
-                [](void* data, ext_image_copy_capture_frame_v1*, uint32_t reason) {
-                    qCDebug(lcToplevels) << "capture failed, reason" << reason;
-                    static_cast<Capture*>(data)->finish({});
-                },
-        };
-        m_frame.reset(ext_image_copy_capture_session_v1_create_frame(m_session.get()));
-        ext_image_copy_capture_frame_v1_add_listener(m_frame.get(), &listener, this);
-        ext_image_copy_capture_frame_v1_attach_buffer(m_frame.get(), m_buffer.get());
-        ext_image_copy_capture_frame_v1_damage_buffer(m_frame.get(), 0, 0, m_size.width(), m_size.height());
-        ext_image_copy_capture_frame_v1_capture(m_frame.get());
-        m_owner.flush();
-    }
-
-    void ready()
-    {
-        const QImage view(
-            m_memory->data(), m_size.width(), m_size.height(), m_size.width() * 4, *imageFormat(*m_format));
-        finish(view.copy());
-    }
-
-    // Hands the image over; this capture is destroyed on return.
-    void finish(QImage image) { m_owner.captured(m_window, std::move(image)); }
-
-    Toplevels& m_owner;
-    Toplevel& m_window;
-    Proxy<ext_image_capture_source_v1> m_source;
-    Proxy<ext_image_copy_capture_session_v1> m_session;
-    Proxy<ext_image_copy_capture_frame_v1> m_frame;
-    Proxy<wl_buffer> m_buffer;
-    std::unique_ptr<SharedMemory> m_memory;
-    QSize m_size;
-    std::optional<uint32_t> m_format;
-};
 
 Toplevel::Toplevel() = default;
 Toplevel::~Toplevel() = default;
@@ -388,7 +244,8 @@ void Toplevels::refresh(QObject* context, std::function<void()> ready)
         if (!window->capture && m_sources && m_copier && m_shm) {
             auto* source = ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
                 m_sources.get(), window->entry->handle.get());
-            window->capture = std::make_unique<Capture>(*this, *window, source);
+            window->capture = std::make_unique<ImageCopy>(m_shm.get(), m_copier.get(), source,
+                [this, shown = window.get()](QImage image) { captured(*shown, std::move(image)); });
         }
         if (!window->info && m_info) {
             window->info.reset(tde_window_info_manager_v1_get_info(m_info.get(), window->entry->handle.get()));

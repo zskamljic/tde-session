@@ -1,8 +1,8 @@
 #pragma once
 
+#include "ImageCopy.hpp"
+
 #include "ext-foreign-toplevel-list-v1-client-protocol.h"
-#include "ext-image-capture-source-v1-client-protocol.h"
-#include "ext-image-copy-capture-v1-client-protocol.h"
 #include "tde-window-info-v1-client-protocol.h"
 
 #include <Catalog.hpp>
@@ -27,25 +27,15 @@ class QPainterPath;
 #include <memory>
 #include <vector>
 
-SHELL_PROXY(wl_shm, wl_shm_destroy);
-SHELL_PROXY(wl_shm_pool, wl_shm_pool_destroy);
-SHELL_PROXY(wl_buffer, wl_buffer_destroy);
 SHELL_PROXY(ext_foreign_toplevel_list_v1, ext_foreign_toplevel_list_v1_destroy);
 SHELL_PROXY(ext_foreign_toplevel_handle_v1, ext_foreign_toplevel_handle_v1_destroy);
 SHELL_PROXY(
     ext_foreign_toplevel_image_capture_source_manager_v1, ext_foreign_toplevel_image_capture_source_manager_v1_destroy);
-SHELL_PROXY(ext_image_capture_source_v1, ext_image_capture_source_v1_destroy);
-SHELL_PROXY(ext_image_copy_capture_manager_v1, ext_image_copy_capture_manager_v1_destroy);
-SHELL_PROXY(ext_image_copy_capture_session_v1, ext_image_copy_capture_session_v1_destroy);
-SHELL_PROXY(ext_image_copy_capture_frame_v1, ext_image_copy_capture_frame_v1_destroy);
 SHELL_PROXY(tde_window_info_manager_v1, tde_window_info_manager_v1_destroy);
 SHELL_PROXY(tde_window_info_v1, tde_window_info_v1_destroy);
 
 namespace argus {
 
-using shell::Proxy;
-
-class Capture;
 class Toplevels;
 struct ListEntry;
 
@@ -71,7 +61,7 @@ struct Toplevel {
     bool minimized = false;
 
     ListEntry* entry = nullptr; // its half from ext-foreign-toplevel-list, once paired
-    std::unique_ptr<Capture> capture;
+    std::unique_ptr<ImageCopy> capture; // while copying what it shows
     Proxy<tde_window_info_v1> info; // while asking where it is
 };
 
@@ -127,8 +117,6 @@ signals:
     void previewChanged(quint64 id);
 
 private:
-    friend class Capture;
-
     static void global(void* data, wl_registry* registry, uint32_t name, const char* interface, uint32_t version);
     static void globalRemove(void* data, wl_registry* registry, uint32_t name);
 

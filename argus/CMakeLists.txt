@@ -31,6 +31,7 @@ add_executable(tde-argus
     src/Background.cpp
     src/Desktop.cpp
     src/Flip.cpp
+    src/ImageCopy.cpp
     src/Overview.cpp
     src/Picker.cpp
     src/Switcher.cpp
