@@ -64,10 +64,6 @@ bool isSuper(xkb_keysym_t sym)
 {
     return sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R;
 }
-bool isAlt(xkb_keysym_t sym)
-{
-    return sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R;
-}
 
 // Calls a method of a part of the shell over the session bus, or runs `otherwise` when that
 // part is not there.
@@ -81,6 +77,21 @@ void hermes(std::string_view method, std::string_view otherwise)
 {
     callShell("io.github.zskamljic.Hermes /io/github/zskamljic/Hermes",
         std::format("io.github.zskamljic.Hermes {}", method), otherwise);
+}
+
+// The window switcher of the overview that a modifier holds open: Flip 3D for Super, the
+// switcher for Alt.
+std::string_view pickerFor(uint32_t modifier)
+{
+    return modifier == WLR_MODIFIER_LOGO ? "Flip" : "Switcher";
+}
+
+// Asks the window switcher held open by `modifier` to do `call`.
+void callPicker(uint32_t modifier, std::string_view call, std::string_view otherwise)
+{
+    const std::string_view picker = pickerFor(modifier);
+    callShell(std::format("io.github.zskamljic.Argus /io/github/zskamljic/Argus/{}", picker),
+        std::format("io.github.zskamljic.Argus.{} {}", picker, call), otherwise);
 }
 
 } // namespace
@@ -97,6 +108,7 @@ Keyboard::Keyboard(Server& server, wlr_keyboard* keyboard)
         wlr_seat_keyboard_notify_key(m_server.seat, event->time_msec, event->keycode, event->state);
     });
     m_modifiers.connect(keyboard->events.modifiers, [this] {
+        m_server.modifiersChanged(*this->keyboard);
         wlr_seat_set_keyboard(m_server.seat, this->keyboard);
         wlr_seat_keyboard_notify_modifiers(m_server.seat, &this->keyboard->modifiers);
     });
@@ -271,8 +283,6 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
         for (int i = 0; i < count; ++i) {
             if (isSuper(syms[i]) && m_superAlone)
                 spawn("tde-argus --toggle");
-            if (m_cycling && isAlt(syms[i]))
-                finishCycling();
         }
         m_superAlone = false;
         return s_consumedKeys.erase(keycode) > 0;
@@ -288,6 +298,17 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
     return false;
 }
 
+void Server::modifiersChanged(wlr_keyboard& keyboard)
+{
+    // The modifier holding a window switcher open was let go: it switches. It is told from
+    // here, as the key may have gone up before the switcher had the keyboard, or come as a
+    // change of the modifiers alone.
+    if (m_pickingWith != 0 && !(wlr_keyboard_get_modifiers(&keyboard) & m_pickingWith)) {
+        callPicker(m_pickingWith, "Release", "true");
+        m_pickingWith = 0;
+    }
+}
+
 bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
 {
     constexpr uint32_t Super = WLR_MODIFIER_LOGO;
@@ -301,27 +322,20 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
         return true;
     };
 
-    // Switching windows; Shift goes backwards.
-    if ((modifiers & ~Shift) == Alt || (modifiers & ~Shift) == Super) {
-        if (sym == XKB_KEY_Tab || sym == XKB_KEY_ISO_Left_Tab) {
-            // With Super, the windows flip through in 3D, drawn by the overview; once it shows,
-            // the keys are its own.
-            if ((modifiers & ~Shift) == Super) {
-                if (keyboardHeldByLayer())
-                    return false;
-                const bool backwards = modifiers & Shift;
-                callShell("io.github.zskamljic.Argus /io/github/zskamljic/Argus/Flip",
-                    std::format("io.github.zskamljic.Argus.Flip Show b {}", backwards), "exec tde-argus --flip");
-                return true;
-            }
-            cycleWindows(modifiers & Shift, false);
-            return true;
-        }
-        // The key above Tab, whatever it prints.
-        if (keycode == KEY_GRAVE && (modifiers & ~Shift) == Alt) {
-            cycleWindows(modifiers & Shift, true);
-            return true;
-        }
+    // Switching windows, drawn by the overview: Alt+Tab, Alt and the key above Tab for the
+    // windows of one application, and Super+Tab flipping through them in 3D. Shift goes
+    // backwards. Once the switcher shows, the keys are its own.
+    const uint32_t base = modifiers & ~Shift;
+    const bool tab = sym == XKB_KEY_Tab || sym == XKB_KEY_ISO_Left_Tab;
+    // The key above Tab, whatever it prints.
+    const bool grave = keycode == KEY_GRAVE && base == Alt;
+    if (((base == Alt || base == Super) && tab) || grave) {
+        if (keyboardHeldByLayer())
+            return false;
+        m_pickingWith = base;
+        callPicker(base, std::format("Show bb {} {}", bool(modifiers & Shift), grave),
+            base == Super ? "exec tde-argus --flip" : "exec tde-argus --switch");
+        return true;
     }
 
     if (modifiers == (Ctrl | Alt)) {
@@ -379,7 +393,9 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
             spawn("ariadne");
             return true;
         case XKB_KEY_l:
-            spawn("tde-cerberus");
+            // Through the bar, which knows how the lock screen is wanted.
+            callShell("io.github.zskamljic.Hermes /io/github/zskamljic/Hermes/Locking",
+                "io.github.zskamljic.Hermes.Locking Lock", "exec tde-cerberus");
             return true;
         default:
             break;
@@ -406,37 +422,6 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
     default:
         return false;
     }
-}
-
-void Server::cycleWindows(bool backwards, bool sameApplication)
-{
-    if (!m_cycling) {
-        m_cycle = m_order;
-        if (sameApplication && !m_cycle.empty()) {
-            const std::string appId = m_cycle.front()->appId();
-            std::erase_if(m_cycle, [&](View* view) { return view->appId() != appId; });
-        }
-        if (m_cycle.size() < 2) {
-            m_cycle.clear();
-            return;
-        }
-        m_cycling = true;
-        m_cycleIndex = 0;
-    }
-    if (m_cycle.empty())
-        return;
-    const size_t count = m_cycle.size();
-    m_cycleIndex = backwards ? (m_cycleIndex + count - 1) % count : (m_cycleIndex + 1) % count;
-    focus(m_cycle[m_cycleIndex]);
-}
-
-void Server::finishCycling()
-{
-    m_cycling = false;
-    View* chosen = m_cycleIndex < m_cycle.size() ? m_cycle[m_cycleIndex] : nullptr;
-    m_cycle.clear();
-    if (chosen)
-        focus(chosen);
 }
 
 // Pointer ---------------------------------------------------------------------------------

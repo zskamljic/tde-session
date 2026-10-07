@@ -120,8 +120,6 @@ void Server::newLock(wlr_session_lock_v1* lock)
         // Nothing of what was going on stays in hand.
         if (m_cursorMode != CursorMode::Passthrough)
             finishGrab();
-        if (m_cycling)
-            finishCycling();
         wlr_seat_keyboard_clear_focus(seat);
         wlr_seat_pointer_clear_focus(seat);
     }
