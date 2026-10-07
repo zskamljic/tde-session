@@ -4,6 +4,7 @@
 #include "Screenshot.hpp"
 #include "Switcher.hpp"
 
+#include <Platform.hpp>
 #include <SessionConfig.hpp>
 #include <tde/ConfigWatcher.hpp>
 #include <tde/DesktopConfig.hpp>
@@ -42,6 +43,7 @@ QDBusMessage pick(const QString& part)
 
 int main(int argc, char* argv[])
 {
+    shell::keepOffPortal();
     QApplication app(argc, argv);
     QApplication::setApplicationName(u"tde-argus"_s);
     QApplication::setApplicationVersion(QStringLiteral(TDE_SESSION_VERSION));

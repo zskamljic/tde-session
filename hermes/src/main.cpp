@@ -1,6 +1,8 @@
 #include "Bar.hpp"
 #include "Osd.hpp"
 
+#include <Platform.hpp>
+
 #include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
@@ -12,6 +14,7 @@ using namespace Qt::StringLiterals;
 
 int main(int argc, char* argv[])
 {
+    shell::keepOffPortal();
     QApplication app(argc, argv);
     QApplication::setApplicationName(u"tde-hermes"_s);
     QApplication::setApplicationVersion(QStringLiteral(TDE_SESSION_VERSION));
