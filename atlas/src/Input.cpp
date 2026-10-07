@@ -238,7 +238,12 @@ void Server::newKeyboard(wlr_keyboard* keyboard, bool virtualKeyboard)
 
 void Server::keyboardDestroyed(Keyboard& keyboard)
 {
+    const bool wasSeats = wlr_seat_get_keyboard(seat) == keyboard.keyboard;
     std::erase_if(m_keyboards, [&](const auto& k) { return k.get() == &keyboard; });
+    // The seat goes on with another keyboard, such as the real one after a virtual one is gone:
+    // without one, programs that start later get no keymap to read their keys with.
+    if (wasSeats && !m_keyboards.empty())
+        wlr_seat_set_keyboard(seat, m_keyboards.front()->keyboard);
     updateCapabilities();
 }
 
