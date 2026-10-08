@@ -8,9 +8,11 @@
 #include "Taskbar.hpp"
 #include "Tray.hpp"
 
+#include <Applications.hpp>
 #include <Icons.hpp>
 #include <Layer.hpp>
 #include <SessionConfig.hpp>
+#include <WifiPassword.hpp>
 #include <tde/ConfigWatcher.hpp>
 #include <tde/DesktopConfig.hpp>
 #include <tde/Dialog.hpp>
@@ -18,6 +20,7 @@
 
 #include <LayerShellQt/Window>
 
+#include <QActionEvent>
 #include <QCalendarWidget>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -181,12 +184,25 @@ Bar::Bar(QWidget* parent)
 
     m_system = new QToolButton(this);
     m_system->setAutoRaise(true);
-    m_system->setToolTip(u"Sound, Network, Battery and Power"_s);
+    m_system->setToolTip(u"Sound, Network, Bluetooth, Battery and Power"_s);
     m_system->setPopupMode(QToolButton::InstantPopup);
     m_system->setStyleSheet(buttonStyle(u"padding: 0 10px;"_s));
     m_system->setMenu(createQuickSettings());
     connect(&m_audio, &Audio::changed, this, &Bar::updateStatusIcon);
     connect(&m_network, &Network::changed, this, &Bar::updateStatusIcon);
+    connect(&m_bluetooth, &shell::Bluetooth::changed, this, &Bar::updateStatusIcon);
+    // Failures are told in the quick settings while they show, as a notification otherwise.
+    const auto notifyFailure = [this](const QString& icon, std::function<QString()> summary) {
+        return [this, icon, summary = std::move(summary)](const QString& message) {
+            if (!m_system->menu()->isVisible())
+                m_notifications.Notify(u"Quick Settings"_s, 0, icon, summary(), message, {}, {}, -1);
+        };
+    };
+    connect(&m_wifi, &shell::Wifi::failed, this, notifyFailure(u"network-wireless-offline-symbolic"_s, [this] {
+        return m_wifi.connecting().isEmpty() ? u"Wi-Fi"_s : u"Could not connect to “%1”"_s.arg(m_wifi.connecting());
+    }));
+    connect(&m_bluetooth, &shell::Bluetooth::failed, this,
+        notifyFailure(u"bluetooth-disabled-symbolic"_s, [] { return u"Bluetooth"_s; }));
     connect(&m_battery, &Battery::changed, this, &Bar::updateStatusIcon);
     updateStatusIcon();
 
@@ -247,11 +263,17 @@ void Bar::raiseWindowOf(const QString& desktopEntry, const QString& appName)
 QMenu* Bar::createQuickSettings()
 {
     auto* menu = new QMenu(this);
-    auto* panel = new QuickSettings(m_audio, m_brightness, m_network, m_battery, menu);
+    auto* panel = new QuickSettings(m_audio, m_brightness, m_network, m_wifi, m_bluetooth, m_battery, menu);
     auto* action = new QWidgetAction(menu);
     action->setDefaultWidget(panel);
     menu->addAction(action);
     connect(menu, &QMenu::aboutToShow, panel, &QuickSettings::refresh);
+    // The menu keeps the size it measured until told its action changed.
+    connect(panel, &QuickSettings::resized, menu, [menu, action] {
+        QActionEvent changed(QEvent::ActionChanged, action);
+        QCoreApplication::sendEvent(menu, &changed);
+        menu->adjustSize();
+    });
 
     // Each after the menu has closed, so a question asked is not under it.
     const auto then = [this, menu](std::function<void()> act) {
@@ -261,6 +283,28 @@ QMenu* Bar::createQuickSettings()
         };
     };
     const QString unsaved = u"Programs that are still open will be closed, and unsaved work in them is lost."_s;
+    connect(panel, &QuickSettings::settingsRequested, this, [then](const QString& page) {
+        then([page] {
+            shell::Application settings;
+            settings.id = u"tde-daedalus.desktop"_s;
+            settings.exec = u"tde-daedalus --page "_s + page;
+            shell::launch(settings);
+        })();
+    });
+    // A network never used before that wants a password has it asked for, once the menu is gone.
+    connect(panel, &QuickSettings::wifiNetworkChosen, this, [this, then](const QString& ssid) {
+        then([this, ssid] {
+            const auto& networks = m_wifi.networks();
+            const auto network = std::ranges::find(networks, ssid, &shell::WifiNetwork::ssid);
+            if (network == networks.end())
+                return;
+            if (!network->needsPassword()) {
+                m_wifi.connectTo(ssid);
+            } else if (const auto password = shell::askWifiPassword(nullptr, ssid)) {
+                m_wifi.connectTo(ssid, *password);
+            }
+        })();
+    });
     connect(panel, &QuickSettings::lockRequested, this, then([this] { m_locking->lock(); }));
     connect(panel, &QuickSettings::suspendRequested, this, then([] { power(u"Suspend"_s); }));
     connect(panel, &QuickSettings::restartRequested, this, then([unsaved] {
@@ -285,6 +329,8 @@ void Bar::updateStatusIcon()
     QStringList names;
     if (m_network.isAvailable())
         names << m_network.iconName();
+    if (m_bluetooth.isPowered())
+        names << u"bluetooth-active-symbolic"_s;
     if (m_audio.isAvailable())
         names << volumeIconName(m_audio.volume(), m_audio.isMuted());
     if (m_brightness.isAvailable())

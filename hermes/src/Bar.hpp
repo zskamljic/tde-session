@@ -7,6 +7,8 @@
 #include "Sounds.hpp"
 #include "SystemStatus.hpp"
 
+#include <Bluetooth.hpp>
+#include <Wifi.hpp>
 #include <Windows.hpp>
 
 #include <QTimer>
@@ -69,6 +71,8 @@ private:
     Audio m_audio;
     Brightness m_brightness;
     Network m_network;
+    shell::Wifi m_wifi;
+    shell::Bluetooth m_bluetooth;
     Battery m_battery;
     MediaKeys m_keys {m_audio, m_brightness}; // with the level indicator, a window of its own
     DisplayLayouts m_displays;

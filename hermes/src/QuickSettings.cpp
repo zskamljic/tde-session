@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -81,11 +82,14 @@ QString volumeIconName(double volume, bool muted)
     return u"audio-volume-high-symbolic"_s;
 }
 
-QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& network, Battery& battery, QWidget* parent)
+QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& network, shell::Wifi& wifi,
+    shell::Bluetooth& bluetooth, Battery& battery, QWidget* parent)
     : QWidget(parent)
     , m_audio(audio)
     , m_brightness(brightness)
     , m_network(network)
+    , m_wifi(wifi)
+    , m_bluetooth(bluetooth)
     , m_battery(battery)
 {
     setFixedWidth(340);
@@ -121,15 +125,44 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     m_networkIcon->setAlignment(Qt::AlignCenter);
     m_networkText = new QLabel(m_networkRow);
     m_networkText->setTextFormat(Qt::PlainText);
-    m_wifi = flatButton(m_networkRow);
-    m_wifi->setCheckable(true);
-    m_wifi->setToolTip(u"Wi-Fi"_s);
-    m_wifi->setIcon(symbolic(u"network-wireless-symbolic"_s, this));
-    connect(m_wifi, &QToolButton::toggled, this, [this](bool on) { m_network.setWifiEnabled(on); });
+    m_wifiSwitch = flatButton(m_networkRow);
+    m_wifiSwitch->setCheckable(true);
+    m_wifiSwitch->setToolTip(u"Wi-Fi"_s);
+    m_wifiSwitch->setIcon(symbolic(u"network-wireless-symbolic"_s, this));
+    connect(m_wifiSwitch, &QToolButton::toggled, this, [this](bool on) { m_network.setWifiEnabled(on); });
     line->addWidget(m_networkIcon);
     line->addWidget(m_networkText, 1);
-    line->addWidget(m_wifi);
+    line->addWidget(m_wifiSwitch);
+    line->addWidget(settingsButton(u"network"_s, u"Network Settings"_s));
     layout->addWidget(m_networkRow);
+    m_networks = new QWidget(this);
+    m_networkList = new QVBoxLayout(m_networks);
+    m_networkList->setContentsMargins(42, 0, 0, 0);
+    m_networkList->setSpacing(2);
+    layout->addWidget(m_networks);
+
+    m_bluetoothRow = row(this, line);
+    m_bluetoothIcon = new QLabel(m_bluetoothRow);
+    m_bluetoothIcon->setFixedSize(32, 32);
+    m_bluetoothIcon->setAlignment(Qt::AlignCenter);
+    m_bluetoothText = new QLabel(m_bluetoothRow);
+    m_bluetoothText->setTextFormat(Qt::PlainText);
+    m_bluetoothSwitch = flatButton(m_bluetoothRow);
+    m_bluetoothSwitch->setCheckable(true);
+    m_bluetoothSwitch->setToolTip(u"Bluetooth"_s);
+    m_bluetoothSwitch->setIcon(symbolic(u"bluetooth-active-symbolic"_s, this));
+    connect(m_bluetoothSwitch, &QToolButton::toggled, this, [this](bool on) { m_bluetooth.setPowered(on); });
+    line->addWidget(m_bluetoothIcon);
+    line->addWidget(m_bluetoothText, 1);
+    line->addWidget(m_bluetoothSwitch);
+    line->addWidget(settingsButton(u"bluetooth"_s, u"Bluetooth Settings"_s));
+    layout->addWidget(m_bluetoothRow);
+    // Under it, indented past its icon.
+    m_devices = new QWidget(this);
+    m_deviceList = new QVBoxLayout(m_devices);
+    m_deviceList->setContentsMargins(42, 0, 0, 0);
+    m_deviceList->setSpacing(2);
+    layout->addWidget(m_devices);
 
     m_batteryRow = row(this, line);
     m_batteryIcon = new QLabel(m_batteryRow);
@@ -166,6 +199,23 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     connect(&m_audio, &Audio::changed, this, &QuickSettings::sync);
     connect(&m_brightness, &Brightness::changed, this, &QuickSettings::sync);
     connect(&m_network, &Network::changed, this, &QuickSettings::sync);
+    connect(&m_bluetooth, &shell::Bluetooth::changed, this, &QuickSettings::sync);
+    connect(&m_wifi, &shell::Wifi::changed, this, &QuickSettings::sync);
+    // What went wrong shows in place of what its row says, for a while.
+    const auto showProblem = [this](QString QuickSettings::* problem) {
+        return [this, problem](const QString& message) {
+            this->*problem = message;
+            sync();
+            QTimer::singleShot(6000, this, [this, problem, message] {
+                if (this->*problem == message) {
+                    (this->*problem).clear();
+                    sync();
+                }
+            });
+        };
+    };
+    connect(&m_bluetooth, &shell::Bluetooth::failed, this, showProblem(&QuickSettings::m_bluetoothProblem));
+    connect(&m_wifi, &shell::Wifi::failed, this, showProblem(&QuickSettings::m_wifiProblem));
     connect(&m_battery, &Battery::changed, this, &QuickSettings::sync);
     sync();
 }
@@ -193,9 +243,25 @@ QToolButton* QuickSettings::actionButton(const QString& icon, const QString& nam
     return button;
 }
 
+QToolButton* QuickSettings::settingsButton(const QString& page, const QString& name)
+{
+    QToolButton* button = flatButton(this);
+    button->setToolTip(name);
+    button->setIcon(symbolic(u"go-next-symbolic"_s, this));
+    connect(button, &QToolButton::clicked, this, [this, page] { emit settingsRequested(page); });
+    return button;
+}
+
+void QuickSettings::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    emit resized();
+}
+
 void QuickSettings::refresh()
 {
     m_brightness.refresh();
+    m_wifi.scan();
     sync();
 }
 
@@ -218,12 +284,16 @@ void QuickSettings::sync()
 
     m_networkRow->setVisible(m_network.isAvailable());
     m_networkIcon->setPixmap(symbolic(m_network.iconName(), this).pixmap(IconSize, IconSize));
-    m_networkText->setText(m_network.description());
-    m_wifi->setVisible(m_network.hasWifi());
+    m_networkText->setText(m_wifiProblem.isEmpty() ? m_network.description() : m_wifiProblem);
+    m_networkText->setWordWrap(!m_wifiProblem.isEmpty());
+    m_wifiSwitch->setVisible(m_network.hasWifi());
     {
-        const QSignalBlocker blocker(m_wifi);
-        m_wifi->setChecked(m_network.isWifiEnabled());
+        const QSignalBlocker blocker(m_wifiSwitch);
+        m_wifiSwitch->setChecked(m_network.isWifiEnabled());
     }
+
+    syncWifi();
+    syncBluetooth();
 
     m_batteryRow->setVisible(m_battery.isPresent());
     m_batteryIcon->setPixmap(symbolic(m_battery.iconName(), this).pixmap(IconSize, IconSize));
@@ -231,6 +301,104 @@ void QuickSettings::sync()
     m_batteryText->setText(
         time.isEmpty() ? u"%1%"_s.arg(m_battery.percentage()) : u"%1%  ·  %2"_s.arg(m_battery.percentage()).arg(time));
     adjustSize();
+}
+
+void QuickSettings::syncBluetooth()
+{
+    const bool on = m_bluetooth.isPowered();
+    m_bluetoothRow->setVisible(m_bluetooth.isAvailable());
+    m_bluetoothIcon->setPixmap(symbolic(on ? u"bluetooth-active-symbolic"_s : u"bluetooth-disabled-symbolic"_s, this)
+            .pixmap(IconSize, IconSize));
+    const QString connected = m_bluetooth.connectedNames();
+    m_bluetoothText->setText(!m_bluetoothProblem.isEmpty() ? m_bluetoothProblem
+            : !on                                          ? u"Bluetooth is off"_s
+            : connected.isEmpty()                          ? u"Bluetooth is on"_s
+                                                           : connected);
+    m_bluetoothText->setWordWrap(!m_bluetoothProblem.isEmpty());
+    {
+        const QSignalBlocker blocker(m_bluetoothSwitch);
+        m_bluetoothSwitch->setChecked(on);
+    }
+
+    // A button for each device paired, connecting it or letting it go.
+    auto devices = on ? m_bluetooth.paired() : std::vector<shell::BluetoothDevice> {};
+    m_devices->setVisible(!devices.empty());
+    if (devices == m_shownDevices)
+        return;
+    m_shownDevices = std::move(devices);
+    while (QLayoutItem* item = m_deviceList->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
+    for (const shell::BluetoothDevice& device : m_shownDevices) {
+        QToolButton* button = listButton(m_devices,
+            device.icon.isEmpty() ? u"bluetooth-active-symbolic"_s : device.icon + u"-symbolic"_s, device.name,
+            device.connected ? u"Connected"_s : QString());
+        button->setToolTip(device.connected ? u"Disconnect"_s : u"Connect"_s);
+        connect(button, &QToolButton::clicked, this, [this, path = device.path, connected = device.connected] {
+            if (connected)
+                m_bluetooth.disconnectDevice(path);
+            else
+                m_bluetooth.connectDevice(path);
+        });
+        m_deviceList->addWidget(button);
+    }
+}
+
+QToolButton* QuickSettings::listButton(QWidget* parent, const QString& icon, const QString& name, const QString& state)
+{
+    QToolButton* button = flatButton(parent);
+    button->setMinimumSize(0, 30);
+    button->setMaximumSize(QWIDGETSIZE_MAX, 30);
+    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    button->setStyleSheet(button->styleSheet() + u" QToolButton { border-radius: 8px; }"_s);
+    auto* content = new QHBoxLayout(button);
+    content->setContentsMargins(10, 0, 10, 0);
+    content->setSpacing(10);
+    auto* iconLabel = new QLabel(button);
+    iconLabel->setPixmap(symbolic(icon, this).pixmap(IconSize, IconSize));
+    auto* nameLabel = new QLabel(name, button);
+    nameLabel->setTextFormat(Qt::PlainText);
+    auto* stateLabel = new QLabel(state, button);
+    stateLabel->setStyleSheet(u"color: %1;"_s.arg(tde::theme::colors().dimText.name()));
+    for (QLabel* label : {iconLabel, nameLabel, stateLabel})
+        label->setAttribute(Qt::WA_TransparentForMouseEvents);
+    content->addWidget(iconLabel);
+    content->addWidget(nameLabel, 1);
+    content->addWidget(stateLabel);
+    return button;
+}
+
+void QuickSettings::syncWifi()
+{
+    // The networks in range, the strongest first, connecting to one or letting it go.
+    std::vector<shell::WifiNetwork> networks;
+    if (m_wifi.isAvailable() && m_wifi.isEnabled()) {
+        for (const shell::WifiNetwork& network : m_wifi.networks()) {
+            if (network.strength >= 0 && networks.size() < 6)
+                networks.push_back(network);
+        }
+    }
+    m_networks->setVisible(!networks.empty());
+    if (networks == m_shownNetworks)
+        return;
+    m_shownNetworks = std::move(networks);
+    while (QLayoutItem* item = m_networkList->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
+    for (const shell::WifiNetwork& network : m_shownNetworks) {
+        const QString state = network.active ? u"Connected"_s : network.needsPassword() ? u"Secured"_s : QString();
+        QToolButton* button = listButton(m_networks, shell::wifiIconName(network.strength), network.ssid, state);
+        button->setToolTip(network.active ? u"Disconnect"_s : u"Connect"_s);
+        connect(button, &QToolButton::clicked, this, [this, ssid = network.ssid, active = network.active] {
+            if (active)
+                m_wifi.disconnect();
+            else
+                emit wifiNetworkChosen(ssid);
+        });
+        m_networkList->addWidget(button);
+    }
 }
 
 } // namespace hermes
