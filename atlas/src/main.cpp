@@ -67,9 +67,20 @@ int main(int argc, char* argv[])
     // unless told otherwise.
     setenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal", false);
     setenv("GTK_USE_PORTAL", "1", false);
-    atlas::Server::spawn("dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP "
-                         "XDG_SESSION_TYPE XDG_SESSION_DESKTOP QT_QPA_PLATFORMTHEME GTK_USE_PORTAL && "
-                         "systemctl --user daemon-reload && systemctl --user start tde-session.target");
+    // Passwords and passphrases for ssh, git and `sudo -A` are asked for in a window, and keys are
+    // unlocked once a session, in openssh's agent, unless the session has an agent of its own.
+    setenv("SSH_ASKPASS", TDE_ASKPASS, false);
+    setenv("SSH_ASKPASS_REQUIRE", "prefer", false);
+    setenv("SUDO_ASKPASS", TDE_ASKPASS, false);
+    const char* runtime = std::getenv("XDG_RUNTIME_DIR");
+    const bool ownAgent = !std::getenv("SSH_AUTH_SOCK") && runtime;
+    if (ownAgent)
+        setenv("SSH_AUTH_SOCK", (std::string(runtime) + "/ssh-agent.socket").c_str(), true);
+    atlas::Server::spawn(std::string("dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY "
+                                     "XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP QT_QPA_PLATFORMTHEME "
+                                     "GTK_USE_PORTAL SSH_ASKPASS SSH_ASKPASS_REQUIRE SUDO_ASKPASS SSH_AUTH_SOCK && "
+                                     "systemctl --user daemon-reload && ")
+        + (ownAgent ? "systemctl --user start ssh-agent.socket; " : "") + "systemctl --user start tde-session.target");
     // The path as an argument of its own, whatever characters it has.
     atlas::Server::spawn("exec /bin/sh \"$1\"", autostartFile());
 
@@ -80,6 +91,7 @@ int main(int argc, char* argv[])
     // looks for this display.
     [[maybe_unused]] const int stopped = std::system("systemctl --user stop tde-session.target; "
                                                      "systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY "
-                                                     "XDG_SESSION_TYPE QT_QPA_PLATFORMTHEME GTK_USE_PORTAL");
+                                                     "XDG_SESSION_TYPE QT_QPA_PLATFORMTHEME GTK_USE_PORTAL "
+                                                     "SSH_ASKPASS SSH_ASKPASS_REQUIRE SUDO_ASKPASS");
     return 0;
 }

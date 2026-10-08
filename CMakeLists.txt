@@ -32,6 +32,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.freedesktop.impl.portal.desktop.td
 add_subdirectory(shell)
 add_subdirectory(atlas)
 add_subdirectory(argus)
+add_subdirectory(askpass)
 add_subdirectory(hermes)
 add_subdirectory(cerberus)
 add_subdirectory(daedalus)

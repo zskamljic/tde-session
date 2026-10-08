@@ -48,7 +48,8 @@ target_include_directories(tde-atlas PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-atlas PRIVATE
     WLR_USE_UNSTABLE
     TDE_SESSION_VERSION="${PROJECT_VERSION}"
-    TDE_DATA_DIR="${TDE_DATA_DIR}")
+    TDE_DATA_DIR="${TDE_DATA_DIR}"
+    TDE_ASKPASS="${CMAKE_INSTALL_FULL_BINDIR}/tde-askpass")
 # The wlroots headers are C; their C-isms are worked around in wlr.hpp.
 target_compile_options(tde-atlas PRIVATE -Wno-pedantic -Wno-missing-field-initializers)
 target_link_libraries(tde-atlas PRIVATE PkgConfig::WLROOTS PkgConfig::WAYLAND_SERVER PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO
