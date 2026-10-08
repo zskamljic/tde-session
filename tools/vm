@@ -99,7 +99,6 @@ write_files:
   - path: /etc/environment
     append: true
     content: |
-      XKB_DEFAULT_LAYOUT=${layout:-us}
       # virgl offers OpenGL 4.2 and terminals such as Ghostty want 4.3; what they use works.
       MESA_GL_VERSION_OVERRIDE=4.3
       MESA_GLSL_VERSION_OVERRIDE=430
