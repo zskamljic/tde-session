@@ -38,6 +38,7 @@ add_executable(tde-argus
     src/Picker.cpp
     src/Screenshot.cpp
     src/ScreenshotPortal.cpp
+    src/ShareChooser.cpp
     src/Switcher.cpp
     src/Toplevels.cpp
     ${protocol_sources}

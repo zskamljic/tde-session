@@ -3,6 +3,7 @@
 #include "Flip.hpp"
 #include "Screenshot.hpp"
 #include "ScreenshotPortal.hpp"
+#include "ShareChooser.hpp"
 #include "Switcher.hpp"
 
 #include <Platform.hpp>
@@ -19,6 +20,7 @@
 #include <QDeadlineTimer>
 #include <QThread>
 
+#include <cstdio>
 #include <optional>
 
 using namespace Qt::StringLiterals;
@@ -66,8 +68,10 @@ int main(int argc, char* argv[])
     const QCommandLineOption screenshotOption(u"screenshot"_s, u"Take a screenshot of what is picked on the screen."_s);
     const QCommandLineOption screenOption(u"screenshot-screen"_s, u"Take a screenshot of the screens."_s);
     const QCommandLineOption windowOption(u"screenshot-window"_s, u"Take a screenshot of the window in use."_s);
-    parser.addOptions(
-        {toggleOption, applicationsOption, flipOption, switchOption, screenshotOption, screenOption, windowOption});
+    const QCommandLineOption shareOption(
+        u"choose-shared"_s, u"Ask what to share of the screen, and print it as xdg-desktop-portal-wlr reads it."_s);
+    parser.addOptions({toggleOption, applicationsOption, flipOption, switchOption, screenshotOption, screenOption,
+        windowOption, shareOption});
     parser.process(app);
 
     std::optional<QDBusMessage> request;
@@ -85,6 +89,17 @@ int main(int argc, char* argv[])
         request = call(u"Screenshot"_s, u"TakeScreen"_s);
     else if (parser.isSet(windowOption))
         request = call(u"Screenshot"_s, u"TakeWindow"_s);
+
+    // Asked by the portal: the running one asks the user, as long as it takes; this one prints the
+    // answer, nothing when declined.
+    if (parser.isSet(shareOption)) {
+        const QDBusMessage reply
+            = QDBusConnection::sessionBus().call(call(u"Sharing"_s, u"Choose"_s), QDBus::Block, 10 * 60 * 1000);
+        const QString choice = reply.arguments().value(0).toString();
+        if (!choice.isEmpty())
+            std::printf("%s\n", choice.toUtf8().constData());
+        return 0;
+    }
 
     // One per session: later starts hand their request to it, and wait for the answer, so the
     // request is out before they are.
@@ -120,11 +135,13 @@ int main(int argc, char* argv[])
     argus::Flip flip(toplevels, wallpaper);
     argus::Switcher switcher(toplevels);
     argus::Screenshot screenshot(toplevels);
+    argus::ShareChooser sharing(toplevels);
     // The switchers and the screenshot's buttons show where the bar is.
     const auto placeSwitchers = [&](QScreen* screen) {
         flip.setScreen(screen);
         switcher.setScreen(screen);
         screenshot.setPrimaryScreen(screen);
+        sharing.setPrimaryScreen(screen);
     };
     QObject::connect(&desktop, &argus::Desktop::primaryScreenChanged, placeSwitchers);
     placeSwitchers(desktop.primaryScreen());
@@ -132,6 +149,7 @@ int main(int argc, char* argv[])
     bus.registerObject(Path + u"/Flip"_s, &flip, QDBusConnection::ExportScriptableSlots);
     bus.registerObject(Path + u"/Switcher"_s, &switcher, QDBusConnection::ExportScriptableSlots);
     bus.registerObject(Path + u"/Screenshot"_s, &screenshot, QDBusConnection::ExportScriptableSlots);
+    bus.registerObject(Path + u"/Sharing"_s, &sharing, QDBusConnection::ExportScriptableSlots);
     // Screenshots for other programs, through xdg-desktop-portal.
     argus::ScreenshotPortal portal(screenshot);
     if (!portal.registerOnBus())

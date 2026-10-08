@@ -20,6 +20,10 @@ install(FILES data/tde-session.target DESTINATION lib/systemd/user)
 install(FILES data/tde-portals.conf DESTINATION share/xdg-desktop-portal)
 # Screenshots and colours picked for other programs, by Argus.
 install(FILES data/portal/tde-argus.portal DESTINATION share/xdg-desktop-portal/portals)
+# What to share of the screen, asked by Argus too, as XDG_CURRENT_DESKTOP names the session.
+include(GNUInstallDirs)
+install(FILES data/portal/xdg-desktop-portal-wlr.conf
+    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/xdg-desktop-portal-wlr RENAME TDE)
 configure_file(data/dbus/org.freedesktop.impl.portal.desktop.tde.argus.service.in
     org.freedesktop.impl.portal.desktop.tde.argus.service @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.freedesktop.impl.portal.desktop.tde.argus.service

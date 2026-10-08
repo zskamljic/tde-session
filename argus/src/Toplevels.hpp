@@ -48,6 +48,8 @@ struct Toplevel {
     ~Toplevel();
 
     QString displayName() const { return title.isEmpty() ? appId : title; }
+    // How ext-foreign-toplevel-list names it, as screen sharing picks windows by; empty until paired.
+    QString identifier() const;
     // How far down the stack it is: 0 for the window used last, those not known below all.
     int depth() const { return recency < 0 ? std::numeric_limits<int>::max() : recency; }
 
@@ -80,6 +82,7 @@ struct ListEntry {
     QString appId;
     QString pendingTitle;
     QString pendingAppId;
+    QString identifier;
     bool announced = false;
     Toplevel* window = nullptr; // once paired
 };

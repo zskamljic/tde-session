@@ -29,6 +29,11 @@ QString fromUtf8(const char* text)
 Toplevel::Toplevel() = default;
 Toplevel::~Toplevel() = default;
 
+QString Toplevel::identifier() const
+{
+    return entry ? entry->identifier : QString();
+}
+
 QRect placeOf(const Toplevel& window, const QWidget& widget)
 {
     if (window.frame.isEmpty() || window.minimized)
@@ -146,7 +151,8 @@ void Toplevels::addListEntry(ext_foreign_toplevel_handle_v1* handle)
                      const char* title) { static_cast<ListEntry*>(data)->pendingTitle = fromUtf8(title); },
         .app_id = [](void* data, ext_foreign_toplevel_handle_v1*,
                       const char* appId) { static_cast<ListEntry*>(data)->pendingAppId = fromUtf8(appId); },
-        .identifier = [](void*, ext_foreign_toplevel_handle_v1*, const char*) { },
+        .identifier = [](void* data, ext_foreign_toplevel_handle_v1*,
+                          const char* identifier) { static_cast<ListEntry*>(data)->identifier = fromUtf8(identifier); },
     };
     ext_foreign_toplevel_handle_v1_add_listener(handle, &listener, entry.get());
     m_entries.push_back(std::move(entry));
