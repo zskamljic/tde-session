@@ -3,6 +3,7 @@
 #include "BackgroundPage.hpp"
 #include "DisplaysPage.hpp"
 #include "LockPage.hpp"
+#include "NetworkPage.hpp"
 
 #include <tde/DesktopConfig.hpp>
 #include <tde/FramelessHelper.hpp>
@@ -98,6 +99,7 @@ SettingsWindow::SettingsWindow(QWidget* parent)
         m_stack->addWidget(page);
         m_names << name;
     };
+    addPage(u"network"_s, u"network-wireless"_s, u"Network"_s, new NetworkPage(m_stack));
     addPage(
         u"background"_s, u"preferences-desktop-wallpaper"_s, u"Background"_s, new BackgroundPage(m_settings, m_stack));
     addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));

@@ -8,6 +8,7 @@ add_executable(tde-daedalus
     src/BackgroundPage.cpp
     src/DisplaysPage.cpp
     src/LockPage.cpp
+    src/NetworkPage.cpp
     src/Pages.cpp
     src/SettingsWindow.cpp
     src/Widgets.cpp
