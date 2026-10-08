@@ -1,6 +1,7 @@
 # What the shell's programs share: the installed applications and their icons, the windows
-# open on the compositor, its displays, the session's settings, and owning Wayland objects.
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui)
+# open on the compositor, its displays, Bluetooth and Wi-Fi, the session's settings, and owning
+# Wayland objects.
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui DBus)
 find_package(Tde 0.2 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
@@ -32,15 +33,17 @@ endforeach()
 
 add_library(tde-shell STATIC
     src/Applications.cpp
+    src/Bluetooth.cpp
     src/Catalog.cpp
     src/Displays.cpp
     src/Icons.cpp
     src/SessionConfig.cpp
+    src/Wifi.cpp
     src/Windows.cpp
     ${protocol_sources}
 )
 target_include_directories(tde-shell PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(tde-shell PUBLIC Qt6::Core Qt6::Gui Tde::Tde PkgConfig::WAYLAND_CLIENT)
+target_link_libraries(tde-shell PUBLIC Qt6::Core Qt6::Gui Qt6::DBus Tde::Tde PkgConfig::WAYLAND_CLIENT)
 
 if(TDE_SESSION_BUILD_TESTS)
     add_subdirectory(tests)
