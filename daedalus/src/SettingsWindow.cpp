@@ -5,6 +5,7 @@
 #include "DisplaysPage.hpp"
 #include "LockPage.hpp"
 #include "NetworkPage.hpp"
+#include "PowerPage.hpp"
 #include "SoundPage.hpp"
 
 #include <tde/DesktopConfig.hpp>
@@ -107,6 +108,7 @@ SettingsWindow::SettingsWindow(QWidget* parent)
         u"background"_s, u"preferences-desktop-wallpaper"_s, u"Background"_s, new BackgroundPage(m_settings, m_stack));
     addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));
     addPage(u"sound"_s, u"audio-speakers"_s, u"Sound"_s, new SoundPage(m_stack));
+    addPage(u"power"_s, u"battery-good"_s, u"Power"_s, new PowerPage(m_settings, m_stack));
     addPage(u"windows"_s, u"preferences-system-windows"_s, u"Windows"_s, new WindowsPage(m_settings, m_stack));
     addPage(u"lock"_s, u"system-lock-screen"_s, u"Lock Screen"_s, new LockPage(m_stack));
     addPage(u"datetime"_s, u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));
