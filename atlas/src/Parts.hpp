@@ -64,9 +64,10 @@ private:
 
 class Keyboard {
 public:
-    Keyboard(Server& server, wlr_keyboard* keyboard);
+    Keyboard(Server& server, wlr_keyboard* keyboard, bool virtualKeyboard);
 
     wlr_keyboard* keyboard;
+    bool virtualKeyboard; // one of a program, with the keymap it brings
 
 private:
     Server& m_server;

@@ -156,6 +156,9 @@ private:
     // Input.cpp
     void newInput(wlr_input_device* device);
     void newKeyboard(wlr_keyboard* keyboard, bool virtualKeyboard);
+    // Follows the system's keyboard layout as localectl changes it, on the keyboards there are.
+    void watchKeyboardLayout();
+    void keyboardLayoutChanged();
     void updateCapabilities();
     void cursorMotion(uint32_t timeMsec);
     void cursorButton(wlr_pointer_button_event* event);
@@ -182,6 +185,8 @@ private:
     wlr_layer_shell_v1* m_layerShell = nullptr;
     wlr_output_manager_v1* m_outputManager = nullptr;
     wl_event_source* m_layoutIdle = nullptr; // to see layout changes once they are all done
+    int m_keyboardWatch = -1; // inotify, on where the system keeps the keyboard layout
+    wl_event_source* m_keyboardWatchSource = nullptr;
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
     wlr_xwayland* m_xwayland = nullptr;
 

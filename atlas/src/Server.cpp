@@ -34,6 +34,10 @@ Server::~Server()
         listener->disconnect();
     if (m_layoutIdle)
         wl_event_source_remove(m_layoutIdle);
+    if (m_keyboardWatchSource)
+        wl_event_source_remove(m_keyboardWatchSource);
+    if (m_keyboardWatch >= 0)
+        close(m_keyboardWatch);
     wl_display_destroy_clients(display);
     m_popups.clear();
     m_views.clear();

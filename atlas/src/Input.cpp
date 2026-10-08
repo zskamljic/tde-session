@@ -4,6 +4,8 @@
 #include "Parts.hpp"
 
 #include <linux/input-event-codes.h>
+#include <sys/inotify.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <charconv>
@@ -60,6 +62,20 @@ xkb_rule_names keyboardLayout(std::string& layout, std::string& variant, std::st
     return names;
 }
 
+// Gives a keyboard of the machine the layout the system has.
+void setSystemKeymap(wlr_keyboard* keyboard)
+{
+    std::string layout, variant, options;
+    const xkb_rule_names names = keyboardLayout(layout, variant, options);
+    xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (!keymap)
+        keymap = xkb_keymap_new_from_names(context, nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    wlr_keyboard_set_keymap(keyboard, keymap);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(context);
+}
+
 bool isSuper(xkb_keysym_t sym)
 {
     return sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R;
@@ -96,8 +112,9 @@ void callPicker(uint32_t modifier, std::string_view call, std::string_view other
 
 } // namespace
 
-Keyboard::Keyboard(Server& server, wlr_keyboard* keyboard)
+Keyboard::Keyboard(Server& server, wlr_keyboard* keyboard, bool virtualKeyboard)
     : keyboard(keyboard)
+    , virtualKeyboard(virtualKeyboard)
     , m_server(server)
 {
     m_key.connect<wlr_keyboard_key_event>(keyboard->events.key, [this](wlr_keyboard_key_event* event) {
@@ -149,6 +166,7 @@ void Server::setUpInput()
     seat = wlr_seat_create(display, "seat0");
     m_newInput.connect<wlr_input_device>(
         backend->events.new_input, [this](wlr_input_device* device) { newInput(device); });
+    watchKeyboardLayout();
 
     m_requestCursor.connect<wlr_seat_pointer_request_set_cursor_event>(
         seat->events.request_set_cursor, [this](wlr_seat_pointer_request_set_cursor_event* event) {
@@ -219,21 +237,44 @@ void Server::newInput(wlr_input_device* device)
 void Server::newKeyboard(wlr_keyboard* keyboard, bool virtualKeyboard)
 {
     // Virtual keyboards bring the keymap of the program behind them.
-    if (!virtualKeyboard) {
-        std::string layout, variant, options;
-        const xkb_rule_names names = keyboardLayout(layout, variant, options);
-        xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-        xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-        if (!keymap)
-            keymap = xkb_keymap_new_from_names(context, nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS);
-        wlr_keyboard_set_keymap(keyboard, keymap);
-        xkb_keymap_unref(keymap);
-        xkb_context_unref(context);
-    }
+    if (!virtualKeyboard)
+        setSystemKeymap(keyboard);
     wlr_keyboard_set_repeat_info(keyboard, 25, 600);
-    m_keyboards.push_back(std::make_unique<Keyboard>(*this, keyboard));
+    m_keyboards.push_back(std::make_unique<Keyboard>(*this, keyboard, virtualKeyboard));
     wlr_seat_set_keyboard(seat, keyboard);
     updateCapabilities();
+}
+
+void Server::watchKeyboardLayout()
+{
+    // Set for the session, it stays as it is.
+    if (!environment("XKB_DEFAULT_LAYOUT").empty())
+        return;
+    m_keyboardWatch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (m_keyboardWatch < 0)
+        return;
+    // localectl writes the file anew; the folder may not be there before it first does.
+    for (const char* folder : {"/etc/X11", "/etc/X11/xorg.conf.d"})
+        inotify_add_watch(m_keyboardWatch, folder, IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE);
+    m_keyboardWatchSource = wl_event_loop_add_fd(
+        eventLoop, m_keyboardWatch, WL_EVENT_READABLE,
+        [](int fd, uint32_t, void* data) {
+            alignas(inotify_event) char events[4096];
+            while (read(fd, events, sizeof events) > 0) { }
+            static_cast<Server*>(data)->keyboardLayoutChanged();
+            return 0;
+        },
+        this);
+}
+
+void Server::keyboardLayoutChanged()
+{
+    // The folder made since starting is watched from now on.
+    inotify_add_watch(m_keyboardWatch, "/etc/X11/xorg.conf.d", IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE);
+    for (const auto& keyboard : m_keyboards) {
+        if (!keyboard->virtualKeyboard)
+            setSystemKeymap(keyboard->keyboard);
+    }
 }
 
 void Server::keyboardDestroyed(Keyboard& keyboard)
