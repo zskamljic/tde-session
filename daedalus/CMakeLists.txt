@@ -1,5 +1,7 @@
 find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus)
 find_package(Tde 0.2 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
 
 set(CMAKE_AUTOMOC ON)
 
@@ -11,11 +13,12 @@ add_executable(tde-daedalus
     src/LockPage.cpp
     src/NetworkPage.cpp
     src/Pages.cpp
+    src/SoundPage.cpp
     src/SettingsWindow.cpp
     src/Widgets.cpp
 )
 target_compile_definitions(tde-daedalus PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
-target_link_libraries(tde-daedalus PRIVATE Qt6::Gui Qt6::Widgets Qt6::DBus Tde::Tde tde-shell)
+target_link_libraries(tde-daedalus PRIVATE Qt6::Gui Qt6::Widgets Qt6::DBus Tde::Tde tde-shell PkgConfig::PULSE)
 install(TARGETS tde-daedalus)
 install(FILES tde-daedalus.desktop DESTINATION share/applications)
 
