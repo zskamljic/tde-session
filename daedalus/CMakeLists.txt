@@ -10,6 +10,7 @@ add_executable(tde-daedalus
     src/BackgroundPage.cpp
     src/BluetoothPage.cpp
     src/DisplaysPage.cpp
+    src/KeyboardPage.cpp
     src/LockPage.cpp
     src/NetworkPage.cpp
     src/Pages.cpp
@@ -34,4 +35,9 @@ if(TDE_SESSION_BUILD_TESTS)
     target_include_directories(tst_arrangement PRIVATE src)
     target_link_libraries(tst_arrangement PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
     add_test(NAME tst_arrangement COMMAND tst_arrangement)
+
+    add_executable(tst_keyboard tests/tst_keyboard.cpp src/KeyboardPage.cpp src/Widgets.cpp)
+    target_include_directories(tst_keyboard PRIVATE src)
+    target_link_libraries(tst_keyboard PRIVATE Qt6::Widgets Qt6::DBus Qt6::Test Tde::Tde tde-shell)
+    add_test(NAME tst_keyboard COMMAND tst_keyboard)
 endif()
