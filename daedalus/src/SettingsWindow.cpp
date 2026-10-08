@@ -93,21 +93,40 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     layout->addWidget(sidebar);
     layout->addWidget(content, 1);
 
-    const auto addPage = [&](const QString& icon, const QString& name, QWidget* page) {
-        new QListWidgetItem(tde::theme::symbolicIcon(icon), name, m_pages);
+    const auto addPage = [&](const QString& name, const QString& icon, const QString& title, QWidget* page) {
+        new QListWidgetItem(tde::theme::symbolicIcon(icon), title, m_pages);
         m_stack->addWidget(page);
+        m_names << name;
     };
-    addPage(u"preferences-desktop-wallpaper"_s, u"Background"_s, new BackgroundPage(m_settings, m_stack));
-    addPage(u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));
-    addPage(u"preferences-system-windows"_s, u"Windows"_s, new WindowsPage(m_settings, m_stack));
-    addPage(u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));
-    addPage(u"system-lock-screen"_s, u"Lock Screen"_s, new LockPage(m_stack));
+    addPage(
+        u"background"_s, u"preferences-desktop-wallpaper"_s, u"Background"_s, new BackgroundPage(m_settings, m_stack));
+    addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));
+    addPage(u"windows"_s, u"preferences-system-windows"_s, u"Windows"_s, new WindowsPage(m_settings, m_stack));
+    addPage(u"lock"_s, u"system-lock-screen"_s, u"Lock Screen"_s, new LockPage(m_stack));
+    addPage(u"datetime"_s, u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));
 
     connect(m_pages, &QListWidget::currentRowChanged, this, [this, title](int row) {
         m_stack->setCurrentIndex(row);
         title->setText(m_pages->item(row)->text());
     });
     m_pages->setCurrentRow(0);
+}
+
+bool SettingsWindow::showPage(const QString& name)
+{
+    const qsizetype index = m_names.indexOf(name.toLower());
+    if (index < 0)
+        return false;
+    m_pages->setCurrentRow(int(index));
+    return true;
+}
+
+void SettingsWindow::ShowPage(const QString& name)
+{
+    showPage(name);
+    show();
+    raise();
+    activateWindow();
 }
 
 SettingsWindow::~SettingsWindow()

@@ -6,6 +6,8 @@
 
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDBusConnection>
+#include <QDBusMessage>
 
 using namespace Qt::StringLiterals;
 
@@ -21,7 +23,24 @@ int main(int argc, char* argv[])
     parser.setApplicationDescription(u"The settings of the TDE session."_s);
     parser.addHelpOption();
     parser.addVersionOption();
+    const QCommandLineOption pageOption(u"page"_s,
+        u"Open on the page called <name>: network, bluetooth, background, displays, sound, power, windows, "
+        "keyboard, lock, apps or datetime."_s,
+        u"name"_s);
+    parser.addOption(pageOption);
     parser.process(app);
+    const QString page = parser.value(pageOption);
+
+    // One window: a second start shows the first on the page asked for.
+    const QString service = u"io.github.zskamljic.Daedalus"_s;
+    const QString path = u"/io/github/zskamljic/Daedalus"_s;
+    auto bus = QDBusConnection::sessionBus();
+    if (bus.isConnected() && !bus.registerService(service)) {
+        QDBusMessage message = QDBusMessage::createMethodCall(service, path, service, u"ShowPage"_s);
+        message << page;
+        bus.call(message);
+        return 0;
+    }
 
     tde::createDesktopConfig(tde::desktopConfigPath());
     tde::setDesktop(tde::loadDesktopConfig());
@@ -40,6 +59,9 @@ QLabel#Keys { color: @dim_text@; border: 1px solid @border@; border-radius: 6px;
     tde::theme::apply(app, tde::desktop().appearance);
 
     daedalus::SettingsWindow window;
+    if (!page.isEmpty() && !window.showPage(page))
+        qWarning("tde-daedalus: there is no page called %s", qPrintable(page));
+    bus.registerObject(path, &window, QDBusConnection::ExportScriptableSlots);
     window.show();
     return QApplication::exec();
 }
