@@ -10,7 +10,10 @@ The desktop session of TDE, tofiffe's desktop environment:
 - **Hermes** (`tde-hermes`), the bar along the top: the applications, the clock, the tray
   icons and the quick settings; it also shows the notifications;
 - **Cerberus** (`tde-cerberus`), the lock screen;
-- **Daedalus** (`tde-daedalus`), the settings: the background, windows, the clock and the lock screen.
+- **tde-askpass**, which asks for the passphrases of SSH keys and for passwords for ssh, git
+  and `sudo -A`;
+- **Daedalus** (`tde-daedalus`), the settings: the network, Bluetooth, the background, displays,
+  sound, power, windows, the keyboard, the lock screen, default apps, and the clock.
 
 The bar shows the running applications the way Windows 7 did, a button each with a dot below
 for every window. A click switches to the application's window or, when it is active,
@@ -18,8 +21,11 @@ minimizes it; with several windows, clicks go through them. A middle click opens
 window, and a right click lists the windows.
 
 The status icons on the right open the quick settings: the volume, the brightness of a laptop's
-screen, the network, with a switch for Wi-Fi, and the battery, and buttons to lock the screen,
-log out, restart or shut down. The volume and brightness keys show their level near the bottom
+screen, the network, with a switch for Wi-Fi and the networks in range to connect to,
+Bluetooth, with a switch and the devices paired to connect or let go, and the battery, and
+buttons to lock the screen, suspend, log out, restart or shut down. A network never used asks
+for its password; one that does not take it asks again. The arrows by the network and Bluetooth
+open their settings. The volume and brightness keys show their level near the bottom
 of the screen for a moment.
 
 Notifications show in the top right corner, below the bar, for five seconds, or until they
@@ -91,16 +97,22 @@ cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
 sudo cmake --install build
 ```
 
-Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, libpulse, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
+Building needs wlroots 0.20 (with Xwayland), pango, libcanberra, libpulse, libsecret, PAM, xkbcommon, Qt 6, polkit-qt6, layer-shell-qt, libtde, wayland-protocols and wlr-protocols.
 The session runs a terminal, Ariadne for files, and xdg-desktop-portal with its GTK and wlroots back ends.
+Networking, Bluetooth, the battery and the power mode come from NetworkManager, BlueZ, UPower and power-profiles-daemon when they run; what is not there is left out.
 
 ## Changing it
 
-Daedalus, shown as Settings, sets the desktop's background (a picture and how it covers the
-screen, or a colour; pictures added there are kept in `~/.local/share/backgrounds`), how the
-displays are arranged and which one has the bar, what Alt+Tab shows of the windows, how long
-the animations of the overview and Flip 3D take, whether the clocks show seconds, and
-whether and when the screen locks by itself. The session's own settings are in
+Daedalus, shown as Settings, connects to Wi-Fi networks and forgets them, pairs Bluetooth
+devices (it is visible to others, and looks for them, while its page shows), and sets the
+desktop's background (a picture and how it covers the screen, or a colour; pictures added there
+are kept in `~/.local/share/backgrounds`), how the displays are arranged and which one has the
+bar, which output and input sound uses and how loud, the power mode and when the screens turn
+off and the computer sleeps, plugged in and on battery, what Alt+Tab shows of the windows, how
+long the animations of the overview and Flip 3D take, the keyboard layouts and the keys that
+switch them, whether and when the screen locks by itself, which applications open web pages,
+mail, music and the rest, and whether the clocks show seconds. `tde-daedalus --page bluetooth`
+opens it on a page, or shows the one open there. The session's own settings are in
 `~/.config/tde/session/config.lua`, which Daedalus writes; the lock screen's are in the
 desktop config, `~/.config/tde/config.lua`, of which Daedalus changes only that value. Both
 can be edited by hand too, and take effect once saved.
@@ -113,20 +125,29 @@ and the window switchers are on the primary display; every display has its backg
 its part of the overview.
 
 Files are opened and saved through xdg-desktop-portal, which `tde-portals.conf` has pick them
-in [Ariadne](https://github.com/zskamljic/tde-ariadne) when it is installed. Programs that ask the
-portal for a screenshot or a colour on the screen get them from Argus, the way Print takes
-them; the screen is shared by `xdg-desktop-portal-wlr` (which asks which display to share with
-`slurp`), and the rest is left to GTK's portals. The session sets
+in [Ariadne](https://github.com/zskamljic/tde-ariadne) when it is installed. Programs that ask
+the portal for a screenshot or a colour on the screen get them from Argus, the way Print takes
+them; the screen is shared by `xdg-desktop-portal-wlr`, for which Argus asks whether a whole
+screen or one window is shared, and the rest is left to GTK's portals. The session sets
 `QT_QPA_PLATFORMTHEME=xdgdesktopportal` and `GTK_USE_PORTAL=1`, unless they are set already, so
 Qt and GTK 3 programs use the portal too. Atlas places the picker over the window it was opened
 for, which the program shares with it through xdg-foreign.
+
+Programs that want a password or a passphrase without a terminal to ask in, such as ssh, git
+and `sudo -A`, ask in a window of tde-askpass, which the session sets as `SSH_ASKPASS` and
+`SUDO_ASKPASS`; ssh asks there from terminals too. A key unlocked there stays unlocked until
+the session ends, in openssh's agent, which the session starts unless it has an agent already,
+such as gnome-keyring's. Its passphrase can be remembered in the keyring (gnome-keyring,
+KeePassXC or another Secret Service), to unlock the key without asking; one that no longer
+works is forgotten and asked for again. Administrator passwords that polkit asks for are asked
+for by the bar.
 
 The programs started with the session are listed in `/usr/share/tde/autostart`; a copy in
 `~/.config/tde/autostart` takes its place. Programs that start at login the usual way, from
 `/etc/xdg/autostart` and `~/.config/autostart`, start too, as systemd services that
 `tde-session.target` brings up and takes down with the session; those meant only for other
-desktops do not. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and
-friends, or else from the system layout that `localectl` sets.
+desktops do not. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and friends, or else from the
+system layout that `localectl`, and Daedalus, set; Atlas follows changes to it at once.
 
 ## Testing in a virtual machine
 
