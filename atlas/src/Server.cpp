@@ -30,7 +30,7 @@ Server::~Server()
              &m_newVirtualKeyboard, &m_newVirtualPointer, &m_cursorMotion, &m_cursorMotionAbsolute, &m_cursorButton,
              &m_cursorAxis, &m_cursorFrame, &m_requestCursor, &m_requestCursorShape, &m_requestSelection,
              &m_requestPrimarySelection, &m_requestStartDrag, &m_startDrag, &m_dragIconDestroy, &m_requestActivate,
-             &m_newInhibitor, &m_newCaptureSource, &m_newXwaylandSurface, &m_xwaylandReady})
+             &m_newInhibitor, &m_newCaptureSource, &m_outputPowerMode, &m_newXwaylandSurface, &m_xwaylandReady})
         listener->disconnect();
     if (m_layoutIdle)
         wl_event_source_remove(m_layoutIdle);
@@ -755,6 +755,22 @@ void Server::setUpProtocols()
                 if (view->surface() == event->surface)
                     focus(view);
             }
+        });
+
+    // Displays turned off and on again, as the bar does after a while without input. They keep
+    // their place in the layout, so nothing moves; one turned off in the settings stays off.
+    auto* power = wlr_output_power_manager_v1_create(display);
+    m_outputPowerMode.connect<wlr_output_power_v1_set_mode_event>(
+        power->events.set_mode, [this](wlr_output_power_v1_set_mode_event* event) {
+            const bool on = event->mode == ZWLR_OUTPUT_POWER_V1_MODE_ON;
+            if (on && !wlr_output_layout_get(outputLayout, event->output))
+                return;
+            wlr_output_state state;
+            wlr_output_state_init(&state);
+            wlr_output_state_set_enabled(&state, on);
+            if (!wlr_output_commit_state(event->output, &state))
+                wlr_log(WLR_ERROR, "cannot turn %s %s", event->output->name, on ? "on" : "off");
+            wlr_output_state_finish(&state);
         });
 
     // Pictures of screens and windows, for the overview and screenshots.

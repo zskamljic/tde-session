@@ -8,12 +8,15 @@ pkg_get_variable(WLR_PROTOCOLS wlr-protocols pkgdatadir)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
 pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
 
-# The wlroots headers include the server side of layer-shell, which compositors generate.
-set(layer_shell_xml ${WLR_PROTOCOLS}/unstable/wlr-layer-shell-unstable-v1.xml)
-set(layer_shell_header ${CMAKE_CURRENT_BINARY_DIR}/wlr-layer-shell-unstable-v1-protocol.h)
-add_custom_command(OUTPUT ${layer_shell_header}
-    COMMAND ${WAYLAND_SCANNER} server-header ${layer_shell_xml} ${layer_shell_header}
-    DEPENDS ${layer_shell_xml})
+# The wlroots headers include the server side of layer-shell and of turning outputs off, which
+# compositors generate.
+set(wlr_headers)
+foreach(name wlr-layer-shell-unstable-v1 wlr-output-power-management-unstable-v1)
+    set(xml ${WLR_PROTOCOLS}/unstable/${name}.xml)
+    set(header ${CMAKE_CURRENT_BINARY_DIR}/${name}-protocol.h)
+    add_custom_command(OUTPUT ${header} COMMAND ${WAYLAND_SCANNER} server-header ${xml} ${header} DEPENDS ${xml})
+    list(APPEND wlr_headers ${header})
+endforeach()
 
 # TDE's own protocol, which names windows the way ext-foreign-toplevel-list does.
 set(protocol_sources)
@@ -38,7 +41,7 @@ add_executable(tde-atlas
     src/Server.cpp
     src/View.cpp
     src/WindowInfo.cpp
-    ${layer_shell_header}
+    ${wlr_headers}
     ${protocol_sources}
 )
 target_include_directories(tde-atlas PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

@@ -264,6 +264,7 @@ private:
     };
     std::vector<std::unique_ptr<Inhibitor>> m_inhibitors;
     Listener m_newCaptureSource;
+    Listener m_outputPowerMode;
     Listener m_newXwaylandSurface;
     Listener m_xwaylandReady;
 };
