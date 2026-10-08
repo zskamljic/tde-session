@@ -1,6 +1,7 @@
 #include "SettingsWindow.hpp"
 
 #include "BackgroundPage.hpp"
+#include "BluetoothPage.hpp"
 #include "DisplaysPage.hpp"
 #include "LockPage.hpp"
 #include "NetworkPage.hpp"
@@ -100,6 +101,7 @@ SettingsWindow::SettingsWindow(QWidget* parent)
         m_names << name;
     };
     addPage(u"network"_s, u"network-wireless"_s, u"Network"_s, new NetworkPage(m_stack));
+    addPage(u"bluetooth"_s, u"bluetooth-active"_s, u"Bluetooth"_s, new BluetoothPage(m_stack));
     addPage(
         u"background"_s, u"preferences-desktop-wallpaper"_s, u"Background"_s, new BackgroundPage(m_settings, m_stack));
     addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));

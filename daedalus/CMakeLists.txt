@@ -6,6 +6,7 @@ set(CMAKE_AUTOMOC ON)
 add_executable(tde-daedalus
     src/main.cpp
     src/BackgroundPage.cpp
+    src/BluetoothPage.cpp
     src/DisplaysPage.cpp
     src/LockPage.cpp
     src/NetworkPage.cpp
