@@ -131,6 +131,15 @@ SessionConfig loadSessionConfig(const QString& path)
             if (const auto seconds = reader.boolean("seconds"))
                 config.clock.seconds = *seconds;
         });
+        reader.table("power", [&] {
+            constexpr int MaxMinutes = 24 * 60;
+            if (const auto blank = reader.integer("blank", 0, MaxMinutes))
+                config.power.blank = *blank;
+            if (const auto suspend = reader.integer("suspend", 0, MaxMinutes))
+                config.power.suspend = *suspend;
+            if (const auto onBattery = reader.integer("suspend_on_battery", 0, MaxMinutes))
+                config.power.suspendOnBattery = *onBattery;
+        });
     });
     return config;
 }
@@ -186,6 +195,12 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"    clock = {"_s,
         u"        -- Whether the clocks of the bar and the lock screen show seconds."_s,
         u"        seconds = %1,"_s.arg(config.clock.seconds ? u"true"_s : u"false"_s),
+        u"    },"_s,
+        u"    power = {"_s,
+        u"        -- Minutes without input until it happens; 0 never does it."_s,
+        u"        blank = %1, -- the screens turn off"_s.arg(config.power.blank),
+        u"        suspend = %1, -- the computer sleeps, plugged in"_s.arg(config.power.suspend),
+        u"        suspend_on_battery = %1, -- and on battery"_s.arg(config.power.suspendOnBattery),
         u"    },"_s,
         u"}"_s,
     };

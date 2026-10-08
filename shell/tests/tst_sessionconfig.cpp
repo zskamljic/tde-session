@@ -26,6 +26,7 @@ private slots:
         config.background.color = QColor(0x12, 0x34, 0x56);
         config.switcher.style = shell::SessionConfig::Switcher::Style::Icons;
         config.clock.seconds = true;
+        config.power = {.blank = 0, .suspend = 45, .suspendOnBattery = 10};
         config.animations = {.overview = 0, .flip = 600, .flipStep = 90};
         config.displays.primary = u"Dell U2720Q ABC123"_s;
         config.displays.keep({

@@ -75,6 +75,15 @@ struct SessionConfig {
         bool operator==(const Clock&) const = default;
     } clock;
 
+    // What happens after a while without input, in minutes; 0 never does it.
+    struct Power {
+        int blank = 5; // the screens turn off
+        int suspend = 0; // the computer sleeps, plugged in
+        int suspendOnBattery = 15; // and on battery
+
+        bool operator==(const Power&) const = default;
+    } power;
+
     bool operator==(const SessionConfig&) const = default;
 };
 

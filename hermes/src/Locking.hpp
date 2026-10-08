@@ -1,17 +1,12 @@
 #pragma once
 
-#include "ext-idle-notify-v1-client-protocol.h"
-
-#include <Proxy.hpp>
+#include "Idle.hpp"
 
 #include <QDBusUnixFileDescriptor>
 #include <QObject>
 
 #include <functional>
 #include <vector>
-
-SHELL_PROXY(ext_idle_notifier_v1, ext_idle_notifier_v1_destroy);
-SHELL_PROXY(ext_idle_notification_v1, ext_idle_notification_v1_destroy);
 
 class QProcess;
 

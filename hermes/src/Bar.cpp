@@ -4,6 +4,7 @@
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
 #include "PolkitAgent.hpp"
+#include "PowerSaving.hpp"
 #include "QuickSettings.hpp"
 #include "Taskbar.hpp"
 #include "Tray.hpp"
@@ -142,6 +143,7 @@ Bar::Bar(QWidget* parent)
 
     m_tray = new Tray(this);
     m_locking = new Locking(this);
+    m_powerSaving = new PowerSaving(this);
     m_polkit = new PolkitAgent(this);
     if (!m_polkit->start())
         qWarning("tde-hermes: another program asks for passwords for polkit already");
@@ -157,6 +159,7 @@ Bar::Bar(QWidget* parent)
         m_seconds = config.clock.seconds;
         m_locking->setClockSeconds(m_seconds);
         m_displays.setSettings(config.displays);
+        m_powerSaving->setTimes(config.power.blank, config.power.suspend, config.power.suspendOnBattery);
     };
     auto* watcher = new tde::ConfigWatcher({tde::desktopConfigPath(), shell::sessionConfigPath()}, this);
     connect(watcher, &tde::ConfigWatcher::changed, this, [this, applySession](const QString& path) {
