@@ -309,6 +309,7 @@ std::vector<Application> loadApplications(const QStringList& desktops)
                 .icon = entry->value(u"Icon"_s),
                 .workingDirectory = entry->value(u"Path"_s),
                 .startupWmClass = entry->value(u"StartupWMClass"_s),
+                .mimeTypes = entry->list(u"MimeType"_s),
                 .terminal = entry->flag(u"Terminal"_s),
                 .inMenus = !entry->flag(u"NoDisplay"_s) && shownIn(*entry, desktops),
             });

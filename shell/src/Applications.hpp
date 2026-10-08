@@ -18,6 +18,7 @@ struct Application {
     QString icon;
     QString workingDirectory;
     QString startupWmClass; // the app id its windows have, when not the file's name
+    QStringList mimeTypes; // what it opens
     bool terminal = false;
     bool inMenus = true; // false for helpers and apps of other desktops, which only lend their icons
 };

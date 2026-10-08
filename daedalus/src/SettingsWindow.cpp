@@ -2,6 +2,7 @@
 
 #include "BackgroundPage.hpp"
 #include "BluetoothPage.hpp"
+#include "DefaultAppsPage.hpp"
 #include "DisplaysPage.hpp"
 #include "KeyboardPage.hpp"
 #include "LockPage.hpp"
@@ -113,6 +114,7 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     addPage(u"windows"_s, u"preferences-system-windows"_s, u"Windows"_s, new WindowsPage(m_settings, m_stack));
     addPage(u"keyboard"_s, u"input-keyboard"_s, u"Keyboard"_s, new KeyboardPage(m_stack));
     addPage(u"lock"_s, u"system-lock-screen"_s, u"Lock Screen"_s, new LockPage(m_stack));
+    addPage(u"apps"_s, u"applications-system"_s, u"Default Apps"_s, new DefaultAppsPage(m_stack));
     addPage(u"datetime"_s, u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));
 
     connect(m_pages, &QListWidget::currentRowChanged, this, [this, title](int row) {
