@@ -338,21 +338,39 @@ void Bar::updateStatusIcon()
         names << volumeIconName(m_audio.volume(), m_audio.isMuted());
     if (m_brightness.isAvailable())
         names << u"display-brightness-symbolic"_s;
-    if (m_battery.isPresent() && !m_battery.iconName().isEmpty())
+    // The battery's charge beside its icon.
+    int batteryIndex = -1;
+    if (m_battery.isPresent() && !m_battery.iconName().isEmpty()) {
+        batteryIndex = int(names.size());
         names << m_battery.iconName();
+    }
     names << u"system-shutdown-symbolic"_s;
 
     constexpr int Size = 16;
     constexpr int Gap = 8;
+    constexpr int TextGap = 4;
     const qreal ratio = devicePixelRatioF();
-    const QSize size(int(names.size()) * Size + (int(names.size()) - 1) * Gap, Size);
+    const QFont font = m_system->font();
+    const QFontMetrics metrics(font);
+    const QString charge = batteryIndex >= 0 ? u"%1%"_s.arg(m_battery.percentage()) : QString();
+    const int chargeWidth = charge.isEmpty() ? 0 : TextGap + metrics.horizontalAdvance(charge);
+    const QSize size(int(names.size()) * Size + (int(names.size()) - 1) * Gap + chargeWidth, Size);
     QPixmap pixmap(size * ratio);
     pixmap.setDevicePixelRatio(ratio);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
+    painter.setFont(font);
+    painter.setPen(tde::theme::colors().text);
+    int x = 0;
     for (int i = 0; i < names.size(); ++i) {
         const QIcon icon = shell::tintedIcon(names[i], QSize(Size, Size), ratio, tde::theme::colors().text);
-        icon.paint(&painter, QRect(i * (Size + Gap), 0, Size, Size));
+        icon.paint(&painter, QRect(x, 0, Size, Size));
+        x += Size;
+        if (i == batteryIndex) {
+            painter.drawText(QRect(x + TextGap, 0, chargeWidth - TextGap, Size), Qt::AlignVCenter, charge);
+            x += chargeWidth;
+        }
+        x += Gap;
     }
     painter.end();
     m_system->setIconSize(size);

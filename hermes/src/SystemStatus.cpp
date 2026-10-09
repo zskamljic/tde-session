@@ -8,6 +8,7 @@
 #include <QDBusVariant>
 #include <QDir>
 #include <QFile>
+#include <QIcon>
 
 #include <algorithm>
 #include <cmath>
@@ -47,6 +48,31 @@ int readNumber(const QString& path)
 
 // Battery ---------------------------------------------------------------------------------
 
+QString batteryIconName(int percentage, uint state, const QString& fallback)
+{
+    // As icon themes name them now, in steps of ten, with a plug or a bolt when plugged in;
+    // UPower's own names are those of older themes.
+    const int level = std::clamp((percentage + 5) / 10 * 10, 0, 100);
+    QString name;
+    switch (state) {
+    case 1: // charging
+        name = level == 100 ? u"battery-level-100-charged-symbolic"_s
+                            : u"battery-level-%1-charging-symbolic"_s.arg(level);
+        break;
+    case 4: // fully charged
+        name = u"battery-level-100-charged-symbolic"_s;
+        break;
+    case 5: // plugged in, waiting to charge
+    case 6: // plugged in, waiting to discharge
+        name = u"battery-level-%1-plugged-in-symbolic"_s.arg(level);
+        break;
+    default:
+        name = u"battery-level-%1-symbolic"_s.arg(level);
+        break;
+    }
+    return QIcon::hasThemeIcon(name) || fallback.isEmpty() ? name : fallback;
+}
+
 namespace {
 const QString UPower = u"org.freedesktop.UPower"_s;
 const QString DisplayDevice = u"/org/freedesktop/UPower/devices/DisplayDevice"_s;
@@ -68,22 +94,26 @@ void Battery::refresh()
     const bool present = properties.value(u"IsPresent"_s).toBool() && properties.value(u"Type"_s).toUInt() == 2;
     const int percentage = int(std::lround(properties.value(u"Percentage"_s).toDouble()));
     const uint state = properties.value(u"State"_s).toUInt();
-    const bool charging = state == 1 || state == 5;
+    const bool charging = state == 1;
+    const bool pluggedIn = charging || state == 4 || state == 5 || state == 6;
     QString time;
     if (state == 4)
         time = u"Fully charged"_s;
+    else if (state == 5 || state == 6)
+        time = u"Plugged in, not charging"_s;
     else if (state == 1 && properties.value(u"TimeToFull"_s).toLongLong() > 0)
         time = u"%1 until full"_s.arg(duration(properties.value(u"TimeToFull"_s).toLongLong()));
     else if (state == 2 && properties.value(u"TimeToEmpty"_s).toLongLong() > 0)
         time = u"%1 left"_s.arg(duration(properties.value(u"TimeToEmpty"_s).toLongLong()));
-    const QString icon = properties.value(u"IconName"_s).toString();
+    const QString icon = batteryIconName(percentage, state, properties.value(u"IconName"_s).toString());
 
-    if (present == m_present && percentage == m_percentage && charging == m_charging && time == m_time
-        && icon == m_icon)
+    if (present == m_present && percentage == m_percentage && charging == m_charging && pluggedIn == m_pluggedIn
+        && time == m_time && icon == m_icon)
         return;
     m_present = present;
     m_percentage = percentage;
     m_charging = charging;
+    m_pluggedIn = pluggedIn;
     m_time = time;
     m_icon = icon;
     emit changed();

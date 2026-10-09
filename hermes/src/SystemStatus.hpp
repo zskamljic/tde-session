@@ -6,6 +6,10 @@
 
 namespace hermes {
 
+// The symbolic icon for a battery `percentage` full, in UPower's `state`; `fallback` when the
+// icon theme has none of that name.
+QString batteryIconName(int percentage, uint state, const QString& fallback = {});
+
 // The charge of the battery, through UPower, on machines that have one.
 class Battery : public QObject {
     Q_OBJECT
@@ -16,6 +20,7 @@ public:
     bool isPresent() const { return m_present; }
     int percentage() const { return m_percentage; }
     bool isCharging() const { return m_charging; }
+    bool isPluggedIn() const { return m_pluggedIn; }
     // "2:15 left", "Fully charged" and the like; empty when there is nothing to say.
     QString timeText() const { return m_time; }
     QString iconName() const { return m_icon; }
@@ -30,6 +35,7 @@ private:
     bool m_present = false;
     int m_percentage = 0;
     bool m_charging = false;
+    bool m_pluggedIn = false;
     QString m_time;
     QString m_icon;
 };
