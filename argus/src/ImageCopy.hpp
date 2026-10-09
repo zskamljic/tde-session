@@ -33,19 +33,25 @@ class SharedMemory;
 // One copy of what a window or a screen shows, through ext-image-copy-capture. The session
 // first says which buffers it takes, then a frame is copied into one. Either way `done` is
 // called once, with the picture or a null one when it failed, as the last thing the copy does,
-// so it may destroy the copy.
+// so it may destroy the copy. With `repeat`, next() asks for another picture once the one
+// before came, which the compositor sends when there is something new; `done` is called for
+// each, and with a null one when it stops.
 class ImageCopy {
 public:
     ImageCopy(wl_shm* shm, ext_image_copy_capture_manager_v1* copier, ext_image_capture_source_v1* source,
-        std::function<void(QImage)> done);
+        std::function<void(QImage)> done, bool repeat = false);
     ~ImageCopy();
+
+    void next();
 
     ImageCopy(const ImageCopy&) = delete;
     ImageCopy& operator=(const ImageCopy&) = delete;
 
 private:
+    void constrained();
     void copy();
     void ready();
+    void failed(uint32_t reason);
     void finish(QImage image);
 
     wl_shm* m_shm;
@@ -57,6 +63,11 @@ private:
     std::unique_ptr<SharedMemory> m_memory;
     QSize m_size;
     std::optional<uint32_t> m_format;
+    QSize m_bufferSize; // of the buffer made, which a new size needs another of
+    uint32_t m_bufferFormat = 0;
+    bool m_repeat = false;
+    bool m_constrained = false; // told which buffers it takes
+    int m_failures = 0; // in a row
 };
 
 // Copies what the screens show.

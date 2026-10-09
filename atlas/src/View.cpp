@@ -61,6 +61,12 @@ wlr_ext_image_capture_source_v1* View::captureSource()
     return capture().source();
 }
 
+void View::damaged()
+{
+    if (m_capture)
+        m_capture->damage();
+}
+
 void View::place()
 {
     // Dialogs over their parent, those another program shows for a window, such as a portal's
@@ -502,8 +508,10 @@ void XdgView::commit()
         wlr_xdg_toplevel_set_size(toplevel, 0, 0);
         applyDecorationMode();
     }
-    if (mapped)
+    if (mapped) {
         sizeCommitted();
+        damaged();
+    }
     // Pictures show the window without its shadow.
     wlr_scene_subsurface_tree_set_clip(&m_captureContent->node, &toplevel->base->geometry);
     if (decoration())
@@ -682,6 +690,7 @@ void XwaylandView::associate()
     m_commit.connect(xsurface->surface->events.commit, [this] {
         if (decoration())
             decoration()->update();
+        damaged();
     });
     m_map.connect(xsurface->surface->events.map, [this] {
         // Programs that leave their frame to the window manager, as most X11 ones do, get a

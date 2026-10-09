@@ -170,6 +170,7 @@ void Toplevels::listEntryClosed(ListEntry& entry)
 {
     if (entry.window) {
         entry.window->capture.reset();
+        entry.window->live.reset();
         entry.window->info.reset();
         entry.window->entry = nullptr;
     }
@@ -190,6 +191,9 @@ void Toplevels::pair()
             (*match)->window = window.get();
         }
     }
+    // Windows new while live are live too.
+    if (m_live > 0)
+        startLive();
 }
 
 Toplevel* Toplevels::find(quint64 id) const
@@ -206,6 +210,50 @@ void Toplevels::activate(quint64 id)
 void Toplevels::close(quint64 id)
 {
     m_windows.close(id);
+}
+
+void Toplevels::setLive(bool live)
+{
+    m_live = std::max(0, m_live + (live ? 1 : -1));
+    if (m_live > 0) {
+        startLive();
+        return;
+    }
+    for (const auto& window : m_shown)
+        window->live.reset();
+}
+
+void Toplevels::startLive()
+{
+    if (!m_sources || !m_copier || !m_shm)
+        return;
+    for (const auto& window : m_shown) {
+        if (!window->entry || window->live)
+            continue;
+        auto* source = ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+            m_sources.get(), window->entry->handle.get());
+        window->live = std::make_unique<ImageCopy>(
+            m_shm.get(), m_copier.get(), source,
+            [this, shown = window.get()](QImage image) { liveFrame(*shown, std::move(image)); }, true);
+    }
+    flush();
+}
+
+void Toplevels::liveFrame(Toplevel& window, QImage image)
+{
+    if (image.isNull()) {
+        // It stopped, as the window went away; nothing of the copy may run after this.
+        window.live.reset();
+        return;
+    }
+    window.preview = std::move(image);
+    emit previewChanged(window.id);
+    // The next picture, once the window shows something new, but not more often than this.
+    constexpr int Interval = 40; // ms
+    QTimer::singleShot(Interval, this, [this, id = window.id] {
+        if (const Toplevel* shown = find(id); shown && shown->live)
+            shown->live->next();
+    });
 }
 
 QIcon Toplevels::iconOf(const Toplevel& window) const

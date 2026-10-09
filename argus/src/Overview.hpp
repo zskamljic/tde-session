@@ -44,6 +44,7 @@ class Overview : public QWidget {
 public:
     Overview(
         Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* screen, bool primary, QWidget* parent = nullptr);
+    ~Overview() override;
 
     // How long it takes to open or close, in milliseconds.
     void setAnimationTime(int milliseconds) { m_animationTime = milliseconds; }
@@ -84,6 +85,7 @@ private:
     void setHovered(quint64 id);
     void activate(quint64 id);
     void appear();
+    void setLive(bool live);
     void animateTo(double shown);
     // Whether `window` is shown here: those on this screen, and on the primary screen those
     // not on any.
@@ -107,6 +109,7 @@ private:
     bool m_opening = false; // waiting for the pictures and places of the windows
     bool m_closing = false;
     quint64 m_chosen = 0; // the window it closes onto, drawn above the others
+    bool m_live = false; // the pictures follow the windows
     std::vector<QGraphicsOpacityEffect*> m_fades; // of the search, the button and the grid
 };
 

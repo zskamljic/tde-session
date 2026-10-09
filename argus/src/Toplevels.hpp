@@ -64,6 +64,7 @@ struct Toplevel {
 
     ListEntry* entry = nullptr; // its half from ext-foreign-toplevel-list, once paired
     std::unique_ptr<ImageCopy> capture; // while copying what it shows
+    std::unique_ptr<ImageCopy> live; // while its picture follows what it shows
     Proxy<tde_window_info_v1> info; // while asking where it is
 };
 
@@ -103,6 +104,10 @@ public:
 
     void activate(quint64 id);
     void close(quint64 id);
+    // While live, the pictures of the windows follow what they show, as often as they change
+    // and at most every so often; previewChanged tells. Every setLive(true) is undone by a
+    // setLive(false).
+    void setLive(bool live);
 
     // The installed applications, which the windows belong to.
     const shell::Catalog& catalog() const { return m_catalog; }
@@ -129,6 +134,8 @@ private:
     void listEntryClosed(ListEntry& entry);
     void pair();
     void captured(Toplevel& window, QImage image);
+    void startLive();
+    void liveFrame(Toplevel& window, QImage image);
     void located(Toplevel& window, const QRect& frame, int recency, bool minimized);
     bool isRefreshing() const;
     void checkRefreshed(bool waitedLongEnough = false);
@@ -149,6 +156,7 @@ private:
     std::vector<std::unique_ptr<ListEntry>> m_entries;
     std::vector<std::pair<QPointer<QObject>, std::function<void()>>> m_waiting; // for refresh() to be done
     QTimer m_patience;
+    int m_live = 0; // how many asked for live pictures
 };
 
 } // namespace argus

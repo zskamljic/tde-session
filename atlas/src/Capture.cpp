@@ -56,7 +56,8 @@ wlr_box boxOf(const Part& part)
 const wlr_ext_image_capture_source_v1_interface SourceImpl {
     .start = [](wlr_ext_image_capture_source_v1* source, bool) { WindowCapture::fromSource(source).start(); },
     .stop = nullptr,
-    .request_frame = [](wlr_ext_image_capture_source_v1* source, bool) { WindowCapture::fromSource(source).frame(); },
+    .request_frame =
+        [](wlr_ext_image_capture_source_v1* source, bool) { WindowCapture::fromSource(source).requestFrame(); },
     .copy_frame =
         [](wlr_ext_image_capture_source_v1* source, wlr_ext_image_copy_capture_frame_v1* frame,
             wlr_ext_image_capture_source_v1_frame_event* event) {
@@ -114,6 +115,8 @@ double WindowCapture::scale() const
 
 void WindowCapture::start()
 {
+    // A copy starting wants a frame at once, whatever the others had.
+    m_damaged = true;
     m_extents = extents();
     m_scale = scale();
     const int width = int(std::ceil(m_extents.width * m_scale));
@@ -139,8 +142,27 @@ void WindowCapture::start()
     wlr_ext_image_capture_source_v1_set_constraints_from_swapchain(&m_source.base, m_swapchain, server.renderer);
 }
 
+void WindowCapture::requestFrame()
+{
+    // Copies taken one after the other, as for a live picture, wait for something new.
+    if (!m_damaged) {
+        m_waiting = true;
+        return;
+    }
+    frame();
+}
+
+void WindowCapture::damage()
+{
+    m_damaged = true;
+    if (m_waiting)
+        frame();
+}
+
 void WindowCapture::frame()
 {
+    m_damaged = false;
+    m_waiting = false;
     // The window may have changed size since; the copies then take the new one.
     start();
     wlr_buffer* buffer = render();

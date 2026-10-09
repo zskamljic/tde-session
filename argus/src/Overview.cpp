@@ -194,8 +194,15 @@ Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* sc
         if (m_closing) {
             m_closing = false;
             hide();
+            setLive(false);
         }
     });
+}
+
+Overview::~Overview()
+{
+    // Its screen went while it was open: the pictures need not follow the windows for it.
+    setLive(false);
 }
 
 void Overview::Show()
@@ -231,6 +238,16 @@ void Overview::appear()
     show();
     m_search->setFocus();
     animateTo(1);
+    // The windows go on showing what they do.
+    setLive(true);
+}
+
+void Overview::setLive(bool live)
+{
+    if (live != m_live) {
+        m_live = live;
+        m_toplevels.setLive(live);
+    }
 }
 
 void Overview::closeOnto(quint64 chosen)

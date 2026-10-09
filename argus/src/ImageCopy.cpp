@@ -78,11 +78,12 @@ void flushRequests()
 // ImageCopy -------------------------------------------------------------------------------
 
 ImageCopy::ImageCopy(wl_shm* shm, ext_image_copy_capture_manager_v1* copier, ext_image_capture_source_v1* source,
-    std::function<void(QImage)> done)
+    std::function<void(QImage)> done, bool repeat)
     : m_shm(shm)
     , m_done(std::move(done))
     , m_source(source)
     , m_session(ext_image_copy_capture_manager_v1_create_session(copier, source, 0))
+    , m_repeat(repeat)
 {
     static const ext_image_copy_capture_session_v1_listener listener {
         .buffer_size = [](void* data, ext_image_copy_capture_session_v1*, uint32_t width,
@@ -97,7 +98,7 @@ ImageCopy::ImageCopy(wl_shm* shm, ext_image_copy_capture_manager_v1* copier, ext
             },
         .dmabuf_device = [](void*, ext_image_copy_capture_session_v1*, wl_array*) { },
         .dmabuf_format = [](void*, ext_image_copy_capture_session_v1*, uint32_t, wl_array*) { },
-        .done = [](void* data, ext_image_copy_capture_session_v1*) { static_cast<ImageCopy*>(data)->copy(); },
+        .done = [](void* data, ext_image_copy_capture_session_v1*) { static_cast<ImageCopy*>(data)->constrained(); },
         .stopped = [](void* data, ext_image_copy_capture_session_v1*) { static_cast<ImageCopy*>(data)->finish({}); },
     };
     ext_image_copy_capture_session_v1_add_listener(m_session.get(), &listener, this);
@@ -106,33 +107,47 @@ ImageCopy::ImageCopy(wl_shm* shm, ext_image_copy_capture_manager_v1* copier, ext
 
 ImageCopy::~ImageCopy() = default;
 
+void ImageCopy::constrained()
+{
+    m_constrained = true;
+    // The constraints changed while copying: the copy still fits, or fails and is made again.
+    if (!m_frame)
+        copy();
+}
+
+void ImageCopy::next()
+{
+    if (m_constrained && !m_frame)
+        copy();
+}
+
 void ImageCopy::copy()
 {
-    if (m_frame)
-        return; // the buffer constraints changed while copying; the copy still fits or fails
     if (!m_format || m_size.isEmpty()) {
         finish({});
         return;
     }
     const int stride = m_size.width() * 4;
-    m_memory = std::make_unique<SharedMemory>(size_t(stride) * size_t(m_size.height()));
-    if (!m_memory->isValid()) {
-        finish({});
-        return;
+    if (!m_buffer || m_bufferSize != m_size || m_bufferFormat != *m_format) {
+        m_buffer.reset();
+        m_memory = std::make_unique<SharedMemory>(size_t(stride) * size_t(m_size.height()));
+        if (!m_memory->isValid()) {
+            finish({});
+            return;
+        }
+        Proxy<wl_shm_pool> pool(wl_shm_create_pool(m_shm, m_memory->fd(), stride * m_size.height()));
+        m_buffer.reset(wl_shm_pool_create_buffer(pool.get(), 0, m_size.width(), m_size.height(), stride, *m_format));
+        m_bufferSize = m_size;
+        m_bufferFormat = *m_format;
     }
-    Proxy<wl_shm_pool> pool(wl_shm_create_pool(m_shm, m_memory->fd(), stride * m_size.height()));
-    m_buffer.reset(wl_shm_pool_create_buffer(pool.get(), 0, m_size.width(), m_size.height(), stride, *m_format));
 
     static const ext_image_copy_capture_frame_v1_listener listener {
         .transform = [](void*, ext_image_copy_capture_frame_v1*, uint32_t) { },
         .damage = [](void*, ext_image_copy_capture_frame_v1*, int32_t, int32_t, int32_t, int32_t) { },
         .presentation_time = [](void*, ext_image_copy_capture_frame_v1*, uint32_t, uint32_t, uint32_t) { },
         .ready = [](void* data, ext_image_copy_capture_frame_v1*) { static_cast<ImageCopy*>(data)->ready(); },
-        .failed =
-            [](void* data, ext_image_copy_capture_frame_v1*, uint32_t reason) {
-                qCDebug(lcCapture) << "capture failed, reason" << reason;
-                static_cast<ImageCopy*>(data)->finish({});
-            },
+        .failed = [](void* data, ext_image_copy_capture_frame_v1*,
+                      uint32_t reason) { static_cast<ImageCopy*>(data)->failed(reason); },
     };
     m_frame.reset(ext_image_copy_capture_session_v1_create_frame(m_session.get()));
     ext_image_copy_capture_frame_v1_add_listener(m_frame.get(), &listener, this);
@@ -144,14 +159,30 @@ void ImageCopy::copy()
 
 void ImageCopy::ready()
 {
-    const QImage view(m_memory->data(), m_size.width(), m_size.height(), m_size.width() * 4, *imageFormat(*m_format));
+    const QImage view(m_memory->data(), m_bufferSize.width(), m_bufferSize.height(), m_bufferSize.width() * 4,
+        *imageFormat(m_bufferFormat));
+    m_frame.reset();
+    m_failures = 0;
     finish(view.copy());
+}
+
+void ImageCopy::failed(uint32_t reason)
+{
+    qCDebug(lcCapture) << "capture failed, reason" << reason;
+    m_frame.reset();
+    // Copied over and over, a window that changed size goes on in its new size, which the
+    // session told before.
+    if (m_repeat && reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_BUFFER_CONSTRAINTS && ++m_failures < 3) {
+        copy();
+        return;
+    }
+    finish({});
 }
 
 void ImageCopy::finish(QImage image)
 {
     // Held here, as calling it may destroy this copy.
-    const auto done = std::move(m_done);
+    const auto done = m_repeat ? m_done : std::move(m_done);
     if (done)
         done(std::move(image));
 }

@@ -68,6 +68,8 @@ public:
     wlr_scene_tree* captureTree() const { return m_captureTree; }
     // What copies of the window alone are taken from, made the first time one is asked for.
     wlr_ext_image_capture_source_v1* captureSource();
+    // The window drew something new, which copies waiting for it get.
+    void damaged();
 
     Server& server;
     wlr_scene_tree* tree = nullptr; // where the window is, title bar and all

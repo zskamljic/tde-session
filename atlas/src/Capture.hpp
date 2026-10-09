@@ -27,8 +27,11 @@ public:
     static WindowCapture& fromSource(wlr_ext_image_capture_source_v1* source);
     // A copy starts: the copies are told the size the window is drawn at.
     void start();
-    // A copy waits for a frame: the window is drawn, and the copies take it.
-    void frame();
+    // A copy waits for a frame: the window is drawn, and the copies take it, once it drew
+    // something new.
+    void requestFrame();
+    // The window drew something new; copies waiting for it get it now.
+    void damage();
     void copy(wlr_ext_image_copy_capture_frame_v1* frame, wlr_buffer* buffer);
 
 private:
@@ -47,8 +50,12 @@ private:
     View& m_view;
     Source m_source {};
     wlr_swapchain* m_swapchain = nullptr; // of the size the window is drawn at
+    void frame();
+
     wlr_box m_extents {};
     double m_scale = 1;
+    bool m_damaged = true; // since the last frame
+    bool m_waiting = false; // a copy waits for something new
 };
 
 } // namespace atlas
