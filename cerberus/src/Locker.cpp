@@ -2,6 +2,7 @@
 
 #include "Auth.hpp"
 #include "Face.hpp"
+#include "Fingerprint.hpp"
 #include "Password.hpp"
 
 #include "ext-session-lock-v1-client-protocol.h"
@@ -123,6 +124,7 @@ private:
     void stopRepeat();
     void tickClock();
     void authenticated(bool accepted);
+    void fingerprintChanged();
 
     wl_display* m_display = nullptr;
     Owned<wl_registry, wl_registry_destroy> m_registry;
@@ -146,6 +148,8 @@ private:
     int m_clockTimer = -1;
 
     std::unique_ptr<Authenticator> m_auth;
+    std::unique_ptr<Fingerprint> m_fingerprint;
+    int m_ticks = 0; // of the clock, to try the fingerprint reader again now and then
     Password m_password;
     Face m_face;
     bool m_seconds = false; // shown in the clock
@@ -453,8 +457,37 @@ void Locker::stopRepeat()
     timerfd_settime(m_repeatTimer, 0, &off, nullptr);
 }
 
+void Locker::fingerprintChanged()
+{
+    using State = Fingerprint::State;
+    switch (m_fingerprint->state()) {
+    case State::Matched:
+        authenticated(true);
+        return;
+    case State::Unavailable:
+        m_face.finger = Face::Finger::None;
+        break;
+    case State::Waiting:
+        m_face.finger = Face::Finger::Ready;
+        break;
+    case State::NoMatch:
+        m_face.finger = Face::Finger::NoMatch;
+        break;
+    case State::Retry:
+        m_face.finger = Face::Finger::Retry;
+        break;
+    }
+    drawAll();
+}
+
 void Locker::tickClock()
 {
+    // A reader that went away, as over sleeping, may be back.
+    if (++m_ticks % 10 == 0 && m_fingerprint && m_fingerprint->state() == Fingerprint::State::Unavailable) {
+        m_fingerprint->restart();
+        if (m_fingerprint->state() != Fingerprint::State::Unavailable)
+            fingerprintChanged();
+    }
     std::string time = timeText(m_seconds);
     std::string date = formatted("%A, %-d %B");
     if (time != m_face.time || date != m_face.date) {
@@ -485,6 +518,9 @@ int Locker::run()
     }
     m_face.user = fullName(user);
     m_auth = std::make_unique<Authenticator>(user->pw_name);
+    m_fingerprint = std::make_unique<Fingerprint>(user->pw_name);
+    if (m_fingerprint->state() == Fingerprint::State::Waiting)
+        m_face.finger = Face::Finger::Ready;
 
     m_display = wl_display_connect(nullptr);
     if (!m_display) {
@@ -530,6 +566,7 @@ int Locker::run()
             {m_auth->fd(), POLLIN, 0},
             {m_repeatTimer, POLLIN, 0},
             {m_clockTimer, POLLIN, 0},
+            {m_fingerprint->fd(), m_fingerprint->events(), 0},
         };
         if (poll(fds, std::size(fds), -1) < 0) {
             wl_display_cancel_read(m_display);
@@ -555,6 +592,8 @@ int Locker::run()
             if (const auto accepted = m_auth->result())
                 authenticated(*accepted);
         }
+        if (fds[4].revents && m_fingerprint->process() && !m_unlocked)
+            fingerprintChanged();
         // Whoever started it may wait for the session to be locked, as before sleeping.
         if (m_locked && !announced) {
             std::puts("locked");

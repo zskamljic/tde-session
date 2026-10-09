@@ -126,7 +126,25 @@ void draw(cairo_t* cr, int width, int height, const Face& face)
     }
     if (!message.empty()) {
         setColor(cr, color);
-        centred(cr, message, "Sans 11", centreX, y);
+        y += centred(cr, message, "Sans 11", centreX, y) + 6;
+    }
+
+    // Under it all, the other way in.
+    switch (face.finger) {
+    case Face::Finger::None:
+        break;
+    case Face::Finger::Ready:
+        setColor(cr, DimText);
+        centred(cr, "Or touch the fingerprint reader", "Sans 11", centreX, y);
+        break;
+    case Face::Finger::NoMatch:
+        setColor(cr, Error);
+        centred(cr, "Fingerprint not recognized", "Sans 11", centreX, y);
+        break;
+    case Face::Finger::Retry:
+        setColor(cr, DimText);
+        centred(cr, "Touch the reader again", "Sans 11", centreX, y);
+        break;
     }
 }
 

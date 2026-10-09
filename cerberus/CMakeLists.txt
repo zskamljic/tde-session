@@ -3,6 +3,7 @@ pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
 pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
 pkg_check_modules(PAM REQUIRED IMPORTED_TARGET pam)
+pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
 pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
 include(GNUInstallDirs)
@@ -17,6 +18,7 @@ add_executable(tde-cerberus
     src/main.cpp
     src/Auth.cpp
     src/Face.cpp
+    src/Fingerprint.cpp
     src/Locker.cpp
     src/Password.cpp
     ${header}
@@ -25,7 +27,7 @@ add_executable(tde-cerberus
 target_include_directories(tde-cerberus PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-cerberus PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tde-cerberus PRIVATE
-    PkgConfig::WAYLAND_CLIENT PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO PkgConfig::PAM)
+    PkgConfig::WAYLAND_CLIENT PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO PkgConfig::PAM PkgConfig::SYSTEMD)
 install(TARGETS tde-cerberus)
 # How passwords are checked: as at the login prompt.
 install(FILES tde-cerberus.pam DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/pam.d RENAME tde-cerberus)
