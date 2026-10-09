@@ -183,12 +183,21 @@ wlr_buffer* WindowCapture::render()
     clear.color = {0, 0, 0, 0};
     clear.blend_mode = WLR_RENDER_BLEND_MODE_NONE;
     wlr_render_pass_add_rect(pass, &clear);
-    std::vector<wlr_texture*> textures;
+    std::vector<wlr_texture*> textures; // made here, to destroy after drawing
     for (const Part& part : partsOf(m_view.captureNode())) {
-        wlr_texture* texture = wlr_texture_from_buffer(renderer, part.buffer->buffer);
+        // A program's buffer the scene made a texture of already: that one. Those in shared
+        // memory are let go of once copied into it, so no other could be made.
+        wlr_texture* texture = nullptr;
+        if (wlr_client_buffer* client = wlr_client_buffer_get(part.buffer->buffer);
+            client && client->texture && client->texture->renderer == renderer) {
+            texture = client->texture;
+        } else {
+            texture = wlr_texture_from_buffer(renderer, part.buffer->buffer);
+            if (texture)
+                textures.push_back(texture);
+        }
         if (!texture)
             continue;
-        textures.push_back(texture);
         const wlr_box box = boxOf(part);
         const wlr_box place {
             int(std::round((box.x - m_extents.x) * m_scale)),
