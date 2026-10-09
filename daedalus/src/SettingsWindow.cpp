@@ -107,8 +107,8 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     };
     addPage(u"network"_s, u"network-wireless"_s, u"Network"_s, new NetworkPage(m_stack));
     addPage(u"bluetooth"_s, u"bluetooth-active"_s, u"Bluetooth"_s, new BluetoothPage(m_stack));
-    addPage(
-        u"background"_s, u"preferences-desktop-wallpaper"_s, u"Background"_s, new BackgroundPage(m_settings, m_stack));
+    addPage(u"appearance"_s, u"preferences-desktop-wallpaper"_s, u"Appearance"_s,
+        new BackgroundPage(m_settings, m_stack));
     addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));
     addPage(u"sound"_s, u"audio-speakers"_s, u"Sound"_s, new SoundPage(m_stack));
     addPage(u"power"_s, u"battery-good"_s, u"Power"_s, new PowerPage(m_settings, m_stack));
@@ -129,7 +129,9 @@ SettingsWindow::SettingsWindow(QWidget* parent)
 
 bool SettingsWindow::showPage(const QString& name)
 {
-    const qsizetype index = m_names.indexOf(name.toLower());
+    // The page's name before it held the theme too.
+    const QString wanted = name.toLower() == u"background" ? u"appearance"_s : name.toLower();
+    const qsizetype index = m_names.indexOf(wanted);
     if (index < 0)
         return false;
     m_pages->setCurrentRow(int(index));

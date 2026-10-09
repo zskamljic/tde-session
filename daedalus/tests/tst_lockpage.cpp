@@ -1,3 +1,4 @@
+#include <DesktopSettings.hpp>
 #include <LockPage.hpp>
 
 #include <tde/DesktopConfig.hpp>
@@ -48,6 +49,33 @@ private slots:
         QCOMPARE(read(path),
             u"-- mine\nreturn {\n    appearance = { theme = \"arc\" },\n    lock = {\n        -- how long\n"
             "        after = 12, -- minutes\n    },\n}\n"_s);
+    }
+
+    void skipsNestedTablesAndComments()
+    {
+        QTemporaryDir dir;
+        const QString path = write(dir,
+            "return {\n    appearance = {\n        -- theme = \"system\",\n        colors = { theme = \"#fff\" },\n"
+            "        theme = 'arc', -- light\n        corner_radius = 5,\n    },\n    lock = { after = 5 },\n}\n");
+        QVERIFY(shell::setDesktopString(path, u"appearance"_s, u"theme"_s, u"arc-dark"_s));
+        QVERIFY(daedalus::setLockAfter(path, 9));
+        QCOMPARE(read(path),
+            u"return {\n    appearance = {\n        -- theme = \"system\",\n        colors = { theme = \"#fff\" },\n"
+            "        theme = \"arc-dark\", -- light\n        corner_radius = 5,\n    },\n    lock = { after = 9 },\n}\n"_s);
+        tde::DesktopConfig config;
+        QVERIFY(tde::readDesktopConfig(path, config));
+        QCOMPARE(config.appearance.theme, u"arc-dark"_s);
+    }
+
+    void setsTopLevelValues()
+    {
+        QTemporaryDir dir;
+        const QString path = write(dir,
+            "return {\n    -- terminal = \"kitty\",\n    appearance = { terminal = \"x\" },\n}\n");
+        QVERIFY(shell::setDesktopSetting(path, {}, u"terminal"_s, u"\"foot\""_s));
+        QVERIFY(shell::setDesktopSetting(path, {}, u"terminal"_s, u"\"ghostty\""_s));
+        QCOMPARE(read(path),
+            u"return {\n    -- terminal = \"kitty\",\n    appearance = { terminal = \"x\" },\n    terminal = \"ghostty\",\n}\n"_s);
     }
 
     void addsWhatIsMissing()

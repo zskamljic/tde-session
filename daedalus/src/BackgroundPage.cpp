@@ -1,5 +1,8 @@
 #include "BackgroundPage.hpp"
 
+#include <DesktopSettings.hpp>
+
+#include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
 #include <QColorDialog>
@@ -16,6 +19,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QProcess>
 #include <QPushButton>
 #include <QScreen>
 #include <QStandardPaths>
@@ -206,6 +210,24 @@ BackgroundPage::BackgroundPage(Settings& settings, QWidget* parent)
     if (!background.image.isEmpty())
         m_picture = shell::loadBackgroundPicture(background.image, previewScale());
 
+    // The look of the TDE applications and the shell; GTK programs follow between light and dark.
+    auto* theme = new QComboBox(this);
+    theme->addItem(u"Dark"_s, u"arc-dark"_s);
+    theme->addItem(u"Light"_s, u"arc"_s);
+    theme->addItem(u"Follow the System"_s, u"system"_s);
+    theme->setCurrentIndex(std::max(0, theme->findData(tde::loadDesktopConfig().appearance.theme)));
+    connect(theme, &QComboBox::activated, this, [this, theme] {
+        const QString name = theme->currentData().toString();
+        if (!shell::setDesktopString(tde::desktopConfigPath(), u"appearance"_s, u"theme"_s, name))
+            qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
+        if (name != u"system")
+            QProcess::startDetached(u"gsettings"_s,
+                {u"set"_s, u"org.gnome.desktop.interface"_s, u"color-scheme"_s,
+                    name == u"arc" ? u"default"_s : u"prefer-dark"_s});
+    });
+    Group* style = addGroup(u"Style"_s);
+    style->addRow(u"Theme"_s, u"The colours of windows and of the desktop"_s, theme);
+
     m_preview = new QLabel(this);
     m_preview->setAlignment(Qt::AlignCenter);
     addWidget(m_preview, Qt::AlignHCenter);
@@ -238,7 +260,7 @@ BackgroundPage::BackgroundPage(Settings& settings, QWidget* parent)
             changed();
         }
     });
-    Group* look = addGroup(u"Appearance"_s);
+    Group* look = addGroup(u"Background"_s);
     look->addRow(u"Placement"_s, u"How the picture covers the screen"_s, m_mode);
     look->addRow(u"Colour"_s, u"Around a picture that leaves room, or alone without one"_s, m_color);
 

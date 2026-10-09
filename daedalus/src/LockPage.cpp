@@ -1,11 +1,10 @@
 #include "LockPage.hpp"
 
+#include <DesktopSettings.hpp>
+
 #include <tde/DesktopConfig.hpp>
 
 #include <QComboBox>
-#include <QFile>
-#include <QRegularExpression>
-#include <QSaveFile>
 
 #include <algorithm>
 #include <vector>
@@ -16,37 +15,7 @@ namespace daedalus {
 
 bool setLockAfter(const QString& path, int minutes)
 {
-    tde::createDesktopConfig(path);
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return false;
-    QString text = QString::fromUtf8(file.readAll());
-    file.close();
-
-    const QString value = QString::number(minutes);
-    // The lock table holds no tables of its own, so it ends at the first closing brace.
-    static const QRegularExpression table(uR"(\block\s*=\s*\{[^}]*\})"_s);
-    static const QRegularExpression after(uR"((\bafter\s*=\s*)-?\d+)"_s);
-    if (const auto lock = table.match(text); lock.hasMatch()) {
-        QString block = lock.captured();
-        if (after.match(block).hasMatch())
-            block.replace(after, u"\\1"_s + value);
-        else
-            block.insert(block.indexOf(u'{') + 1, u" after = %1,"_s.arg(value));
-        text.replace(lock.capturedStart(), lock.capturedLength(), block);
-    } else {
-        // Into the table the file returns, at its end.
-        const qsizetype end = text.lastIndexOf(u'}');
-        if (end < 0)
-            return false;
-        text.insert(end, u"    lock = { after = %1 },\n"_s.arg(value));
-    }
-
-    QSaveFile out(path);
-    if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
-        return false;
-    out.write(text.toUtf8());
-    return out.commit();
+    return shell::setDesktopSetting(path, u"lock"_s, u"after"_s, QString::number(minutes));
 }
 
 LockPage::LockPage(QWidget* parent)
