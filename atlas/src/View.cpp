@@ -5,6 +5,8 @@
 #include "Placement.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <ctime>
 #include <vector>
 
 namespace atlas {
@@ -55,8 +57,7 @@ wlr_ext_image_capture_source_v1* View::captureSource()
 void View::place()
 {
     // Dialogs over their parent, those another program shows for a window, such as a portal's
-    // file picker, over that window, and everything else where it covers no other window, the
-    // middle of the screen when that is free.
+    // file picker, over that window, and everything else in the middle of the screen.
     wlr_box ownSize = size();
     ownSize.height += decorationHeight();
     wlr_box area = server.usableArea(server.cursor->x, server.cursor->y);
@@ -73,16 +74,13 @@ void View::place()
     y = std::max(std::min(y, usable.y + usable.height - ownSize.height), usable.y);
 
     if (!parent) {
-        // Clear of the other windows on the screen where possible.
+        // A step aside from a window already there, so both can be told apart.
         std::vector<Rect> others;
         for (View* other : server.stackingOrder()) {
             if (other == this || !other->mapped || other->minimized)
                 continue;
-            // Those on this screen; whatever lies beside it does not matter.
             const wlr_box box = other->geometry();
-            wlr_box common;
-            if (wlr_box_intersection(&common, &box, &usable))
-                others.push_back({box.x, box.y, box.width, box.height});
+            others.push_back({box.x, box.y, box.width, box.height});
         }
         const Rect placed
             = placeWindow(ownSize.width, ownSize.height, {usable.x, usable.y, usable.width, usable.height}, others);
@@ -90,6 +88,33 @@ void View::place()
         y = placed.y;
     }
     moveTo(x, y);
+    m_placedAt = now();
+    m_placedSize = size();
+}
+
+uint64_t View::now()
+{
+    timespec time {};
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return uint64_t(time.tv_sec) * 1000 + uint64_t(time.tv_nsec) / 1'000'000;
+}
+
+bool View::placedRecently() const
+{
+    // Programs that read their settings once shown take a moment for it.
+    constexpr uint64_t Moment = 1500; // ms
+    return mapped && !handled && !isTiled() && !fullscreen && now() - m_placedAt < Moment;
+}
+
+void View::sizeCommitted()
+{
+    // A window taking another size right after it showed, as some do once they read what
+    // size they had last time, is placed again with it, so it is in the middle all the same.
+    const wlr_box current = size();
+    if (current.width == m_placedSize.width && current.height == m_placedSize.height)
+        return;
+    if (placedRecently())
+        place();
 }
 
 // The scene tree starts where the window does; shadows drawn by the window lie outside it.
@@ -391,6 +416,8 @@ void XdgView::commit()
         wlr_xdg_toplevel_set_size(toplevel, 0, 0);
         applyDecorationMode();
     }
+    if (mapped)
+        sizeCommitted();
     // Pictures show the window without its shadow.
     wlr_scene_subsurface_tree_set_clip(&m_captureContent->node, &toplevel->base->geometry);
     if (decoration())
@@ -511,7 +538,12 @@ XwaylandView::XwaylandView(Server& server, wlr_xwayland_surface* surface)
     // Before it is shown, a window may put itself where it likes; afterwards it is placed.
     m_requestConfigure.connect<wlr_xwayland_surface_configure_event>(
         surface->events.request_configure, [this](wlr_xwayland_surface_configure_event* event) {
-            if (!mapped || (!isTiled() && !fullscreen)) {
+            if (placedRecently()) {
+                // Just shown, it keeps the place it was given, whatever size it takes.
+                const wlr_box content = contentGeometry();
+                wlr_xwayland_surface_configure(xsurface, content.x, content.y, event->width, event->height);
+                sizeCommitted();
+            } else if (!mapped || (!isTiled() && !fullscreen)) {
                 wlr_xwayland_surface_configure(xsurface, event->x, event->y, event->width, event->height);
                 if (mapped) {
                     wlr_scene_node_set_position(&tree->node, event->x, event->y - decorationHeight());

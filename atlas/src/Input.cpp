@@ -688,6 +688,7 @@ void Server::beginMove(View& view)
 {
     if (view.fullscreen || m_cursorMode != CursorMode::Passthrough)
         return;
+    view.handled = true;
     if (view.isTiled()) {
         // Leaving a tile restores the size the window had, under the same spot of the pointer.
         const wlr_box tiled = view.geometry();
@@ -709,6 +710,7 @@ void Server::beginResize(View& view, uint32_t edges)
 {
     if (view.fullscreen || view.isTiled() || m_cursorMode != CursorMode::Passthrough)
         return;
+    view.handled = true;
     const wlr_box geometry = view.geometry();
     m_grabbed = &view;
     m_cursorMode = CursorMode::Resize;

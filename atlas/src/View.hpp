@@ -3,6 +3,7 @@
 #include "Decoration.hpp"
 #include "Server.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -72,6 +73,7 @@ public:
     bool fullscreen = false;
     Tile tile = Tile::None;
     wlr_box restore {}; // the geometry to return to from a tile or full screen
+    bool handled = false; // moved or resized by the user since it was placed
 
 protected:
     virtual wlr_box size() const = 0; // width and height; x and y are ignored
@@ -84,6 +86,10 @@ protected:
 
     void onMapped();
     void onUnmapped();
+    // Whether the window showed a moment ago and was left where it was put.
+    bool placedRecently() const;
+    // The window's size changed: right after it showed, it is placed again.
+    void sizeCommitted();
     void updatePublished();
     void updateOutput();
 
@@ -93,10 +99,13 @@ protected:
     wlr_scene_tree* m_captureContent = nullptr;
 
 private:
+    static uint64_t now(); // ms, of the monotonic clock
     void place();
     void publish();
     void unpublish();
 
+    uint64_t m_placedAt = 0;
+    wlr_box m_placedSize {};
     std::unique_ptr<Decoration> m_decoration;
     std::unique_ptr<WindowCapture> m_capture;
     wlr_foreign_toplevel_handle_v1* m_foreign = nullptr;
