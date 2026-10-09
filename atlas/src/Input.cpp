@@ -407,7 +407,7 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
         case XKB_KEY_F4:
             return withView([](View& v) { v.close(); });
         case XKB_KEY_F10:
-            return withView([](View& v) { v.setTile(v.tile == Tile::Maximized ? Tile::None : Tile::Maximized); });
+            return withView([](View& v) { v.setTile(v.tile == Tile::Maximized ? Tile::None : Tile::Maximized, true); });
         default:
             break;
         }
@@ -420,18 +420,18 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
         case XKB_KEY_h:
             return withView([](View& v) { v.setMinimized(true); });
         case XKB_KEY_Up:
-            return withView([](View& v) { v.setTile(Tile::Maximized); });
+            return withView([](View& v) { v.setTile(Tile::Maximized, true); });
         case XKB_KEY_Down:
             return withView([](View& v) {
                 if (v.fullscreen)
                     v.setFullscreen(false);
                 else
-                    v.setTile(Tile::None);
+                    v.setTile(Tile::None, true);
             });
         case XKB_KEY_Left:
-            return withView([](View& v) { v.setTile(v.tile == Tile::Right ? Tile::None : Tile::Left); });
+            return withView([](View& v) { v.setTile(v.tile == Tile::Right ? Tile::None : Tile::Left, true); });
         case XKB_KEY_Right:
-            return withView([](View& v) { v.setTile(v.tile == Tile::Left ? Tile::None : Tile::Right); });
+            return withView([](View& v) { v.setTile(v.tile == Tile::Left ? Tile::None : Tile::Right, true); });
         case XKB_KEY_a:
             spawn("tde-argus --applications");
             return true;
@@ -588,7 +588,7 @@ bool Server::decorationButton(View& view, wlr_pointer_button_event* event)
         // Twice in a row maximizes or restores; held and dragged moves.
         if (m_titleClickView == &view && event->time_msec - m_titleClickTime < 400) {
             m_titleClickView = nullptr;
-            view.setTile(view.tile == Tile::Maximized ? Tile::None : Tile::Maximized);
+            view.setTile(view.tile == Tile::Maximized ? Tile::None : Tile::Maximized, true);
             return true;
         }
         m_titleClickView = &view;
@@ -623,7 +623,7 @@ void Server::decorationReleased(View& view)
         view.close();
         break;
     case Decoration::Part::Maximize:
-        view.setTile(view.tile == Tile::Maximized ? Tile::None : Tile::Maximized);
+        view.setTile(view.tile == Tile::Maximized ? Tile::None : Tile::Maximized, true);
         break;
     case Decoration::Part::Minimize:
         view.setMinimized(true);
@@ -771,7 +771,7 @@ void Server::updateResize()
 void Server::finishGrab()
 {
     if (m_cursorMode == CursorMode::Move && m_grabbed && m_snapTarget != Tile::None)
-        m_grabbed->setTile(m_snapTarget);
+        m_grabbed->setTile(m_snapTarget, true);
     showSnapPreview(Tile::None, {});
     m_snapTarget = Tile::None;
     m_cursorMode = CursorMode::Passthrough;
@@ -784,6 +784,10 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
     if (tile == Tile::None) {
         if (m_snapPreview)
             wlr_scene_node_set_enabled(&m_snapPreview->node, false);
+        if (m_snapPreviewTimer) {
+            wl_event_source_remove(m_snapPreviewTimer);
+            m_snapPreviewTimer = nullptr;
+        }
         return;
     }
     wlr_box box = area;
@@ -797,10 +801,44 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
     const float color[4] = {0x52 / 255.0f * alpha, 0x94 / 255.0f * alpha, 0xe2 / 255.0f * alpha, alpha};
     if (!m_snapPreview)
         m_snapPreview = wlr_scene_rect_create(layers.feedback, box.width, box.height, color);
-    wlr_scene_rect_set_size(m_snapPreview, box.width, box.height);
     wlr_scene_rect_set_color(m_snapPreview, color);
-    wlr_scene_node_set_position(&m_snapPreview->node, box.x, box.y);
     wlr_scene_node_set_enabled(&m_snapPreview->node, true);
+
+    // It grows out of the window being dragged.
+    m_snapPreviewFrom = m_grabbed ? m_grabbed->geometry() : box;
+    m_snapPreviewTo = box;
+    clock_gettime(CLOCK_MONOTONIC, &m_snapPreviewStart);
+    if (!m_snapPreviewTimer) {
+        m_snapPreviewTimer = wl_event_loop_add_timer(
+            eventLoop,
+            [](void* data) {
+                static_cast<Server*>(data)->stepSnapPreview();
+                return 0;
+            },
+            this);
+    }
+    stepSnapPreview();
+}
+
+void Server::stepSnapPreview()
+{
+    timespec now {};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    const double elapsed = double(now.tv_sec - m_snapPreviewStart.tv_sec) * 1000
+        + double(now.tv_nsec - m_snapPreviewStart.tv_nsec) / 1e6;
+    const double t = windowAnimationTime > 0 ? std::min(1.0, elapsed / windowAnimationTime) : 1.0;
+    const double eased = 1 - std::pow(1 - t, 3);
+    const auto between = [eased](int a, int b) { return int(std::lround(a + (b - a) * eased)); };
+    wlr_scene_rect_set_size(m_snapPreview, std::max(1, between(m_snapPreviewFrom.width, m_snapPreviewTo.width)),
+        std::max(1, between(m_snapPreviewFrom.height, m_snapPreviewTo.height)));
+    wlr_scene_node_set_position(&m_snapPreview->node, between(m_snapPreviewFrom.x, m_snapPreviewTo.x),
+        between(m_snapPreviewFrom.y, m_snapPreviewTo.y));
+    if (t < 1) {
+        wl_event_source_timer_update(m_snapPreviewTimer, 8);
+    } else {
+        wl_event_source_remove(m_snapPreviewTimer);
+        m_snapPreviewTimer = nullptr;
+    }
 }
 
 } // namespace atlas

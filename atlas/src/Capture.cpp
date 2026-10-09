@@ -154,6 +154,13 @@ void WindowCapture::frame()
     wlr_buffer_unlock(buffer);
 }
 
+wlr_buffer* WindowCapture::snapshot(wlr_box& extents)
+{
+    start();
+    extents = m_extents;
+    return render();
+}
+
 void WindowCapture::copy(wlr_ext_image_copy_capture_frame_v1* frame, wlr_buffer* buffer)
 {
     if (!wlr_ext_image_copy_capture_frame_v1_copy_buffer(frame, buffer, m_view.server.renderer))

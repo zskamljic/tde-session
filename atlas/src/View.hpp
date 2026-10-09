@@ -38,9 +38,13 @@ public:
     void moveTo(int x, int y);
     // Asks the window to take this geometry; it moves at once and resizes when it can.
     void setGeometry(const wlr_box& box);
+    // As setGeometry(), with a picture of the window going from where it was to there
+    // meanwhile, until the window drew itself in its new size.
+    void animateTo(const wlr_box& box);
 
     void setActivated(bool activated);
-    void setTile(Tile tile);
+    // With `animate`, it goes there as animateTo() has it: for tiles the user asked for.
+    void setTile(Tile tile, bool animate = false);
     void setFullscreen(bool fullscreen);
     void setMinimized(bool minimized);
 
@@ -100,10 +104,20 @@ protected:
 
 private:
     static uint64_t now(); // ms, of the monotonic clock
+    WindowCapture& capture();
+    void stepMorph();
+    void endMorph();
     void place();
     void publish();
     void unpublish();
 
+    // The picture standing in for the window while it moves to a tile.
+    wlr_scene_buffer* m_morph = nullptr;
+    wl_event_source* m_morphTimer = nullptr;
+    wlr_box m_morphFrom {};
+    wlr_box m_morphTo {};
+    wlr_box m_morphExtents {}; // of the picture, relative to the window where it started
+    uint64_t m_morphStart = 0;
     uint64_t m_placedAt = 0;
     wlr_box m_placedSize {};
     std::unique_ptr<Decoration> m_decoration;

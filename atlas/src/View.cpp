@@ -25,6 +25,7 @@ View::View(Server& server)
 
 View::~View()
 {
+    endMorph();
     unpublish();
     m_capture.reset();
     m_decoration.reset();
@@ -42,16 +43,22 @@ void View::onMapped()
 
 void View::onUnmapped()
 {
+    endMorph();
     mapped = false;
     unpublish();
     server.viewUnmapped(*this);
 }
 
-wlr_ext_image_capture_source_v1* View::captureSource()
+WindowCapture& View::capture()
 {
     if (!m_capture)
         m_capture = std::make_unique<WindowCapture>(*this);
-    return m_capture->source();
+    return *m_capture;
+}
+
+wlr_ext_image_capture_source_v1* View::captureSource()
+{
+    return capture().source();
 }
 
 void View::place()
@@ -181,6 +188,80 @@ void View::setGeometry(const wlr_box& box)
     updateOutput();
 }
 
+void View::animateTo(const wlr_box& box)
+{
+    endMorph();
+    const wlr_box from = geometry();
+    wlr_box extents {};
+    wlr_buffer* picture = server.windowAnimationTime > 0 && mapped && !minimized && !wlr_box_empty(&from)
+        ? capture().snapshot(extents)
+        : nullptr;
+    setGeometry(box);
+    if (!picture)
+        return;
+    // In the window's place in the stack, which hides meanwhile.
+    m_morph = wlr_scene_buffer_create(tree->node.parent, picture);
+    wlr_buffer_unlock(picture);
+    if (!m_morph)
+        return;
+    wlr_scene_node_place_above(&m_morph->node, &tree->node);
+    wlr_scene_node_set_enabled(&tree->node, false);
+    m_morphFrom = from;
+    m_morphTo = box;
+    m_morphExtents = extents;
+    m_morphStart = now();
+    m_morphTimer = wl_event_loop_add_timer(
+        server.eventLoop,
+        [](void* data) {
+            static_cast<View*>(data)->stepMorph();
+            return 0;
+        },
+        this);
+    stepMorph();
+}
+
+void View::stepMorph()
+{
+    constexpr uint64_t Patience = 300; // ms the window may take to draw itself once there
+    constexpr int Step = 8; // ms
+    const uint64_t elapsed = now() - m_morphStart;
+    const int duration = std::max(server.windowAnimationTime, 1);
+    const double t = std::min(1.0, double(elapsed) / duration);
+    const double eased = 1 - std::pow(1 - t, 3);
+    const auto between = [eased](int a, int b) { return a + (b - a) * eased; };
+    const double width = between(m_morphFrom.width, m_morphTo.width);
+    const double height = between(m_morphFrom.height, m_morphTo.height);
+    // The picture's parts beside the window, as shadows are, grow along with it.
+    const double scaleX = width / std::max(m_morphFrom.width, 1);
+    const double scaleY = height / std::max(m_morphFrom.height, 1);
+    wlr_scene_node_set_position(&m_morph->node,
+        int(std::lround(between(m_morphFrom.x, m_morphTo.x) + m_morphExtents.x * scaleX)),
+        int(std::lround(between(m_morphFrom.y, m_morphTo.y) + m_morphExtents.y * scaleY)));
+    wlr_scene_buffer_set_dest_size(m_morph, std::max(1, int(std::lround(m_morphExtents.width * scaleX))),
+        std::max(1, int(std::lround(m_morphExtents.height * scaleY))));
+    if (t >= 1) {
+        const wlr_box now = geometry();
+        if ((now.width == m_morphTo.width && now.height == m_morphTo.height) || elapsed > uint64_t(duration) + Patience) {
+            endMorph();
+            return;
+        }
+    }
+    wl_event_source_timer_update(m_morphTimer, Step);
+}
+
+void View::endMorph()
+{
+    if (m_morphTimer) {
+        wl_event_source_remove(m_morphTimer);
+        m_morphTimer = nullptr;
+    }
+    if (!m_morph)
+        return;
+    wlr_scene_node_destroy(&m_morph->node);
+    m_morph = nullptr;
+    wlr_scene_node_set_enabled(&tree->node, mapped && !minimized);
+}
+
 void View::setActivated(bool activated)
 {
     this->activated = activated;
@@ -190,7 +271,7 @@ void View::setActivated(bool activated)
         wlr_foreign_toplevel_handle_v1_set_activated(m_foreign, activated);
 }
 
-void View::setTile(Tile wanted)
+void View::setTile(Tile wanted, bool animate)
 {
     if (fullscreen)
         return;
@@ -221,7 +302,10 @@ void View::setTile(Tile wanted)
     }
     tile = wanted;
     sendTiled(wanted);
-    setGeometry(box);
+    if (animate)
+        animateTo(box);
+    else
+        setGeometry(box);
     updateFrame();
     if (m_foreign)
         wlr_foreign_toplevel_handle_v1_set_maximized(m_foreign, wanted == Tile::Maximized);
@@ -233,6 +317,7 @@ void View::setFullscreen(bool wanted)
         sendFullscreen(wanted);
         return;
     }
+    endMorph();
     const wlr_box current = geometry();
     fullscreen = wanted;
     updateFrame();
@@ -259,6 +344,7 @@ void View::setMinimized(bool wanted)
 {
     if (wanted == minimized)
         return;
+    endMorph();
     const bool wasFocused = server.focusedView() == this;
     minimized = wanted;
     wlr_scene_node_set_enabled(&tree->node, !wanted);
@@ -288,7 +374,7 @@ void View::publish()
         });
     m_foreignMaximize.connect<wlr_foreign_toplevel_handle_v1_maximized_event>(
         m_foreign->events.request_maximize, [this](wlr_foreign_toplevel_handle_v1_maximized_event* event) {
-            setTile(event->maximized ? Tile::Maximized : Tile::None);
+            setTile(event->maximized ? Tile::Maximized : Tile::None, true);
         });
     m_foreignFullscreen.connect<wlr_foreign_toplevel_handle_v1_fullscreen_event>(m_foreign->events.request_fullscreen,
         [this](wlr_foreign_toplevel_handle_v1_fullscreen_event* event) { setFullscreen(event->fullscreen); });
@@ -388,7 +474,7 @@ XdgView::XdgView(Server& server, wlr_xdg_toplevel* toplevel)
         });
     m_requestMaximize.connect(toplevel->events.request_maximize, [this] {
         if (mapped)
-            setTile(this->toplevel->requested.maximized ? Tile::Maximized : Tile::None);
+            setTile(this->toplevel->requested.maximized ? Tile::Maximized : Tile::None, true);
         else if (this->toplevel->base->initialized)
             wlr_xdg_surface_schedule_configure(this->toplevel->base);
     });
@@ -565,7 +651,7 @@ XwaylandView::XwaylandView(Server& server, wlr_xwayland_surface* surface)
         });
     m_requestMaximize.connect(surface->events.request_maximize, [this] {
         if (mapped)
-            setTile(xsurface->maximized_horz && xsurface->maximized_vert ? Tile::Maximized : Tile::None);
+            setTile(xsurface->maximized_horz && xsurface->maximized_vert ? Tile::Maximized : Tile::None, true);
     });
     m_requestFullscreen.connect(surface->events.request_fullscreen, [this] {
         if (mapped)

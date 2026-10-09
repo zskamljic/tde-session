@@ -18,6 +18,9 @@ public:
     WindowCapture& operator=(const WindowCapture&) = delete;
 
     wlr_ext_image_capture_source_v1* source() { return &m_source.base; }
+    // The window as it is now, in a buffer locked for the caller, with where it is drawn
+    // relative to the window in `extents`; null when it shows nothing.
+    wlr_buffer* snapshot(wlr_box& extents);
 
     // For wlroots, through the source --------------------------------------------------
 

@@ -113,6 +113,7 @@ public:
     wlr_xdg_foreign_v1* foreignV1 = nullptr; // windows shared between programs
     wlr_xdg_foreign_v2* foreignV2 = nullptr;
     wlr_idle_notifier_v1* idleNotifier = nullptr;
+    int windowAnimationTime = 200; // ms windows take to move into a tile; 0 moves them at once
 
     // From bottom to top.
     struct {
@@ -167,6 +168,7 @@ private:
     void updateResize();
     void finishGrab();
     void showSnapPreview(Tile tile, const wlr_box& area);
+    void stepSnapPreview();
     bool decorationButton(View& view, wlr_pointer_button_event* event);
     void decorationReleased(View& view);
     void setDecorationHover(View* view, Decoration::Part part);
@@ -206,6 +208,10 @@ private:
     uint32_t m_resizeEdges = 0;
     Tile m_snapTarget = Tile::None;
     wlr_scene_rect* m_snapPreview = nullptr;
+    wl_event_source* m_snapPreviewTimer = nullptr; // while it grows into place
+    wlr_box m_snapPreviewFrom {};
+    wlr_box m_snapPreviewTo {};
+    timespec m_snapPreviewStart {};
 
     // Title bars drawn here: the one under the pointer, the one whose button is held, and a
     // title held down, which becomes a move once the pointer goes.

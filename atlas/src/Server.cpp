@@ -34,6 +34,8 @@ Server::~Server()
         listener->disconnect();
     if (m_layoutIdle)
         wl_event_source_remove(m_layoutIdle);
+    if (m_snapPreviewTimer)
+        wl_event_source_remove(m_snapPreviewTimer);
     if (m_keyboardWatchSource)
         wl_event_source_remove(m_keyboardWatchSource);
     if (m_keyboardWatch >= 0)
