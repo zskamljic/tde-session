@@ -6,9 +6,13 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusReply>
+#include <QDBusObjectPath>
 #include <QDBusVariant>
+#include <QLabel>
+#include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 using namespace Qt::StringLiterals;
@@ -46,12 +50,122 @@ QComboBox* times(std::vector<int> choices, int current, const QString& never, QW
     return box;
 }
 
+const QString UPower = u"org.freedesktop.UPower"_s;
+const QString DeviceInterface = u"org.freedesktop.UPower.Device"_s;
+
+QVariantMap allProperties(const QString& path)
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(UPower, path, Properties, u"GetAll"_s);
+    call << DeviceInterface;
+    const QDBusReply<QVariantMap> reply = QDBusConnection::systemBus().call(call, QDBus::Block, 2000);
+    return reply.isValid() ? reply.value() : QVariantMap();
+}
+
+// The batteries of the computer itself, not those of mice and headphones.
+QList<QVariantMap> batteries()
+{
+    QList<QVariantMap> found;
+    const QDBusReply<QList<QDBusObjectPath>> devices = QDBusConnection::systemBus().call(
+        QDBusMessage::createMethodCall(UPower, u"/org/freedesktop/UPower"_s, UPower, u"EnumerateDevices"_s));
+    if (!devices.isValid())
+        return found;
+    for (const QDBusObjectPath& path : devices.value()) {
+        QVariantMap properties = allProperties(path.path());
+        if (properties.value(u"Type"_s).toUInt() == 2 && properties.value(u"PowerSupply"_s).toBool()
+            && properties.value(u"IsPresent"_s).toBool())
+            found << properties;
+    }
+    return found;
+}
+
+QString duration(qint64 seconds)
+{
+    const qint64 minutes = (seconds + 30) / 60;
+    if (minutes < 60)
+        return minutes == 1 ? u"1 minute"_s : u"%1 minutes"_s.arg(minutes);
+    return u"%1 h %2 min"_s.arg(minutes / 60).arg(minutes % 60);
+}
+
+QString stateText(const QVariantMap& battery)
+{
+    switch (battery.value(u"State"_s).toUInt()) {
+    case 1:
+        if (const qint64 full = battery.value(u"TimeToFull"_s).toLongLong(); full > 0)
+            return u"Charging, full in %1"_s.arg(duration(full));
+        return u"Charging"_s;
+    case 2:
+        if (const qint64 empty = battery.value(u"TimeToEmpty"_s).toLongLong(); empty > 0)
+            return u"On battery, %1 left"_s.arg(duration(empty));
+        return u"On battery"_s;
+    case 3:
+        return u"Empty"_s;
+    case 4:
+        return u"Fully charged"_s;
+    case 5:
+    case 6:
+        return u"Plugged in, not charging"_s;
+    default:
+        return u"Unknown"_s;
+    }
+}
+
+QLabel* valueLabel(QWidget* parent)
+{
+    auto* label = new QLabel(parent);
+    label->setTextFormat(Qt::PlainText);
+    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    return label;
+}
+
 } // namespace
 
 PowerPage::PowerPage(Settings& settings, QWidget* parent)
     : Page(parent)
 {
     auto& power = settings.config.power;
+
+    // Each battery: how full, what it is doing, how worn and how much it gives.
+    const QList<QVariantMap> found = batteries();
+    for (qsizetype i = 0; i < found.size(); ++i) {
+        Group* group = addGroup(found.size() == 1 ? u"Battery"_s : u"Battery %1"_s.arg(i + 1));
+        QLabel* charge = valueLabel(this);
+        QLabel* state = valueLabel(this);
+        QLabel* health = valueLabel(this);
+        QLabel* rate = valueLabel(this);
+        group->addRow(u"Charge"_s, {}, charge);
+        group->addRow(u"State"_s, {}, state);
+        group->addRow(u"Health"_s, u"How much it holds of what it did when new"_s, health);
+        group->addRow(u"Power"_s, u"Being drawn from it, or charged into it"_s, rate);
+        const QVariantMap& first = found[i];
+        const QString model
+            = QStringList {first.value(u"Vendor"_s).toString(), first.value(u"Model"_s).toString()}.join(u' ').trimmed();
+        if (!model.isEmpty())
+            group->addRow(u"Model"_s, {}, [&] {
+                QLabel* label = valueLabel(this);
+                label->setText(model);
+                return label;
+            }());
+        const QString path = first.value(u"NativePath"_s).toString();
+        const auto update = [=] {
+            QVariantMap battery;
+            for (const QVariantMap& now : batteries()) {
+                if (now.value(u"NativePath"_s) == path)
+                    battery = now;
+            }
+            if (battery.isEmpty())
+                return;
+            charge->setText(u"%1%"_s.arg(std::lround(battery.value(u"Percentage"_s).toDouble())));
+            state->setText(stateText(battery));
+            const double capacity = battery.value(u"Capacity"_s).toDouble();
+            health->setText(capacity > 0 ? u"%1%"_s.arg(std::lround(capacity)) : u"Not known"_s);
+            const double watts = battery.value(u"EnergyRate"_s).toDouble();
+            rate->setText(watts > 0 ? u"%1 W"_s.arg(watts, 0, 'f', 1) : u"None"_s);
+        };
+        update();
+        auto* timer = new QTimer(this);
+        connect(timer, &QTimer::timeout, this, update);
+        timer->start(5000);
+    }
 
     auto* profiles = new shell::PowerProfiles(this);
     if (profiles->isAvailable()) {
