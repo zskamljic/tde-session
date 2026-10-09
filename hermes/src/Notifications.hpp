@@ -77,6 +77,10 @@ public:
     // Its banner's time is up: it stays in the list, unless it was transient.
     void expire(uint id);
     void dismissAll();
+    // Do not disturb: notifications go to the list without a banner or a sound, unless they
+    // are critical.
+    bool isQuiet() const { return m_quiet; }
+    void setQuiet(bool quiet);
 
 public slots:
     Q_SCRIPTABLE QStringList GetCapabilities() const;
@@ -103,6 +107,7 @@ private:
 
     std::vector<Notification> m_notifications;
     uint m_nextId = 1;
+    bool m_quiet = false;
 };
 
 } // namespace hermes

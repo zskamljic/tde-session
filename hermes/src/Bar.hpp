@@ -9,6 +9,7 @@
 #include "SystemStatus.hpp"
 
 #include <Bluetooth.hpp>
+#include <PowerProfiles.hpp>
 #include <Wifi.hpp>
 #include <Windows.hpp>
 
@@ -84,6 +85,7 @@ private:
     shell::Bluetooth m_bluetooth;
     Battery m_battery;
     Media m_media;
+    shell::PowerProfiles m_profiles;
     MediaKeys m_keys {m_audio, m_brightness, m_media}; // with the level indicator, a window of its own
     DisplayLayouts m_displays;
     QTimer m_tick;

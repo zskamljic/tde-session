@@ -1,15 +1,20 @@
 #include "QuickSettings.hpp"
 
 #include "Audio.hpp"
+#include "Notifications.hpp"
 #include "SystemStatus.hpp"
 
 #include <Icons.hpp>
+#include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
+#include <QGridLayout>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QStyleHints>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -83,7 +88,8 @@ QString volumeIconName(double volume, bool muted)
 }
 
 QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& network, shell::Wifi& wifi,
-    shell::Bluetooth& bluetooth, Battery& battery, QWidget* parent)
+    shell::Bluetooth& bluetooth, Battery& battery, NotificationServer& notifications, shell::PowerProfiles& profiles,
+    QWidget* parent)
     : QWidget(parent)
     , m_audio(audio)
     , m_brightness(brightness)
@@ -91,6 +97,8 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     , m_wifi(wifi)
     , m_bluetooth(bluetooth)
     , m_battery(battery)
+    , m_notifications(notifications)
+    , m_profiles(profiles)
 {
     setFixedWidth(340);
     auto* layout = new QVBoxLayout(this);
@@ -118,6 +126,36 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     line->addWidget(sun);
     line->addWidget(m_light, 1);
     layout->addWidget(m_brightnessRow);
+
+    // Two by two, those the machine has.
+    auto* toggles = new QWidget(this);
+    auto* grid = new QGridLayout(toggles);
+    grid->setContentsMargins(0, 2, 0, 2);
+    grid->setSpacing(8);
+    m_darkStyle = toggle(u"Dark Style"_s);
+    connect(m_darkStyle, &QToolButton::clicked, this, [this](bool on) { emit darkStyleRequested(on); });
+    m_quiet = toggle(u"Do Not Disturb"_s);
+    m_quiet->setToolTip(u"Notifications go to the list behind the clock without a banner or a sound"_s);
+    connect(m_quiet, &QToolButton::clicked, this, [this](bool on) { m_notifications.setQuiet(on); });
+    m_powerMode = toggle(QString());
+    m_powerMode->setCheckable(false);
+    m_powerMode->setToolTip(u"Power mode: a click switches to the next"_s);
+    connect(m_powerMode, &QToolButton::clicked, this, [this] {
+        const QStringList offered = m_profiles.offered();
+        if (offered.isEmpty())
+            return;
+        m_profiles.setActive(offered[(offered.indexOf(m_profiles.active()) + 1) % offered.size()]);
+    });
+    m_screenshot = toggle(u"Screenshot"_s);
+    m_screenshot->setCheckable(false);
+    connect(m_screenshot, &QToolButton::clicked, this, &QuickSettings::screenshotRequested);
+    grid->addWidget(m_darkStyle, 0, 0);
+    grid->addWidget(m_quiet, 0, 1);
+    grid->addWidget(m_powerMode, 1, 0);
+    grid->addWidget(m_screenshot, 1, 1);
+    grid->setColumnStretch(0, 1);
+    grid->setColumnStretch(1, 1);
+    layout->addWidget(toggles);
 
     m_networkRow = row(this, line);
     m_networkIcon = new QLabel(m_networkRow);
@@ -184,6 +222,9 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     auto* column = new QVBoxLayout(actions);
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(2);
+    QToolButton* settings = actionButton(u"preferences-system-symbolic"_s, u"Settings"_s, nullptr);
+    connect(settings, &QToolButton::clicked, this, [this] { emit settingsRequested({}); });
+    column->addWidget(settings);
     column->addWidget(
         actionButton(u"system-lock-screen-symbolic"_s, u"Lock the screen"_s, &QuickSettings::lockRequested));
     column->addWidget(actionButton(
@@ -217,7 +258,52 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     connect(&m_bluetooth, &shell::Bluetooth::failed, this, showProblem(&QuickSettings::m_bluetoothProblem));
     connect(&m_wifi, &shell::Wifi::failed, this, showProblem(&QuickSettings::m_wifiProblem));
     connect(&m_battery, &Battery::changed, this, &QuickSettings::sync);
+    connect(&m_notifications, &NotificationServer::changed, this, &QuickSettings::syncToggles);
+    connect(&m_profiles, &shell::PowerProfiles::changed, this, &QuickSettings::syncToggles);
     sync();
+}
+
+QToolButton* QuickSettings::toggle(const QString& name)
+{
+    const auto& colors = tde::theme::colors();
+    auto* button = new QToolButton(this);
+    button->setCheckable(true);
+    button->setText(name);
+    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    button->setIconSize(QSize(IconSize, IconSize));
+    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    button->setFixedHeight(40);
+    button->setStyleSheet(u"QToolButton { background: %1; border: none; border-radius: 20px; padding: 0 14px;"
+                          " text-align: left; }"
+                          " QToolButton:hover { background: %2; }"
+                          " QToolButton:checked { background: %3; color: %4; }"
+                          " QToolButton:checked:hover { background: %5; }"_s.arg(colors.pressed.name(QColor::HexArgb),
+                              colors.hover.name(QColor::HexArgb), colors.accent.name(), colors.accentText.name(),
+                              colors.accent.lighter(115).name()));
+    return button;
+}
+
+void QuickSettings::syncToggles()
+{
+    const auto& colors = tde::theme::colors();
+    const auto setIcon = [this, &colors](QToolButton* button, const QString& name) {
+        button->setIcon(shell::tintedIcon(name, QSize(IconSize, IconSize), devicePixelRatioF(),
+            button->isChecked() ? colors.accentText : colors.text));
+    };
+    // Dark when the theme is, or when it follows the system and that is dark.
+    const QString theme = tde::desktop().appearance.theme;
+    const bool dark = theme == u"arc-dark"
+        || (theme == u"system" && QGuiApplication::styleHints()->colorScheme() != Qt::ColorScheme::Light);
+    m_darkStyle->setChecked(dark);
+    setIcon(m_darkStyle, u"weather-clear-night-symbolic"_s);
+    m_quiet->setChecked(m_notifications.isQuiet());
+    setIcon(m_quiet,
+        m_notifications.isQuiet() ? u"notifications-disabled-symbolic"_s
+                                  : u"preferences-system-notifications-symbolic"_s);
+    m_powerMode->setVisible(m_profiles.isAvailable() && !m_profiles.offered().isEmpty());
+    m_powerMode->setText(shell::powerProfileName(m_profiles.active()));
+    setIcon(m_powerMode, shell::powerProfileIcon(m_profiles.active()));
+    setIcon(m_screenshot, u"camera-photo-symbolic"_s);
 }
 
 QToolButton* QuickSettings::actionButton(const QString& icon, const QString& name, void (QuickSettings::*signal)())
@@ -239,7 +325,8 @@ QToolButton* QuickSettings::actionButton(const QString& icon, const QString& nam
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
     content->addWidget(iconLabel);
     content->addWidget(text, 1);
-    connect(button, &QToolButton::clicked, this, signal);
+    if (signal)
+        connect(button, &QToolButton::clicked, this, signal);
     return button;
 }
 
@@ -294,6 +381,7 @@ void QuickSettings::sync()
 
     syncWifi();
     syncBluetooth();
+    syncToggles();
 
     m_batteryRow->setVisible(m_battery.isPresent());
     m_batteryIcon->setPixmap(symbolic(m_battery.iconName(), this).pixmap(IconSize, IconSize));

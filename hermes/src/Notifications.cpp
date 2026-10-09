@@ -3,6 +3,7 @@
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QRegularExpression>
+#include <QTimer>
 #include <QUrl>
 
 #include <algorithm>
@@ -243,6 +244,12 @@ uint NotificationServer::Notify(const QString& appName, uint replacesId, const Q
         }
     }
 
+    // Kept quiet: straight into the list, or gone at once when there is no point in keeping it.
+    const bool quietly = m_quiet && notification.urgency != Notification::Urgency::Critical;
+    if (quietly)
+        notification.banner = false;
+    const bool dropped = quietly && notification.transient;
+
     // A replacement takes the place of the one it replaces, and shows again.
     const auto previous
         = replacesId ? std::ranges::find(m_notifications, replacesId, &Notification::id) : m_notifications.end();
@@ -268,7 +275,17 @@ uint NotificationServer::Notify(const QString& appName, uint replacesId, const Q
     emit changed();
     if (!replacing)
         emit arrived(id);
+    if (dropped)
+        QTimer::singleShot(0, this, [this, id] { close(id, Reason::Expired); });
     return id;
+}
+
+void NotificationServer::setQuiet(bool quiet)
+{
+    if (quiet == m_quiet)
+        return;
+    m_quiet = quiet;
+    emit changed();
 }
 
 void NotificationServer::CloseNotification(uint id)
