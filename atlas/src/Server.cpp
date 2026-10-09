@@ -196,21 +196,59 @@ void Server::newOutput(wlr_output* output)
         wlr_log(WLR_ERROR, "cannot render to %s", output->name);
         return;
     }
-
-    wlr_output_state state;
-    wlr_output_state_init(&state);
-    wlr_output_state_set_enabled(&state, true);
-    if (wlr_output_mode* mode = wlr_output_preferred_mode(output))
-        wlr_output_state_set_mode(&state, mode);
-    const bool enabled = wlr_output_commit_state(output, &state);
-    wlr_output_state_finish(&state);
-    if (!enabled)
-        wlr_log(WLR_ERROR, "cannot turn on %s", output->name);
-
     outputs.push_back(std::make_unique<Output>(*this, output));
-    if (enabled)
-        placeOutput(wlr_output_layout_add_auto(outputLayout, output));
-    arrange(*outputs.back());
+    turnOn(*outputs.back());
+}
+
+// Turns a new output on in the mode it likes best, or else the best one it takes; when none
+// does, as when a dock brings up its displays one by one, it is tried again a little later.
+void Server::turnOn(Output& output)
+{
+    constexpr int Attempts = 5;
+    constexpr int Delay = 1000; // ms
+
+    // The one it prefers, then as large as can be and as fast.
+    wlr_output_mode* preferred = wlr_output_preferred_mode(output.output);
+    std::vector<wlr_output_mode*> modes;
+    wlr_output_mode* mode;
+    wl_list_for_each(mode, &output.output->modes, link)
+    {
+        if (mode != preferred)
+            modes.push_back(mode);
+    }
+    std::ranges::stable_sort(modes, [](const wlr_output_mode* a, const wlr_output_mode* b) {
+        if (a->width * a->height != b->width * b->height)
+            return a->width * a->height > b->width * b->height;
+        return a->refresh > b->refresh;
+    });
+    if (preferred)
+        modes.insert(modes.begin(), preferred);
+    if (modes.empty())
+        modes.push_back(nullptr); // nested and virtual outputs have no modes
+
+    bool enabled = false;
+    for (wlr_output_mode* candidate : modes) {
+        wlr_output_state state;
+        wlr_output_state_init(&state);
+        wlr_output_state_set_enabled(&state, true);
+        if (candidate)
+            wlr_output_state_set_mode(&state, candidate);
+        enabled = wlr_output_test_state(output.output, &state) && wlr_output_commit_state(output.output, &state);
+        wlr_output_state_finish(&state);
+        if (enabled)
+            break;
+    }
+
+    if (enabled) {
+        output.attempts = 0;
+        placeOutput(wlr_output_layout_add_auto(outputLayout, output.output));
+    } else if (++output.attempts < Attempts) {
+        wlr_log(WLR_INFO, "cannot turn on %s yet, trying again", output.output->name);
+        output.retry(Delay);
+    } else {
+        wlr_log(WLR_ERROR, "cannot turn on %s", output.output->name);
+    }
+    arrange(output);
 }
 
 // Shows an output that is in the layout. Its scene output goes whenever it leaves the layout,

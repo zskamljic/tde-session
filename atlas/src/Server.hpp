@@ -88,6 +88,7 @@ public:
     void layerSurfaceDestroyed(LayerSurface& surface);
     void updateLayerFocus();
     void outputDestroyed(Output& output);
+    void turnOn(Output& output);
     void newPopup(wlr_xdg_popup* popup);
     void popupDestroyed(Popup& popup);
     void keyboardDestroyed(Keyboard& keyboard);

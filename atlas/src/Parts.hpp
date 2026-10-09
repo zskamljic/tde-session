@@ -11,6 +11,10 @@ namespace atlas {
 class Output {
 public:
     Output(Server& server, wlr_output* output);
+    ~Output();
+
+    Output(const Output&) = delete;
+    Output& operator=(const Output&) = delete;
 
     // Where the output is in the layout.
     wlr_box box() const;
@@ -19,8 +23,13 @@ public:
     wlr_output* output;
     wlr_box usable {}; // the part not taken by panels, in layout coordinates
     wlr_box placed {}; // where it was when windows were last moved along with it
+    int attempts = 0; // at turning it on, which failed so far
+
+    // Tries turning it on again after `delay` ms.
+    void retry(int delay);
 
 private:
+    wl_event_source* m_retry = nullptr;
     Listener m_frame;
     Listener m_requestState;
     Listener m_destroy;
