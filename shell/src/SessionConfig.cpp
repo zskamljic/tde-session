@@ -32,6 +32,11 @@ constexpr std::pair<QStringView, Style> styles[] = {
     {u"icons", Style::Icons},
 };
 
+QString boolText(bool value)
+{
+    return value ? u"true"_s : u"false"_s;
+}
+
 QStringList displaysOf(const SessionConfig::Displays::Layout& layout)
 {
     QStringList displays;
@@ -92,6 +97,8 @@ SessionConfig loadSessionConfig(const QString& path)
                 animations.flip = *flip;
             if (const auto step = reader.integer("flip_step", 0, MaxDuration))
                 animations.flipStep = *step;
+            if (const auto windows = reader.integer("windows", 0, MaxDuration))
+                animations.windows = *windows;
         });
         reader.table("displays", [&] {
             auto& displays = config.displays;
@@ -130,6 +137,22 @@ SessionConfig loadSessionConfig(const QString& path)
         reader.table("clock", [&] {
             if (const auto seconds = reader.boolean("seconds"))
                 config.clock.seconds = *seconds;
+        });
+        reader.table("input", [&] {
+            const auto readPointer = [&](SessionConfig::Input::Pointer& pointer) {
+                if (const auto speed = reader.integer("speed", -100, 100))
+                    pointer.speed = *speed;
+                if (const auto scroll = reader.integer("scroll_speed", 10, 1000))
+                    pointer.scrollSpeed = *scroll;
+                if (const auto natural = reader.boolean("natural_scroll"))
+                    pointer.naturalScroll = *natural;
+                if (const auto tap = reader.boolean("tap_to_click"))
+                    pointer.tapToClick = *tap;
+                if (const auto typing = reader.boolean("disable_while_typing"))
+                    pointer.disableWhileTyping = *typing;
+            };
+            reader.table("mouse", [&] { readPointer(config.input.mouse); });
+            reader.table("touchpad", [&] { readPointer(config.input.touchpad); });
         });
         reader.table("power", [&] {
             constexpr int MaxMinutes = 24 * 60;
@@ -180,6 +203,7 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"        overview = %1, -- opening and closing the overview"_s.arg(config.animations.overview),
         u"        flip = %1, -- opening and closing Flip 3D"_s.arg(config.animations.flip),
         u"        flip_step = %1, -- turning to the next window in it"_s.arg(config.animations.flipStep),
+        u"        windows = %1, -- windows moving into a tile, as when maximized"_s.arg(config.animations.windows),
         u"    },"_s,
         u"    displays = {"_s,
         u"        -- The display with the bar, by its make, model and serial number; none for the first."_s,
@@ -201,6 +225,20 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"        blank = %1, -- the screens turn off"_s.arg(config.power.blank),
         u"        suspend = %1, -- the computer sleeps, plugged in"_s.arg(config.power.suspend),
         u"        suspend_on_battery = %1, -- and on battery"_s.arg(config.power.suspendOnBattery),
+        u"    },"_s,
+        u"    input = {"_s,
+        u"        -- Speeds in percent: of the pointer from -100 to 100 around the usual, of scrolling"_s,
+        u"        -- from 10 to 1000 of the usual distance."_s,
+        u"        mouse = { speed = %1, scroll_speed = %2, natural_scroll = %3 },"_s.arg(config.input.mouse.speed)
+            .arg(config.input.mouse.scrollSpeed)
+            .arg(boolText(config.input.mouse.naturalScroll)),
+        u"        touchpad = {"_s,
+        u"            speed = %1, scroll_speed = %2, natural_scroll = %3,"_s.arg(config.input.touchpad.speed)
+            .arg(config.input.touchpad.scrollSpeed)
+            .arg(boolText(config.input.touchpad.naturalScroll)),
+        u"            tap_to_click = %1, disable_while_typing = %2,"_s.arg(boolText(config.input.touchpad.tapToClick),
+            boolText(config.input.touchpad.disableWhileTyping)),
+        u"        },"_s,
         u"    },"_s,
         u"}"_s,
     };

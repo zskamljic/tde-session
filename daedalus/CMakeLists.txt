@@ -13,6 +13,7 @@ add_executable(tde-daedalus
     src/DisplaysPage.cpp
     src/KeyboardPage.cpp
     src/LockPage.cpp
+    src/MousePage.cpp
     src/NetworkPage.cpp
     src/Pages.cpp
     src/PowerPage.cpp

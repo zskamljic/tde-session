@@ -6,6 +6,7 @@
 #include "DisplaysPage.hpp"
 #include "KeyboardPage.hpp"
 #include "LockPage.hpp"
+#include "MousePage.hpp"
 #include "NetworkPage.hpp"
 #include "PowerPage.hpp"
 #include "SoundPage.hpp"
@@ -113,6 +114,8 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     addPage(u"power"_s, u"battery-good"_s, u"Power"_s, new PowerPage(m_settings, m_stack));
     addPage(u"windows"_s, u"preferences-system-windows"_s, u"Windows"_s, new WindowsPage(m_settings, m_stack));
     addPage(u"keyboard"_s, u"input-keyboard"_s, u"Keyboard"_s, new KeyboardPage(m_stack));
+    addPage(u"mouse"_s, u"input-mouse"_s, hasTouchpad() ? u"Mouse & Touchpad"_s : u"Mouse"_s,
+        new MousePage(m_settings, m_stack));
     addPage(u"lock"_s, u"system-lock-screen"_s, u"Lock Screen"_s, new LockPage(m_stack));
     addPage(u"apps"_s, u"applications-system"_s, u"Default Apps"_s, new DefaultAppsPage(m_stack));
     addPage(u"datetime"_s, u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));

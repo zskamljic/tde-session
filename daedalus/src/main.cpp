@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
     parser.addVersionOption();
     const QCommandLineOption pageOption(u"page"_s,
         u"Open on the page called <name>: network, bluetooth, background, displays, sound, power, windows, "
-        "keyboard, lock, apps or datetime."_s,
+        "keyboard, mouse, lock, apps or datetime."_s,
         u"name"_s);
     parser.addOption(pageOption);
     parser.process(app);

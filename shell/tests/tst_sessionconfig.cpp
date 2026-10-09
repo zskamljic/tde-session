@@ -27,7 +27,9 @@ private slots:
         config.switcher.style = shell::SessionConfig::Switcher::Style::Icons;
         config.clock.seconds = true;
         config.power = {.blank = 0, .suspend = 45, .suspendOnBattery = 10};
-        config.animations = {.overview = 0, .flip = 600, .flipStep = 90};
+        config.animations = {.overview = 0, .flip = 600, .flipStep = 90, .windows = 120};
+        config.input.mouse = {.speed = -40, .scrollSpeed = 50, .naturalScroll = true};
+        config.input.touchpad = {.speed = 25, .scrollSpeed = 150, .tapToClick = false, .disableWhileTyping = false};
         config.displays.primary = u"Dell U2720Q ABC123"_s;
         config.displays.keep({
             {.display = u"Dell U2720Q ABC123"_s, .size = QSize(3840, 2160), .refresh = 60000, .scale = 150},

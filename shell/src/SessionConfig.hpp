@@ -38,6 +38,7 @@ struct SessionConfig {
         int overview = 250; // opening and closing the overview
         int flip = 300; // opening and closing Flip 3D
         int flipStep = 220; // turning to the next window in it
+        int windows = 200; // windows moving into a tile, as when maximized
 
         bool operator==(const Animations&) const = default;
     } animations;
@@ -83,6 +84,24 @@ struct SessionConfig {
 
         bool operator==(const Power&) const = default;
     } power;
+
+    // Mice and touchpads, which the compositor sets up.
+    struct Input {
+        struct Pointer {
+            int speed = 0; // -100 to 100, percent around the usual
+            int scrollSpeed = 100; // percent of the usual distance
+            bool naturalScroll = false; // the content moves the way the fingers or the wheel do
+            bool tapToClick = true; // touchpads only
+            bool disableWhileTyping = true; // touchpads only
+
+            bool operator==(const Pointer&) const = default;
+        };
+
+        Pointer mouse;
+        Pointer touchpad {.naturalScroll = true};
+
+        bool operator==(const Input&) const = default;
+    } input;
 
     bool operator==(const SessionConfig&) const = default;
 };

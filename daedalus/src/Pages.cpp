@@ -61,6 +61,7 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     duration(u"Overview"_s, u"Windows moving in and out of the overview"_s, config.animations.overview);
     duration(u"Flip 3D"_s, u"Windows moving into the stack and back"_s, config.animations.flip);
     duration(u"Flip 3D turning"_s, u"The next window coming to the front"_s, config.animations.flipStep);
+    duration(u"Tiling"_s, u"Windows growing to fill the screen or half of it"_s, config.animations.windows);
 
     Group* shortcuts = addGroup(u"Keyboard Shortcuts"_s);
     shortcuts->addRow(u"Switch windows"_s, {}, keys(u"Alt+Tab"_s, this));
