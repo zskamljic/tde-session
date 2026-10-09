@@ -34,6 +34,18 @@ const std::pair<const char*, const char*> SwitchKeys[] = {
     {"", "Not by keys"},
 };
 
+// The keys offered for composing characters, such as Compose, then ' and e for é.
+const std::pair<const char*, const char*> ComposeKeys[] = {
+    {"", "None"},
+    {"compose:ralt", "Right Alt"},
+    {"compose:rctrl", "Right Ctrl"},
+    {"compose:rwin", "Right Super"},
+    {"compose:menu", "Menu"},
+    {"compose:caps", "Caps Lock"},
+    {"compose:prsc", "Print Screen"},
+    {"compose:sclk", "Scroll Lock"},
+};
+
 QString localeProperty(const QString& name)
 {
     QDBusMessage call
@@ -97,20 +109,22 @@ std::pair<QString, QString> layoutsOf(const std::vector<InputSource>& sources)
     return {layouts.join(u','), anyVariant ? variants.join(u',') : QString()};
 }
 
-QString switchOption(const QString& options)
+QString optionOf(const QString& options, const QString& group)
 {
+    const QString prefix = group + u':';
     for (const QString& option : options.split(u',', Qt::SkipEmptyParts)) {
-        if (option.trimmed().startsWith(u"grp:"))
+        if (option.trimmed().startsWith(prefix))
             return option.trimmed();
     }
     return {};
 }
 
-QString withSwitchOption(const QString& options, const QString& option)
+QString withOption(const QString& options, const QString& group, const QString& option)
 {
+    const QString prefix = group + u':';
     QStringList kept;
     for (const QString& other : options.split(u',', Qt::SkipEmptyParts)) {
-        if (!other.trimmed().startsWith(u"grp:"))
+        if (!other.trimmed().startsWith(prefix))
             kept << other.trimmed();
     }
     if (!option.isEmpty())
@@ -213,6 +227,22 @@ void KeyboardPage::sync()
         [this, keys] { save(m_sources, withSwitchOption(m_options, keys->currentData().toString())); });
     switching->addRow(u"Switch layouts with"_s, u"Moves on to the next input source"_s, keys);
     layout->addWidget(switching);
+
+    auto* special = new Group(u"Special Keys"_s, m_content);
+    auto* compose = new QComboBox(special);
+    const QString composeNow = optionOf(m_options, u"compose"_s);
+    for (const auto& [option, label] : ComposeKeys)
+        compose->addItem(QString::fromUtf8(label), QString::fromLatin1(option));
+    if (compose->findData(composeNow) < 0)
+        compose->insertItem(1, composeNow, composeNow);
+    compose->setCurrentIndex(compose->findData(composeNow));
+    connect(compose, &QComboBox::activated, this, [this, compose] {
+        save(m_sources, withOption(m_options, u"compose"_s, compose->currentData().toString()));
+    });
+    special->addRow(u"Compose key"_s, u"Followed by others, types what is not on the keyboard: ' then e for é"_s,
+        compose);
+    special->addNote(u"Right Alt is the AltGr key of many layouts, which then types only what Compose does."_s);
+    layout->addWidget(special);
 }
 
 void KeyboardPage::save(const std::vector<InputSource>& sources, const QString& options)

@@ -52,6 +52,11 @@ private slots:
     {
         QCOMPARE(daedalus::switchOption(u"compose:ralt,grp:alt_shift_toggle"_s), u"grp:alt_shift_toggle"_s);
         QVERIFY(daedalus::switchOption(u"compose:ralt"_s).isEmpty());
+        QCOMPARE(daedalus::optionOf(u"compose:ralt,grp:alt_shift_toggle"_s, u"compose"_s), u"compose:ralt"_s);
+        QCOMPARE(daedalus::withOption(u"compose:ralt,grp:alt_shift_toggle"_s, u"compose"_s, u"compose:caps"_s),
+            u"grp:alt_shift_toggle,compose:caps"_s);
+        QCOMPARE(daedalus::withOption(u"compose:ralt,grp:alt_shift_toggle"_s, u"compose"_s, {}),
+            u"grp:alt_shift_toggle"_s);
         QCOMPARE(daedalus::withSwitchOption(u"grp:alt_shift_toggle,compose:ralt"_s, u"grp:win_space_toggle"_s),
             u"compose:ralt,grp:win_space_toggle"_s);
         QCOMPARE(daedalus::withSwitchOption(u"grp:alt_shift_toggle"_s, {}), QString());

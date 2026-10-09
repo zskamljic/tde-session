@@ -26,12 +26,25 @@ std::vector<InputSource> sourcesOf(const QString& layouts, const QString& varian
 // The other way: layouts and variants, comma-separated, for localectl.
 std::pair<QString, QString> layoutsOf(const std::vector<InputSource>& sources);
 
-// The XKB option that switches between layouts ("grp:win_space_toggle"), or an empty one.
-QString switchOption(const QString& options);
-// `options` with `option` in place of the one switching layouts.
-QString withSwitchOption(const QString& options, const QString& option);
+// The XKB option of `options` in the group `group`, as "grp" has "grp:win_space_toggle", or an
+// empty one.
+QString optionOf(const QString& options, const QString& group);
+// `options` with `option` in place of the one of its group; an empty `option` takes it out.
+QString withOption(const QString& options, const QString& group, const QString& option);
 
-// The keyboard layouts, switching between them, all for the computer: the layouts are kept by
+// The XKB option that switches between layouts ("grp:win_space_toggle"), or an empty one.
+inline QString switchOption(const QString& options)
+{
+    return optionOf(options, QStringLiteral("grp"));
+}
+// `options` with `option` in place of the one switching layouts.
+inline QString withSwitchOption(const QString& options, const QString& option)
+{
+    return withOption(options, QStringLiteral("grp"), option);
+}
+
+// The keyboard layouts, switching between them, and the compose key, all for the computer:
+// the layouts are kept by
 // systemd-localed, as `localectl set-x11-keymap` keeps them, so the login screen has them too.
 class KeyboardPage : public Page {
 public:
