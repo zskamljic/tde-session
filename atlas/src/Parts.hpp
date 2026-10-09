@@ -71,6 +71,18 @@ private:
     Listener m_destroy;
 };
 
+// A mouse, touchpad or the like.
+class Pointer {
+public:
+    Pointer(Server& server, wlr_input_device* device);
+
+    wlr_input_device* device;
+    bool touchpad; // scrolls with fingers, which its settings are for
+
+private:
+    Listener m_destroy;
+};
+
 class Keyboard {
 public:
     Keyboard(Server& server, wlr_keyboard* keyboard, bool virtualKeyboard);

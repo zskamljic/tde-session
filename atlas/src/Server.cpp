@@ -40,6 +40,10 @@ Server::~Server()
         wl_event_source_remove(m_keyboardWatchSource);
     if (m_keyboardWatch >= 0)
         close(m_keyboardWatch);
+    if (m_settingsWatchSource)
+        wl_event_source_remove(m_settingsWatchSource);
+    if (m_settingsWatch >= 0)
+        close(m_settingsWatch);
     wl_display_destroy_clients(display);
     m_popups.clear();
     m_views.clear();
@@ -48,6 +52,7 @@ Server::~Server()
         wlr_xwayland_destroy(m_xwayland);
     layerSurfaces.clear();
     m_keyboards.clear();
+    m_pointers.clear();
     if (scene)
         wlr_scene_node_destroy(&scene->tree.node);
     if (xcursor)

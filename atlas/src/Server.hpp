@@ -2,6 +2,7 @@
 
 #include "Decoration.hpp"
 #include "Listener.hpp"
+#include "Settings.hpp"
 #include "wlr.hpp"
 
 #include <memory>
@@ -14,6 +15,7 @@ class Keyboard;
 class LayerSurface;
 class Output;
 class Popup;
+class Pointer;
 class SessionLock;
 class Unmanaged;
 class View;
@@ -92,6 +94,7 @@ public:
     void newPopup(wlr_xdg_popup* popup);
     void popupDestroyed(Popup& popup);
     void keyboardDestroyed(Keyboard& keyboard);
+    void pointerDestroyed(Pointer& pointer);
     void unmanagedDestroyed(Unmanaged& surface);
 
     // Public to the parts of the compositor ---------------------------------------------
@@ -161,6 +164,10 @@ private:
     // Follows the system's keyboard layout as localectl changes it, on the keyboards there are.
     void watchKeyboardLayout();
     void keyboardLayoutChanged();
+    // Follows the session's settings as Settings saves them.
+    void watchSettings();
+    void applySettings();
+    void configurePointer(const Pointer& pointer) const;
     void updateCapabilities();
     void cursorMotion(uint32_t timeMsec);
     void cursorButton(wlr_pointer_button_event* event);
@@ -190,6 +197,9 @@ private:
     wl_event_source* m_layoutIdle = nullptr; // to see layout changes once they are all done
     int m_keyboardWatch = -1; // inotify, on where the system keeps the keyboard layout
     wl_event_source* m_keyboardWatchSource = nullptr;
+    Settings m_settings;
+    int m_settingsWatch = -1; // inotify, on the folders of the session's settings
+    wl_event_source* m_settingsWatchSource = nullptr;
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
     wlr_xwayland* m_xwayland = nullptr;
 
@@ -197,6 +207,7 @@ private:
     std::vector<View*> m_order; // mapped windows, most recently used first
     std::vector<std::unique_ptr<Popup>> m_popups;
     std::vector<std::unique_ptr<Keyboard>> m_keyboards;
+    std::vector<std::unique_ptr<Pointer>> m_pointers;
     std::vector<std::unique_ptr<Unmanaged>> m_unmanaged;
     LayerSurface* m_layerFocus = nullptr; // a layer surface that holds the keyboard
 

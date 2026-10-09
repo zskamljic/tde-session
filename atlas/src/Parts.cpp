@@ -107,6 +107,19 @@ void Popup::unconstrain()
     wlr_xdg_popup_unconstrain_from_box(popup, &box);
 }
 
+// Pointer ---------------------------------------------------------------------------------
+
+Pointer::Pointer(Server& server, wlr_input_device* device)
+    : device(device)
+    , touchpad(false)
+{
+    if (wlr_input_device_is_libinput(device)) {
+        libinput_device* handle = wlr_libinput_get_device_handle(device);
+        touchpad = libinput_device_config_tap_get_finger_count(handle) > 0;
+    }
+    m_destroy.connect(device->events.destroy, [this, &server] { server.pointerDestroyed(*this); });
+}
+
 // LayerSurface ----------------------------------------------------------------------------
 
 LayerSurface::LayerSurface(Server& server, wlr_layer_surface_v1* surface, Output& output)

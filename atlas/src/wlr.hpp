@@ -4,6 +4,7 @@
 // declared [static N], and members named after C++ keywords. Everything they include from
 // elsewhere comes first, so only the wlroots headers themselves see the workarounds.
 
+#include <libinput.h>
 #include <pixman.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -28,6 +29,7 @@ extern "C" {
 #include "wlr-layer-shell-unstable-v1-protocol.h"
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
+#include <wlr/backend/libinput.h>
 #include <wlr/backend/multi.h>
 #include <wlr/backend/session.h>
 #include <wlr/interfaces/wlr_buffer.h>

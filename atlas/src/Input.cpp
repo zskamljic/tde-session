@@ -158,8 +158,12 @@ void Server::setUpInput()
         cursor->events.button, [this](wlr_pointer_button_event* event) { cursorButton(event); });
     m_cursorAxis.connect<wlr_pointer_axis_event>(cursor->events.axis, [this](wlr_pointer_axis_event* event) {
         wlr_idle_notifier_v1_notify_activity(idleNotifier, seat);
-        wlr_seat_pointer_notify_axis(seat, event->time_msec, event->orientation, event->delta, event->delta_discrete,
-            event->source, event->relative_direction);
+        // As far as the settings say for this kind of device; wheels in steps of their own.
+        const auto pointer = std::ranges::find(m_pointers, &event->pointer->base, &Pointer::device);
+        const bool touchpad = pointer != m_pointers.end() && (*pointer)->touchpad;
+        const double factor = (touchpad ? m_settings.touchpad : m_settings.mouse).scrollSpeed / 100.0;
+        wlr_seat_pointer_notify_axis(seat, event->time_msec, event->orientation, event->delta * factor,
+            int32_t(std::lround(event->delta_discrete * factor)), event->source, event->relative_direction);
     });
     m_cursorFrame.connect(cursor->events.frame, [this] { wlr_seat_pointer_notify_frame(seat); });
 
@@ -167,6 +171,7 @@ void Server::setUpInput()
     m_newInput.connect<wlr_input_device>(
         backend->events.new_input, [this](wlr_input_device* device) { newInput(device); });
     watchKeyboardLayout();
+    watchSettings();
 
     m_requestCursor.connect<wlr_seat_pointer_request_set_cursor_event>(
         seat->events.request_set_cursor, [this](wlr_seat_pointer_request_set_cursor_event* event) {
@@ -227,6 +232,7 @@ void Server::newInput(wlr_input_device* device)
     // Touch screens and tablets wait until their events are handled.
     case WLR_INPUT_DEVICE_POINTER:
         wlr_cursor_attach_input_device(cursor, device);
+        configurePointer(*m_pointers.emplace_back(std::make_unique<Pointer>(*this, device)));
         break;
     default:
         break;
@@ -275,6 +281,70 @@ void Server::keyboardLayoutChanged()
         if (!keyboard->virtualKeyboard)
             setSystemKeymap(keyboard->keyboard);
     }
+}
+
+void Server::pointerDestroyed(Pointer& pointer)
+{
+    std::erase_if(m_pointers, [&](const auto& p) { return p.get() == &pointer; });
+}
+
+void Server::configurePointer(const Pointer& pointer) const
+{
+    if (!wlr_input_device_is_libinput(pointer.device))
+        return;
+    libinput_device* device = wlr_libinput_get_device_handle(pointer.device);
+    const PointerSettings& settings = pointer.touchpad ? m_settings.touchpad : m_settings.mouse;
+    if (libinput_device_config_accel_is_available(device))
+        libinput_device_config_accel_set_speed(device, settings.speed / 100.0);
+    if (libinput_device_config_scroll_has_natural_scroll(device))
+        libinput_device_config_scroll_set_natural_scroll_enabled(device, settings.naturalScroll);
+    if (!pointer.touchpad)
+        return;
+    libinput_device_config_tap_set_enabled(
+        device, settings.tapToClick ? LIBINPUT_CONFIG_TAP_ENABLED : LIBINPUT_CONFIG_TAP_DISABLED);
+    if (libinput_device_config_dwt_is_available(device))
+        libinput_device_config_dwt_set_enabled(
+            device, settings.disableWhileTyping ? LIBINPUT_CONFIG_DWT_ENABLED : LIBINPUT_CONFIG_DWT_DISABLED);
+}
+
+void Server::watchSettings()
+{
+    m_settingsWatch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (m_settingsWatch >= 0) {
+        m_settingsWatchSource = wl_event_loop_add_fd(
+            eventLoop, m_settingsWatch, WL_EVENT_READABLE,
+            [](int fd, uint32_t, void* data) {
+                alignas(inotify_event) char events[4096];
+                while (read(fd, events, sizeof events) > 0) { }
+                static_cast<Server*>(data)->applySettings();
+                return 0;
+            },
+            this);
+    }
+    applySettings();
+}
+
+void Server::applySettings()
+{
+    // The file's folder, or the nearest one there is, to see it made; editors save by
+    // replacing the file, so the folder is watched rather than the file.
+    if (m_settingsWatch >= 0) {
+        std::string folder = settingsPath();
+        while (!folder.empty()) {
+            folder.erase(folder.rfind('/'));
+            if (inotify_add_watch(m_settingsWatch, folder.empty() ? "/" : folder.c_str(),
+                    IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE)
+                >= 0)
+                break;
+        }
+    }
+    Settings settings = loadSettings(settingsPath());
+    if (settings == m_settings)
+        return;
+    m_settings = settings;
+    windowAnimationTime = m_settings.windowAnimation;
+    for (const auto& pointer : m_pointers)
+        configurePointer(*pointer);
 }
 
 void Server::keyboardDestroyed(Keyboard& keyboard)
