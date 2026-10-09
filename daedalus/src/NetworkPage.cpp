@@ -4,7 +4,13 @@
 #include <tde/Dialog.hpp>
 #include <tde/Toast.hpp>
 
+#include <tde/Theme.hpp>
+
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -66,6 +72,13 @@ QWidget* NetworkPage::networkControls(const shell::WifiNetwork& network)
             });
         row->addWidget(toggle);
     }
+    if (!network.connection.isEmpty() && network.secured) {
+        auto* show = new QPushButton(controls);
+        show->setIcon(tde::theme::symbolicIcon(u"view-reveal-symbolic"_s));
+        show->setToolTip(u"Show the password"_s);
+        connect(show, &QPushButton::clicked, this, [this, ssid] { showPassword(ssid); });
+        row->addWidget(show);
+    }
     if (!network.connection.isEmpty()) {
         auto* forget = new QPushButton(u"Forget"_s, controls);
         connect(forget, &QPushButton::clicked, this, [this, ssid] {
@@ -77,6 +90,33 @@ QWidget* NetworkPage::networkControls(const shell::WifiNetwork& network)
         row->addWidget(forget);
     }
     return controls;
+}
+
+void NetworkPage::showPassword(const QString& ssid)
+{
+    const std::optional<QString> password = m_wifi.password(ssid);
+    if (!password) {
+        m_toast->showMessage(u"The password of “%1” could not be read."_s.arg(ssid));
+        return;
+    }
+    tde::Dialog dialog(u"Wi-Fi Password"_s, window());
+    auto* label = new QLabel(u"The password of “%1”:"_s.arg(ssid), &dialog);
+    label->setTextFormat(Qt::PlainText);
+    auto* field = new QLineEdit(*password, &dialog);
+    field->setReadOnly(true);
+    auto* buttons = new QHBoxLayout;
+    auto* copy = new QPushButton(u"Copy"_s, &dialog);
+    auto* close = new QPushButton(u"Close"_s, &dialog);
+    connect(copy, &QPushButton::clicked, &dialog, [field] { QGuiApplication::clipboard()->setText(field->text()); });
+    connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+    buttons->addStretch(1);
+    buttons->addWidget(copy);
+    buttons->addWidget(close);
+    dialog.contentLayout()->addWidget(label);
+    dialog.contentLayout()->addWidget(field);
+    dialog.contentLayout()->addLayout(buttons);
+    dialog.setDefaultButton(close);
+    dialog.run();
 }
 
 void NetworkPage::sync()

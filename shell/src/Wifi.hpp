@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <optional>
 #include <vector>
 
 namespace shell {
@@ -62,6 +63,9 @@ public:
     void disconnect();
     // Forgets the connection kept for `ssid`, password and all.
     void forget(const QString& ssid);
+    // The password kept for `ssid`, which the system may ask the user's own password for
+    // first; nullopt when there is none, or it was not given.
+    std::optional<QString> password(const QString& ssid) const;
 
 signals:
     void changed();

@@ -27,6 +27,8 @@ protected:
 private:
     void sync();
     QWidget* networkControls(const shell::WifiNetwork& network);
+    // In a dialog, to read or copy.
+    void showPassword(const QString& ssid);
 
     shell::Wifi m_wifi;
     QTimer m_scanning;

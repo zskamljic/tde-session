@@ -284,6 +284,26 @@ void Wifi::disconnect()
         call(m_device, Device, u"Disconnect"_s, {}, {});
 }
 
+std::optional<QString> Wifi::password(const QString& ssid) const
+{
+    const auto network = std::ranges::find(m_networks, ssid, &WifiNetwork::ssid);
+    if (network == m_networks.end() || network->connection.isEmpty())
+        return std::nullopt;
+    QDBusMessage call = QDBusMessage::createMethodCall(NetworkManager, network->connection, Connection, u"GetSecrets"_s);
+    call << u"802-11-wireless-security"_s;
+    call.setInteractiveAuthorizationAllowed(true);
+    // Long enough for a password to be typed, when polkit asks for one.
+    const QDBusReply<ConnectionSettings> secrets = QDBusConnection::systemBus().call(call, QDBus::Block, 120000);
+    if (!secrets.isValid())
+        return std::nullopt;
+    const QVariantMap security = secrets.value().value(u"802-11-wireless-security"_s);
+    for (const char* key : {"psk", "wep-key0", "leap-password"}) {
+        if (const QString value = security.value(QString::fromLatin1(key)).toString(); !value.isEmpty())
+            return value;
+    }
+    return std::nullopt;
+}
+
 void Wifi::forget(const QString& ssid)
 {
     const auto network = std::ranges::find(m_networks, ssid, &WifiNetwork::ssid);
