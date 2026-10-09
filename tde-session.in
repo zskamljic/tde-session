@@ -4,7 +4,10 @@
 
 if [ "$1" = --terminal ]; then
     shift
-    for terminal in "$TERMINAL" ghostty kitty alacritty foot konsole gnome-terminal xterm; do
+    # The one the desktop config names, if any, ahead of $TERMINAL and the usual ones.
+    config=${XDG_CONFIG_HOME:-$HOME/.config}/tde/config.lua
+    chosen=$(sed -n 's/^[[:space:]]*terminal[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$config" 2>/dev/null | tail -n 1)
+    for terminal in "$chosen" "$TERMINAL" ghostty kitty alacritty foot konsole gnome-terminal xterm; do
         if [ -n "$terminal" ] && command -v "$terminal" >/dev/null; then
             if [ "$1" = -- ]; then
                 shift

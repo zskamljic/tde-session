@@ -1,7 +1,10 @@
 #include "DefaultAppsPage.hpp"
 
 #include <Applications.hpp>
+#include <DesktopSettings.hpp>
 #include <Icons.hpp>
+#include <tde/DesktopConfig.hpp>
+#include <tde/LuaConfig.hpp>
 
 #include <QComboBox>
 #include <QDir>
@@ -30,24 +33,64 @@ QString readFile(const QString& path)
     return file.open(QIODevice::ReadOnly | QIODevice::Text) ? QString::fromUtf8(file.readAll()) : QString();
 }
 
-QString userList()
+QString userFolder()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + u"/mimeapps.list"_s;
+    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+}
+
+// The names of the lists in a folder, as the specification orders them: those of the desktops
+// in XDG_CURRENT_DESKTOP first, "tde-mimeapps.list", then the common one.
+QStringList listNames()
+{
+    QStringList names;
+    for (const QString& desktop : qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(u':', Qt::SkipEmptyParts))
+        names << desktop.toLower() + u"-mimeapps.list"_s;
+    names << u"mimeapps.list"_s;
+    return names;
 }
 
 // The default for `mimeType` as the lists say it, the user's first, then the system's.
 QString currentDefault(const QString& mimeType)
 {
-    QStringList lists {userList()};
-    for (const QString& folder : QStandardPaths::standardLocations(QStandardPaths::GenericConfigLocation))
-        lists << folder + u"/mimeapps.list"_s;
-    for (const QString& folder : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation))
-        lists << folder + u"/applications/mimeapps.list"_s;
+    QStringList lists;
+    for (const QString& folder : QStandardPaths::standardLocations(QStandardPaths::GenericConfigLocation)) {
+        for (const QString& name : listNames())
+            lists << folder + u'/' + name;
+    }
+    for (const QString& folder : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)) {
+        for (const QString& name : listNames())
+            lists << folder + u"/applications/"_s + name;
+    }
     for (const QString& path : lists) {
         if (const QString found = defaultIn(readFile(path), mimeType); !found.isEmpty())
             return found;
     }
     return {};
+}
+
+// Makes `appId` the default for `mimeTypes` in the user's common list, and in the lists of
+// the desktop that would come before it, where they have a say.
+bool setDefault(const QStringList& mimeTypes, const QString& appId)
+{
+    bool saved = true;
+    for (const QString& name : listNames()) {
+        const QString path = userFolder() + u'/' + name;
+        const QString text = readFile(path);
+        const bool common = name == u"mimeapps.list";
+        if (!common && std::ranges::none_of(mimeTypes, [&](const QString& type) { return !defaultIn(text, type).isEmpty(); }))
+            continue;
+        QDir().mkpath(userFolder());
+        QSaveFile file(path);
+        saved = file.open(QIODevice::WriteOnly | QIODevice::Text)
+            && file.write(withDefault(text, mimeTypes, appId).toUtf8()) >= 0 && file.commit() && saved;
+    }
+    return saved;
+}
+
+// The program a terminal application runs, which the desktop config names.
+QString programOf(const shell::Application& app)
+{
+    return QFileInfo(shell::splitExec(app.exec).value(0)).fileName();
 }
 
 } // namespace
@@ -119,6 +162,8 @@ DefaultAppsPage::DefaultAppsPage(QWidget* parent)
         {"Music", {u"audio/mpeg"_s, u"audio/flac"_s, u"audio/x-vorbis+ogg"_s, u"audio/x-wav"_s}},
         {"Video", {u"video/mp4"_s, u"video/x-matroska"_s, u"video/webm"_s}},
         {"Photos", {u"image/jpeg"_s, u"image/png"_s, u"image/gif"_s, u"image/webp"_s}},
+        {"Documents", {u"application/pdf"_s}},
+        {"Text", {u"text/plain"_s}},
         {"Files", {u"inode/directory"_s}},
     };
     const auto apps = shell::loadApplications(qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(u':'));
@@ -145,18 +190,34 @@ DefaultAppsPage::DefaultAppsPage(QWidget* parent)
         }
         connect(box, &QComboBox::activated, this, [box, types = kind.mimeTypes] {
             const QString id = box->currentData().toString();
-            if (id.isEmpty())
-                return;
-            const QString path = userList();
-            QDir().mkpath(QFileInfo(path).absolutePath());
-            QSaveFile file(path);
-            if (!file.open(QIODevice::WriteOnly | QIODevice::Text)
-                || file.write(withDefault(readFile(path), types, id).toUtf8()) < 0 || !file.commit())
-                qWarning("tde-daedalus: cannot write %s", qPrintable(path));
+            if (!id.isEmpty() && !setDefault(types, id))
+                qWarning("tde-daedalus: cannot write the default applications to %s", qPrintable(userFolder()));
         });
         group->addRow(QString::fromUtf8(kind.title), {}, box);
     }
     group->addNote(u"Each opens what is of its kind: web links and pages, mail addresses, events, and the rest."_s);
+
+    // The terminal is the desktop's choice, for "Open in Terminal" and programs that run in one.
+    Group* tools = addGroup(u"Tools"_s);
+    auto* terminal = new QComboBox(this);
+    terminal->setMinimumWidth(240);
+    terminal->addItem(u"The first one installed"_s, QString());
+    const QString chosen = tde::loadDesktopConfig().terminal;
+    for (const shell::Application& app : apps) {
+        if (app.categories.contains(u"TerminalEmulator"_s) && app.inMenus)
+            terminal->addItem(shell::applicationIcon(&app, app.icon), app.name, programOf(app));
+    }
+    if (!chosen.isEmpty() && terminal->findData(chosen) < 0)
+        terminal->addItem(chosen, chosen);
+    terminal->setCurrentIndex(std::max(0, terminal->findData(chosen)));
+    connect(terminal, &QComboBox::activated, this, [terminal] {
+        const QString program = terminal->currentData().toString();
+        // None chosen leaves it to $TERMINAL and the usual ones.
+        if (!shell::setDesktopSetting(tde::desktopConfigPath(), {}, u"terminal"_s,
+                program.isEmpty() ? u"nil"_s : tde::luaString(program)))
+            qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
+    });
+    tools->addRow(u"Terminal"_s, u"Opens folders and runs programs that need one"_s, terminal);
 }
 
 } // namespace daedalus
