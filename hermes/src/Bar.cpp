@@ -529,6 +529,9 @@ void Bar::placeOn(QScreen* screen)
 
 void Bar::layOut()
 {
+    // Shown on another screen while it is being made, before it has its parts.
+    if (!m_system || !m_tray || !m_clock || !m_taskbar)
+        return;
     const QRect area = rect().adjusted(Spacing, 0, -Spacing, 0);
 
     const QSize systemSize(m_system->sizeHint().width(), height());
