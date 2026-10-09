@@ -565,9 +565,18 @@ int Locker::run()
 
     if (m_unlocked) {
         wl_display_roundtrip(m_display);
+        // Everything of the connection goes before it does.
         m_outputs.clear();
         m_buffers.clear();
+        m_pointer.reset();
+        m_keyboard.reset();
+        m_seat.reset();
+        m_manager.reset();
+        m_shm.reset();
+        m_compositor.reset();
+        m_registry.reset();
         wl_display_disconnect(m_display);
+        m_display = nullptr;
         return 0;
     }
     // Refused, as when another lock screen holds the session already.
