@@ -3,6 +3,7 @@
 #include "Groups.hpp"
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
+#include "PlayerCard.hpp"
 #include "PolkitAgent.hpp"
 #include "PowerSaving.hpp"
 #include "QuickSettings.hpp"
@@ -35,6 +36,7 @@
 #include <QScreen>
 #include <QTextCharFormat>
 #include <QToolButton>
+#include <QVBoxLayout>
 #include <QWidgetAction>
 
 #include <functional>
@@ -112,7 +114,7 @@ Bar::Bar(QWidget* parent)
     m_clock = new QToolButton(this);
     m_clock->setAutoRaise(true);
     m_clock->setStyleSheet(buttonStyle(u"font-weight: bold; padding: 0 10px;"_s));
-    // Behind the clock: the notifications that were missed, and the calendar.
+    // Behind the clock: the notifications that were missed, the calendar and the media player.
     m_clock->setCheckable(true);
     connect(m_clock, &QToolButton::clicked, this, &Bar::showCalendar);
     m_calendarMenu = createCalendarMenu();
@@ -249,8 +251,11 @@ QMenu* Bar::createCalendarMenu()
     connect(list, &NotificationList::handled, menu, &QMenu::close);
     connect(list, &NotificationList::actionPicked, this, &Bar::pickAction);
     dropdownLayout->addWidget(list);
+    // The calendar, and the player below it while something plays.
+    auto* side = new QVBoxLayout;
+    side->setContentsMargins(0, 8, 8, 8);
+    side->setSpacing(10);
     auto* calendar = new QCalendarWidget(dropdown);
-    dropdownLayout->addWidget(calendar, 0, Qt::AlignTop);
     calendar->setGridVisible(false);
     calendar->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
     // Weekends in the text colour too, not in Qt's red.
@@ -258,12 +263,24 @@ QMenu* Bar::createCalendarMenu()
     weekend.setForeground(tde::theme::colors().text);
     calendar->setWeekdayTextFormat(Qt::Saturday, weekend);
     calendar->setWeekdayTextFormat(Qt::Sunday, weekend);
+    side->addWidget(calendar);
+    auto* player = new PlayerCard(m_media, dropdown);
+    player->setFixedWidth(calendar->sizeHint().width());
+    side->addWidget(player);
+    side->addStretch(1);
+    dropdownLayout->addLayout(side);
     auto* action = new QWidgetAction(menu);
     action->setDefaultWidget(dropdown);
     menu->addAction(action);
     connect(menu, &QMenu::aboutToShow, calendar, [calendar] {
         calendar->setSelectedDate(QDate::currentDate());
         calendar->showToday();
+    });
+    // The player coming or going changes the panel's size, which the menu measures again.
+    connect(&m_media, &Media::changed, menu, [menu, action] {
+        QActionEvent changed(QEvent::ActionChanged, action);
+        QCoreApplication::sendEvent(menu, &changed);
+        menu->adjustSize();
     });
     connect(menu, &QMenu::aboutToHide, this, [this] {
         m_clock->setChecked(false);

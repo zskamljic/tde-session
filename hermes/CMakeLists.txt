@@ -1,4 +1,4 @@
-find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus Network)
 find_package(LayerShellQt 6 REQUIRED)
 find_package(PolkitQt6-1 REQUIRED)
 find_package(Tde 0.2 REQUIRED)
@@ -38,8 +38,10 @@ add_executable(tde-hermes
     src/Bar.cpp
     src/DisplayLayouts.cpp
     src/Locking.cpp
+    src/Media.cpp
     src/NotificationViews.cpp
     src/Osd.cpp
+    src/PlayerCard.cpp
     src/PolkitAgent.cpp
     src/PowerSaving.cpp
     src/QuickSettings.cpp
@@ -53,7 +55,7 @@ add_executable(tde-hermes
 target_include_directories(tde-hermes PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-hermes PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tde-hermes PRIVATE
-    hermes-core Qt6::Gui Qt6::Widgets Qt6::DBus LayerShellQt::Interface Tde::Tde PolkitQt6-1::Agent
+    hermes-core Qt6::Gui Qt6::Widgets Qt6::DBus Qt6::Network LayerShellQt::Interface Tde::Tde PolkitQt6-1::Agent
     PkgConfig::CANBERRA PkgConfig::PULSE PkgConfig::WAYLAND_CLIENT)
 install(TARGETS tde-hermes)
 

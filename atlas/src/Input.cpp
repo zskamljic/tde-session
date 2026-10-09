@@ -545,6 +545,20 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
     case XKB_KEY_XF86MonBrightnessDown:
         hermes("LowerBrightness", "brightnessctl set 5%-");
         return true;
+    // For the player that played last, which the bar knows.
+    case XKB_KEY_XF86AudioPlay:
+    case XKB_KEY_XF86AudioPause:
+        hermes("PlayPause", "playerctl play-pause");
+        return true;
+    case XKB_KEY_XF86AudioNext:
+        hermes("Next", "playerctl next");
+        return true;
+    case XKB_KEY_XF86AudioPrev:
+        hermes("Previous", "playerctl previous");
+        return true;
+    case XKB_KEY_XF86AudioStop:
+        hermes("Stop", "playerctl stop");
+        return true;
     default:
         return false;
     }

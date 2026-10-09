@@ -1,6 +1,7 @@
 #include "Osd.hpp"
 
 #include "Audio.hpp"
+#include "Media.hpp"
 #include "QuickSettings.hpp"
 #include "SystemStatus.hpp"
 
@@ -91,10 +92,11 @@ void Osd::paintEvent(QPaintEvent*)
 
 // MediaKeys -------------------------------------------------------------------------------
 
-MediaKeys::MediaKeys(Audio& audio, Brightness& brightness, QObject* parent)
+MediaKeys::MediaKeys(Audio& audio, Brightness& brightness, Media& media, QObject* parent)
     : QObject(parent)
     , m_audio(audio)
     , m_brightness(brightness)
+    , m_media(media)
     , m_osd(std::make_unique<Osd>())
 {
 }
@@ -153,6 +155,26 @@ void MediaKeys::changeBrightness(double by)
         return;
     m_brightness.setValue(stepped(m_brightness.value(), by));
     m_osd->present(u"display-brightness-symbolic"_s, m_brightness.value());
+}
+
+void MediaKeys::PlayPause()
+{
+    m_media.playPause();
+}
+
+void MediaKeys::Next()
+{
+    m_media.next();
+}
+
+void MediaKeys::Previous()
+{
+    m_media.previous();
+}
+
+void MediaKeys::Stop()
+{
+    m_media.stop();
 }
 
 } // namespace hermes

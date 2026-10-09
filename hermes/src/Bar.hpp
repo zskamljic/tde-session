@@ -2,6 +2,7 @@
 
 #include "Audio.hpp"
 #include "DisplayLayouts.hpp"
+#include "Media.hpp"
 #include "Notifications.hpp"
 #include "Osd.hpp"
 #include "Sounds.hpp"
@@ -33,9 +34,9 @@ class Taskbar;
 class Tray;
 
 // The bar along the top of the screen: the applications on the left, the clock in the
-// middle, with the calendar and the notifications behind it, and on the right the tray
-// icons and the status of sound, network and battery, behind which are the quick settings. Notifications also show as
-// banners below it.
+// middle, with the calendar, the media player and the notifications behind it, and on the
+// right the tray icons and the status of sound, network and battery, behind which are the
+// quick settings. Notifications also show as banners below it.
 class Bar : public QWidget {
     Q_OBJECT
 
@@ -82,7 +83,8 @@ private:
     shell::Wifi m_wifi;
     shell::Bluetooth m_bluetooth;
     Battery m_battery;
-    MediaKeys m_keys {m_audio, m_brightness}; // with the level indicator, a window of its own
+    Media m_media;
+    MediaKeys m_keys {m_audio, m_brightness, m_media}; // with the level indicator, a window of its own
     DisplayLayouts m_displays;
     QTimer m_tick;
     bool m_seconds = false; // shown in the clock
