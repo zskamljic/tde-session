@@ -8,6 +8,7 @@
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QStyleHints>
 
 using namespace Qt::StringLiterals;
 
@@ -57,6 +58,18 @@ QWidget#BoxedList QFrame#Separator { background: @border@; border: none; }
 QLabel#Keys { color: @dim_text@; border: 1px solid @border@; border-radius: 6px; padding: 2px 8px; }
 )"_s);
     tde::theme::apply(app, tde::desktop().appearance);
+    // The look follows the desktop's config as it is edited, and the system with "system".
+    tde::ConfigWatcher watcher({tde::desktopConfigPath()});
+    QObject::connect(&watcher, &tde::ConfigWatcher::changed, [&app] {
+        const auto appearance = tde::desktop().appearance;
+        tde::setDesktop(tde::loadDesktopConfig());
+        if (tde::desktop().appearance != appearance)
+            tde::theme::apply(app, tde::desktop().appearance);
+    });
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, [&app] {
+        if (tde::desktop().appearance.theme == u"system")
+            tde::theme::apply(app, tde::desktop().appearance);
+    });
 
     daedalus::SettingsWindow window;
     if (!page.isEmpty() && !window.showPage(page))

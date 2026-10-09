@@ -18,6 +18,7 @@
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDeadlineTimer>
+#include <QStyleHints>
 #include <QThread>
 
 #include <cstdio>
@@ -163,8 +164,24 @@ int main(int argc, char* argv[])
         desktop.setSettings(config);
         flip.setAnimationTimes(config.animations.flip, config.animations.flipStep);
     };
-    tde::ConfigWatcher watcher({shell::sessionConfigPath()});
-    QObject::connect(&watcher, &tde::ConfigWatcher::changed, applySettings);
+    // The desktop's look as well, which the theme follows; a theme following the system does
+    // so as it changes.
+    const auto applyLook = [&app] { tde::theme::apply(app, tde::desktop().appearance); };
+    tde::ConfigWatcher watcher({shell::sessionConfigPath(), tde::desktopConfigPath()});
+    QObject::connect(&watcher, &tde::ConfigWatcher::changed, [&](const QString& path) {
+        if (path == shell::sessionConfigPath()) {
+            applySettings();
+            return;
+        }
+        const auto appearance = tde::desktop().appearance;
+        tde::setDesktop(tde::loadDesktopConfig());
+        if (tde::desktop().appearance != appearance)
+            applyLook();
+    });
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, [&] {
+        if (tde::desktop().appearance.theme == u"system")
+            applyLook();
+    });
     applySettings();
 
     // What this start was asked for, once running.

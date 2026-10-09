@@ -82,9 +82,12 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
+    void changeEvent(QEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // The colours of the theme, where they are not taken at every paint.
+    void updateLook();
     // The windows over the desktop, on the canvas, which redraw() has drawn again.
     void paint(QPainter& painter);
     void redraw();

@@ -142,16 +142,9 @@ Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* sc
     setFocusProxy(m_search);
     connect(m_search, &QLineEdit::textChanged, this, &Overview::updateMode);
 
-    const auto& colors = tde::theme::colors();
     m_appsButton = new QToolButton(this);
     m_appsButton->setIconSize(QSize(24, 24));
-    m_appsButton->setIcon(
-        shell::tintedIcon(u"view-app-grid-symbolic"_s, m_appsButton->iconSize(), devicePixelRatioF(), colors.text));
-    // Round, highlighted under the pointer and while the applications are shown.
-    m_appsButton->setStyleSheet(u"QToolButton { background: transparent; border: none; border-radius: %1px; }"
-                                " QToolButton:hover { background: %2; }"
-                                " QToolButton:pressed, QToolButton:checked { background: %3; }"_s.arg(ButtonSize / 2)
-                                    .arg(colors.hover.name(QColor::HexArgb), colors.pressed.name(QColor::HexArgb)));
+    updateLook();
     m_appsButton->setFixedSize(ButtonSize, ButtonSize);
     m_appsButton->setToolTip(u"Show Applications"_s);
     m_appsButton->setCheckable(true);
@@ -205,6 +198,26 @@ Overview::~Overview()
 {
     // Its screen went while it was open: the pictures need not follow the windows for it.
     setLive(false);
+}
+
+void Overview::updateLook()
+{
+    const auto& colors = tde::theme::colors();
+    m_appsButton->setIcon(
+        shell::tintedIcon(u"view-app-grid-symbolic"_s, m_appsButton->iconSize(), devicePixelRatioF(), colors.text));
+    // Round, highlighted under the pointer and while the applications are shown.
+    m_appsButton->setStyleSheet(u"QToolButton { background: transparent; border: none; border-radius: %1px; }"
+                                " QToolButton:hover { background: %2; }"
+                                " QToolButton:pressed, QToolButton:checked { background: %3; }"_s.arg(ButtonSize / 2)
+                                    .arg(colors.hover.name(QColor::HexArgb), colors.pressed.name(QColor::HexArgb)));
+}
+
+void Overview::changeEvent(QEvent* event)
+{
+    // The theme changed.
+    if (event->type() == QEvent::PaletteChange)
+        updateLook();
+    QWidget::changeEvent(event);
 }
 
 void Overview::Show()
