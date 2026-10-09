@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QRect>
+#include <QScreen>
 #include <QString>
 #include <QTimer>
 #include <QWidget>
@@ -104,6 +105,11 @@ public:
 
     void activate(quint64 id);
     void close(quint64 id);
+    // Puts the window on `screen`; where it is then comes with the next refresh().
+    void moveToScreen(quint64 id, QScreen* screen);
+    // Whether windows can be moved to another screen.
+    bool canMoveWindows() const;
+
     // While live, the pictures of the windows follow what they show, as often as they change
     // and at most every so often; previewChanged tells. Every setLive(true) is undone by a
     // setLive(false).

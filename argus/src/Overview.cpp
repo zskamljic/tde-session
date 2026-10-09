@@ -8,6 +8,7 @@
 #include <Icons.hpp>
 #include <tde/Theme.hpp>
 
+#include <QApplication>
 #include <QGraphicsOpacityEffect>
 #include <QGuiApplication>
 #include <QIcon>
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -405,6 +407,9 @@ void Overview::paint(QPainter& painter)
 
     for (const auto& [slot, shownWindow] : order) {
         const Toplevel& window = *shownWindow;
+        // Being dragged, it is drawn under the pointer instead.
+        if (m_dragging && slot->id == m_pressed)
+            continue;
         const bool hovered = slot->id == m_hovered && settled();
 
         // From where the window is to its place; those not on the screen grow in its place.
@@ -454,6 +459,44 @@ void Overview::paint(QPainter& painter)
             painter.drawLine(c + QPointF(-s, s), c + QPointF(s, -s));
         }
     }
+
+    // A window being dragged, or dragged here from another screen, under the pointer.
+    const auto drawHeld = [&](quint64 id, QPoint at, double width) {
+        const Toplevel* held = m_toplevels.find(id);
+        if (!held)
+            return;
+        const QSizeF natural = held->preview.isNull() ? QSizeF(PlaceholderSize) : QSizeF(held->preview.size());
+        const QSizeF size = natural.scaled(QSizeF(width, width), Qt::KeepAspectRatio);
+        QRectF place(QPointF(), size);
+        place.moveCenter(at);
+        QPainterPath shape;
+        shape.addRoundedRect(place, Radius, Radius);
+        painter.setOpacity(0.85);
+        if (held->preview.isNull()) {
+            paintPlaceholder(painter, shape, m_toplevels.iconOf(*held));
+        } else {
+            painter.save();
+            painter.setClipPath(shape);
+            painter.drawImage(place, held->preview);
+            painter.restore();
+        }
+        painter.setOpacity(1);
+        painter.setPen(QPen(colors.accent, 2));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(shape);
+    };
+    if (m_dragging) {
+        const auto slot = std::ranges::find(m_slots, m_pressed, &Slot::id);
+        drawHeld(m_pressed, m_dragPos, slot == m_slots.end() ? 240.0 : double(std::max(slot->preview.width(),
+                                                                                  slot->preview.height())));
+    }
+    if (m_dropId != 0) {
+        // The whole screen is where it goes.
+        painter.setPen(QPen(colors.accent, 4));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(QRectF(rect()).adjusted(2, 2, -2, -2), Radius, Radius);
+        drawHeld(m_dropId, m_dropPos, 240);
+    }
 }
 
 void Overview::resizeEvent(QResizeEvent* event)
@@ -483,10 +526,46 @@ void Overview::setHovered(quint64 id)
     }
 }
 
+void Overview::mousePressEvent(QMouseEvent* event)
+{
+    m_pressed = 0;
+    m_dragging = false;
+    if (m_closing || event->button() != Qt::LeftButton || QGuiApplication::screens().size() < 2
+        || !m_toplevels.canMoveWindows())
+        return;
+    // A window may be dragged to another screen.
+    const QPoint pos = event->position().toPoint();
+    if (const Slot* slot = slotAt(pos); slot && !slot->closeButton.contains(pos)) {
+        m_pressed = slot->id;
+        m_pressPos = pos;
+    }
+}
+
+void Overview::showDrop(quint64 id, std::optional<QPoint> pos)
+{
+    const quint64 wanted = pos ? id : 0;
+    if (wanted == m_dropId && (!pos || *pos == m_dropPos))
+        return;
+    m_dropId = wanted;
+    m_dropPos = pos.value_or(QPoint());
+    redraw();
+}
+
 void Overview::mouseMoveEvent(QMouseEvent* event)
 {
     if (m_closing)
         return;
+    if (m_pressed != 0) {
+        const QPoint pos = event->position().toPoint();
+        if (!m_dragging && (pos - m_pressPos).manhattanLength() >= QApplication::startDragDistance())
+            m_dragging = true;
+        if (m_dragging) {
+            m_dragPos = pos;
+            redraw();
+            emit windowDragged(m_pressed, screen()->geometry().topLeft() + pos);
+            return;
+        }
+    }
     const Slot* slot = slotAt(event->position().toPoint());
     const bool onClose = slot && slot->closeButton.contains(event->position().toPoint());
     if (onClose != m_hoveringClose) {
@@ -503,6 +582,12 @@ void Overview::leaveEvent(QEvent*)
 
 void Overview::mouseReleaseEvent(QMouseEvent* event)
 {
+    const quint64 pressed = std::exchange(m_pressed, 0);
+    if (std::exchange(m_dragging, false)) {
+        redraw();
+        emit windowDropped(pressed, screen()->geometry().topLeft() + event->position().toPoint());
+        return;
+    }
     if (m_closing || (event->button() != Qt::LeftButton && event->button() != Qt::MiddleButton))
         return;
     const Slot* slot = slotAt(event->position().toPoint());

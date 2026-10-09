@@ -98,7 +98,7 @@ void Toplevels::global(void* data, wl_registry* registry, uint32_t name, const c
         self->m_copier.reset(
             bind.operator()<ext_image_copy_capture_manager_v1>(ext_image_copy_capture_manager_v1_interface, 1));
     } else if (std::strcmp(interface, tde_window_info_manager_v1_interface.name) == 0) {
-        self->m_info.reset(bind.operator()<tde_window_info_manager_v1>(tde_window_info_manager_v1_interface, 1));
+        self->m_info.reset(bind.operator()<tde_window_info_manager_v1>(tde_window_info_manager_v1_interface, 2));
     }
 }
 
@@ -210,6 +210,21 @@ void Toplevels::activate(quint64 id)
 void Toplevels::close(quint64 id)
 {
     m_windows.close(id);
+}
+
+bool Toplevels::canMoveWindows() const
+{
+    return m_info && tde_window_info_manager_v1_get_version(m_info.get()) >= 2;
+}
+
+void Toplevels::moveToScreen(quint64 id, QScreen* screen)
+{
+    const Toplevel* window = find(id);
+    auto* wayland = screen ? screen->nativeInterface<QNativeInterface::QWaylandScreen>() : nullptr;
+    if (!window || !window->entry || !wayland || !canMoveWindows())
+        return;
+    tde_window_info_manager_v1_move_to_output(m_info.get(), window->entry->handle.get(), wayland->output());
+    flush();
 }
 
 void Toplevels::setLive(bool live)

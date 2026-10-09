@@ -6,7 +6,7 @@
     switchers do. The windows are those of ext-foreign-toplevel-list.
   </description>
 
-  <interface name="tde_window_info_manager_v1" version="1">
+  <interface name="tde_window_info_manager_v1" version="2">
     <request name="destroy" type="destructor"/>
 
     <request name="get_info">
@@ -17,9 +17,20 @@
       <arg name="id" type="new_id" interface="tde_window_info_v1"/>
       <arg name="toplevel" type="object" interface="ext_foreign_toplevel_handle_v1"/>
     </request>
+
+    <request name="move_to_output" since="2">
+      <description summary="put a window on another output">
+        Moves the window to the output, as when it is dragged there in the
+        overview. It keeps its size as far as it fits, and its place relative
+        to the part of the output windows may use; a tiled window is tiled
+        there the same way, and one covering an output covers that one.
+      </description>
+      <arg name="toplevel" type="object" interface="ext_foreign_toplevel_handle_v1"/>
+      <arg name="output" type="object" interface="wl_output"/>
+    </request>
   </interface>
 
-  <interface name="tde_window_info_v1" version="1">
+  <interface name="tde_window_info_v1" version="2">
     <enum name="flags" bitfield="true">
       <entry name="minimized" value="1"/>
     </enum>

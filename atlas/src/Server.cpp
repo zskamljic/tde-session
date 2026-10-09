@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -467,6 +468,42 @@ Output* Server::outputAt(double x, double y) const
             return output.get();
     }
     return outputs.empty() ? nullptr : outputs.front().get();
+}
+
+void Server::moveToOutput(View& view, wlr_output& output)
+{
+    const auto target = std::ranges::find(outputs, &output, [](const auto& o) { return o->output; });
+    if (target == outputs.end())
+        return;
+    const wlr_box current = view.geometry();
+    const wlr_box targetBox = (*target)->box();
+    const Output* source = outputAt(current.x + current.width / 2.0, current.y + current.height / 2.0);
+    if (source == target->get() || wlr_box_empty(&targetBox))
+        return;
+    const wlr_box from = usableArea(current.x + current.width / 2.0, current.y + current.height / 2.0);
+    const wlr_box to = wlr_box_empty(&(*target)->usable) ? targetBox : (*target)->usable;
+    // The same place relative to the area, as large as it was as far as it fits.
+    const auto relocate = [&](const wlr_box& box) {
+        wlr_box moved = box;
+        moved.width = std::min(box.width, to.width);
+        moved.height = std::min(box.height, to.height);
+        const double fractionX = from.width > box.width ? double(box.x - from.x) / (from.width - box.width) : 0.5;
+        const double fractionY = from.height > box.height ? double(box.y - from.y) / (from.height - box.height) : 0.5;
+        moved.x = to.x + int(std::lround(std::clamp(fractionX, 0.0, 1.0) * (to.width - moved.width)));
+        moved.y = to.y + int(std::lround(std::clamp(fractionY, 0.0, 1.0) * (to.height - moved.height)));
+        return moved;
+    };
+    if (!wlr_box_empty(&view.restore))
+        view.restore = relocate(view.restore);
+    if (view.fullscreen) {
+        view.setGeometry(targetBox);
+    } else if (view.isTiled()) {
+        // Tiled along the new output's area, which the tile is worked out from.
+        view.moveTo(to.x + (to.width - current.width) / 2, to.y + (to.height - current.height) / 2);
+        view.setTile(view.tile);
+    } else {
+        view.setGeometry(relocate(current));
+    }
 }
 
 wlr_box Server::usableArea(double x, double y) const

@@ -80,6 +80,9 @@ public:
     void beginMove(View& view);
     void beginResize(View& view, uint32_t edges);
 
+    // Puts a window on `output`, at the same place in it as where it is.
+    void moveToOutput(View& view, wlr_output& output);
+
     // The part of the output at the given point that windows may use.
     wlr_box usableArea(double x, double y) const;
     Output* outputAt(double x, double y) const;

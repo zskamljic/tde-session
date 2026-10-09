@@ -50,6 +50,27 @@ void Desktop::sync()
             for (const Screen& other : m_screens)
                 other.overview->closeOnto(chosen);
         });
+        // Windows dragged from one screen's overview to another's go to that screen.
+        connect(entry.overview.get(), &Overview::windowDragged, this, [this, screen](quint64 id, QPoint global) {
+            for (const Screen& other : m_screens) {
+                const bool over = other.screen != screen && other.screen->geometry().contains(global);
+                other.overview->showDrop(
+                    id, over ? std::optional(global - other.screen->geometry().topLeft()) : std::nullopt);
+            }
+        });
+        connect(entry.overview.get(), &Overview::windowDropped, this, [this, screen](quint64 id, QPoint global) {
+            for (const Screen& other : m_screens)
+                other.overview->showDrop(id, std::nullopt);
+            QScreen* target = QGuiApplication::screenAt(global);
+            if (!target || target == screen)
+                return;
+            m_toplevels.moveToScreen(id, target);
+            // Laid out again where the windows are now.
+            m_toplevels.refresh(this, [this] {
+                for (const Screen& other : m_screens)
+                    other.overview->windowsMoved();
+            });
+        });
     }
     for (const Screen& entry : m_screens)
         entry.overview->setPrimary(entry.screen == primary);

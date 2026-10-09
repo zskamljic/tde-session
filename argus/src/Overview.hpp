@@ -6,8 +6,10 @@
 #include <Catalog.hpp>
 
 #include <QRect>
+#include <QPoint>
 #include <QWidget>
 
+#include <optional>
 #include <vector>
 
 class QGraphicsOpacityEffect;
@@ -59,14 +61,24 @@ public:
     void showApplications();
     // Closes, with the window `chosen` coming forward, above the others; 0 for none.
     void closeOnto(quint64 chosen);
+    // A window dragged from the overview of another screen is over this one at `pos`, or
+    // left it for none.
+    void showDrop(quint64 id, std::optional<QPoint> pos);
+    // The windows moved: they are laid out again where they are now.
+    void windowsMoved() { relayout(); }
 
 signals:
     // Something here asks to close, with `chosen` coming forward: the overviews of all
     // screens close together.
     void closeRequested(quint64 chosen);
+    // A window is dragged, to put it on another screen, and was dropped, at `global` in the
+    // coordinates of the screens.
+    void windowDragged(quint64 id, QPoint global);
+    void windowDropped(quint64 id, QPoint global);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
@@ -110,6 +122,14 @@ private:
     bool m_closing = false;
     quint64 m_chosen = 0; // the window it closes onto, drawn above the others
     bool m_live = false; // the pictures follow the windows
+    // A window held by the pointer, and dragged once it moved far enough.
+    quint64 m_pressed = 0;
+    QPoint m_pressPos;
+    bool m_dragging = false;
+    QPoint m_dragPos;
+    // A window dragged here from another screen.
+    quint64 m_dropId = 0;
+    QPoint m_dropPos;
     std::vector<QGraphicsOpacityEffect*> m_fades; // of the search, the button and the grid
 };
 
