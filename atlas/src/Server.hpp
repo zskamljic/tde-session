@@ -224,6 +224,12 @@ private:
     const View* m_titleClickView = nullptr;
     uint32_t m_titleClickTime = 0;
 
+    // The surface a button was pressed on, which keeps the pointer until it is let go, and
+    // where it was in the layout then.
+    wlr_surface* m_pressedSurface = nullptr;
+    double m_pressedX = 0;
+    double m_pressedY = 0;
+
     // The modifier holding a window switcher of the overview open, until it is let go.
     uint32_t m_pickingWith = 0;
 

@@ -536,6 +536,15 @@ void Server::cursorMotion(uint32_t timeMsec)
         return;
     }
 
+    // Held down on a surface, the pointer stays with it; dragging and dropping something
+    // between windows goes to whatever is under it instead.
+    if (m_pressedSurface && !seat->drag && seat->pointer_state.button_count > 0
+        && seat->pointer_state.focused_surface == m_pressedSurface) {
+        wlr_seat_pointer_notify_motion(seat, timeMsec, cursor->x - m_pressedX, cursor->y - m_pressedY);
+        return;
+    }
+    m_pressedSurface = nullptr;
+
     wlr_surface* surface = nullptr;
     double sx = 0;
     double sy = 0;
@@ -654,6 +663,11 @@ void Server::cursorButton(wlr_pointer_button_event* event)
             return;
         }
         wlr_seat_pointer_notify_button(seat, event->time_msec, event->button, event->state);
+        // Let go of, the surface under the pointer has it again.
+        if (seat->pointer_state.button_count == 0 && m_pressedSurface) {
+            m_pressedSurface = nullptr;
+            cursorMotion(event->time_msec);
+        }
         return;
     }
 
@@ -682,6 +696,13 @@ void Server::cursorButton(wlr_pointer_button_event* event)
             focusSurface(layer->surface->surface);
     }
     wlr_seat_pointer_notify_button(seat, event->time_msec, event->button, event->state);
+    // The surface pressed keeps the pointer until it is let go, wherever it goes meanwhile, as
+    // when selecting text past a window's edge or dragging something to another screen.
+    if (wlr_surface* pressed = seat->pointer_state.focused_surface; pressed && !m_pressedSurface) {
+        m_pressedSurface = pressed;
+        m_pressedX = cursor->x - seat->pointer_state.sx;
+        m_pressedY = cursor->y - seat->pointer_state.sy;
+    }
 }
 
 void Server::beginMove(View& view)
