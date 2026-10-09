@@ -1,15 +1,14 @@
 #include "PowerPage.hpp"
 
+#include <PowerProfiles.hpp>
+
 #include <QComboBox>
-#include <QDBusArgument>
 #include <QDBusConnection>
-#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDBusReply>
 #include <QDBusVariant>
 
 #include <algorithm>
-#include <optional>
 #include <vector>
 
 using namespace Qt::StringLiterals;
@@ -18,28 +17,6 @@ namespace daedalus {
 namespace {
 
 const QString Properties = u"org.freedesktop.DBus.Properties"_s;
-
-// power-profiles-daemon, by the name it has now or the one it had before.
-struct Profiles {
-    QString service;
-    QString path;
-    QString interface;
-};
-
-std::optional<Profiles> powerProfiles()
-{
-    const auto bus = QDBusConnection::systemBus();
-    for (const Profiles& profiles : {
-             Profiles {u"org.freedesktop.UPower.PowerProfiles"_s, u"/org/freedesktop/UPower/PowerProfiles"_s,
-                 u"org.freedesktop.UPower.PowerProfiles"_s},
-             Profiles {u"net.hadess.PowerProfiles"_s, u"/net/hadess/PowerProfiles"_s, u"net.hadess.PowerProfiles"_s},
-         }) {
-        if (bus.interface()->isServiceRegistered(profiles.service)
-            || bus.interface()->activatableServiceNames().value().contains(profiles.service))
-            return profiles;
-    }
-    return std::nullopt;
-}
 
 QVariant busProperty(const QString& service, const QString& path, const QString& interface, const QString& name)
 {
@@ -76,29 +53,19 @@ PowerPage::PowerPage(Settings& settings, QWidget* parent)
 {
     auto& power = settings.config.power;
 
-    if (const auto profiles = powerProfiles()) {
+    auto* profiles = new shell::PowerProfiles(this);
+    if (profiles->isAvailable()) {
         auto* mode = new QComboBox(this);
-        const QString active
-            = busProperty(profiles->service, profiles->path, profiles->interface, u"ActiveProfile"_s).toString();
-        const QList<QVariantMap> offered = qdbus_cast<QList<QVariantMap>>(
-            busProperty(profiles->service, profiles->path, profiles->interface, u"Profiles"_s));
-        const std::pair<const char*, const char*> names[] = {
-            {"performance", "Performance"},
-            {"balanced", "Balanced"},
-            {"power-saver", "Power Saver"},
+        const auto fill = [mode, profiles] {
+            mode->clear();
+            for (const QString& profile : profiles->offered())
+                mode->addItem(shell::powerProfileName(profile), profile);
+            mode->setCurrentIndex(std::max(0, mode->findData(profiles->active())));
         };
-        for (const auto& [profile, label] : names) {
-            const QString name = QString::fromLatin1(profile);
-            if (std::ranges::any_of(offered, [&](const QVariantMap& p) { return p.value(u"Profile"_s) == name; }))
-                mode->addItem(QString::fromUtf8(label), name);
-        }
-        mode->setCurrentIndex(std::max(0, mode->findData(active)));
-        connect(mode, &QComboBox::activated, this, [mode, profiles = *profiles] {
-            QDBusMessage call = QDBusMessage::createMethodCall(profiles.service, profiles.path, Properties, u"Set"_s);
-            call << profiles.interface << u"ActiveProfile"_s << QVariant::fromValue(QDBusVariant(mode->currentData()));
-            call.setInteractiveAuthorizationAllowed(true);
-            QDBusConnection::systemBus().call(call, QDBus::NoBlock);
-        });
+        fill();
+        connect(profiles, &shell::PowerProfiles::changed, mode, fill);
+        connect(mode, &QComboBox::activated, this,
+            [mode, profiles] { profiles->setActive(mode->currentData().toString()); });
         Group* modes = addGroup(u"Power Mode"_s);
         modes->addRow(u"Power mode"_s, u"Faster, or longer on battery"_s, mode);
     }
