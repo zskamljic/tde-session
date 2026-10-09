@@ -53,7 +53,7 @@ QString buttonStyle(const QString& extra)
     const auto& colors = tde::theme::colors();
     return u"QToolButton { background: transparent; border: none; border-radius: %1px; %2 }"
            " QToolButton:hover { background: %3; }"
-           " QToolButton:pressed, QToolButton:open { background: %4; }"
+           " QToolButton:pressed, QToolButton:open, QToolButton:checked { background: %4; }"
            " QToolButton::menu-indicator { image: none; width: 0; }"_s.arg(tde::theme::radius())
                .arg(extra, colors.hover.name(QColor::HexArgb), colors.pressed.name(QColor::HexArgb));
 }
@@ -107,39 +107,15 @@ Bar::Bar(QWidget* parent)
         layer->setScope(u"tde-hermes"_s);
     }
 
-    const auto& colors = tde::theme::colors();
     m_taskbar = new Taskbar(m_windows, this);
 
     m_clock = new QToolButton(this);
     m_clock->setAutoRaise(true);
-    m_clock->setPopupMode(QToolButton::InstantPopup);
     m_clock->setStyleSheet(buttonStyle(u"font-weight: bold; padding: 0 10px;"_s));
     // Behind the clock: the notifications that were missed, and the calendar.
-    auto* calendarMenu = new QMenu(m_clock);
-    auto* dropdown = new QWidget(calendarMenu);
-    auto* dropdownLayout = new QHBoxLayout(dropdown);
-    dropdownLayout->setContentsMargins(0, 0, 0, 0);
-    auto* list = new NotificationList(m_notifications, dropdown);
-    connect(list, &NotificationList::handled, calendarMenu, &QMenu::close);
-    connect(list, &NotificationList::actionPicked, this, &Bar::pickAction);
-    dropdownLayout->addWidget(list);
-    auto* calendar = new QCalendarWidget(dropdown);
-    dropdownLayout->addWidget(calendar, 0, Qt::AlignTop);
-    calendar->setGridVisible(false);
-    calendar->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
-    // Weekends in the text colour too, not in Qt's red.
-    QTextCharFormat weekend;
-    weekend.setForeground(colors.text);
-    calendar->setWeekdayTextFormat(Qt::Saturday, weekend);
-    calendar->setWeekdayTextFormat(Qt::Sunday, weekend);
-    auto* calendarAction = new QWidgetAction(calendarMenu);
-    calendarAction->setDefaultWidget(dropdown);
-    calendarMenu->addAction(calendarAction);
-    connect(calendarMenu, &QMenu::aboutToShow, calendar, [calendar] {
-        calendar->setSelectedDate(QDate::currentDate());
-        calendar->showToday();
-    });
-    m_clock->setMenu(calendarMenu);
+    m_clock->setCheckable(true);
+    connect(m_clock, &QToolButton::clicked, this, &Bar::showCalendar);
+    m_calendarMenu = createCalendarMenu();
 
     m_tray = new Tray(this);
     m_locking = new Locking(this);
@@ -261,6 +237,52 @@ void Bar::raiseWindowOf(const QString& desktopEntry, const QString& appName)
             return;
         }
     }
+}
+
+QMenu* Bar::createCalendarMenu()
+{
+    auto* menu = new QMenu(m_clock);
+    auto* dropdown = new QWidget(menu);
+    auto* dropdownLayout = new QHBoxLayout(dropdown);
+    dropdownLayout->setContentsMargins(0, 0, 0, 0);
+    auto* list = new NotificationList(m_notifications, dropdown);
+    connect(list, &NotificationList::handled, menu, &QMenu::close);
+    connect(list, &NotificationList::actionPicked, this, &Bar::pickAction);
+    dropdownLayout->addWidget(list);
+    auto* calendar = new QCalendarWidget(dropdown);
+    dropdownLayout->addWidget(calendar, 0, Qt::AlignTop);
+    calendar->setGridVisible(false);
+    calendar->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
+    // Weekends in the text colour too, not in Qt's red.
+    QTextCharFormat weekend;
+    weekend.setForeground(tde::theme::colors().text);
+    calendar->setWeekdayTextFormat(Qt::Saturday, weekend);
+    calendar->setWeekdayTextFormat(Qt::Sunday, weekend);
+    auto* action = new QWidgetAction(menu);
+    action->setDefaultWidget(dropdown);
+    menu->addAction(action);
+    connect(menu, &QMenu::aboutToShow, calendar, [calendar] {
+        calendar->setSelectedDate(QDate::currentDate());
+        calendar->showToday();
+    });
+    connect(menu, &QMenu::aboutToHide, this, [this] {
+        m_clock->setChecked(false);
+        m_calendarClosed.start();
+    });
+    return menu;
+}
+
+void Bar::showCalendar()
+{
+    // The click that closed it, which reaches the clock as well, does not open it again.
+    if (m_calendarMenu->isVisible() || (m_calendarClosed.isValid() && m_calendarClosed.elapsed() < 250)) {
+        m_clock->setChecked(false);
+        return;
+    }
+    m_clock->setChecked(true);
+    const QSize size = m_calendarMenu->sizeHint();
+    const QPoint below = mapToGlobal(QPoint(m_clock->geometry().center().x(), height()));
+    m_calendarMenu->popup(QPoint(below.x() - size.width() / 2, below.y()));
 }
 
 QMenu* Bar::createQuickSettings()

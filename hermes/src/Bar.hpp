@@ -11,6 +11,7 @@
 #include <Wifi.hpp>
 #include <Windows.hpp>
 
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QWidget>
 
@@ -55,6 +56,9 @@ private:
     void placeOn(QScreen* screen);
     void layOut();
     QMenu* createQuickSettings();
+    QMenu* createCalendarMenu();
+    // Opens the calendar's panel, centred below the clock.
+    void showCalendar();
     void updateStatusIcon();
     void pickAction(uint id, const QString& action);
     void raiseWindowOf(const QString& desktopEntry, const QString& appName);
@@ -68,6 +72,8 @@ private:
     PolkitAgent* m_polkit = nullptr;
     Taskbar* m_taskbar = nullptr;
     QToolButton* m_clock = nullptr;
+    QMenu* m_calendarMenu = nullptr; // behind the clock
+    QElapsedTimer m_calendarClosed; // to tell a click that closed it from one that opens it
     Tray* m_tray = nullptr;
     QToolButton* m_system = nullptr; // the status icons, which open the quick settings
     Audio m_audio;
