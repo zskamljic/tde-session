@@ -61,6 +61,10 @@ private:
     QMenu* createCalendarMenu();
     // Opens the calendar's panel, centred below the clock.
     void showCalendar();
+    // The desktop's look changed: the bar and its panels take it on.
+    void applyTheme();
+    // Makes the panels again, in the theme's colours, once none is open.
+    void rebuildPanels();
     void updateStatusIcon();
     void pickAction(uint id, const QString& action);
     void raiseWindowOf(const QString& desktopEntry, const QString& appName);
@@ -76,6 +80,7 @@ private:
     QToolButton* m_clock = nullptr;
     QMenu* m_calendarMenu = nullptr; // behind the clock
     QElapsedTimer m_calendarClosed; // to tell a click that closed it from one that opens it
+    bool m_rebuildPending = false; // the theme changed while a panel was open
     Tray* m_tray = nullptr;
     QToolButton* m_system = nullptr; // the status icons, which open the quick settings
     Audio m_audio;

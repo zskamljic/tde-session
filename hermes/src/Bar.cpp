@@ -24,18 +24,21 @@
 #include <LayerShellQt/Window>
 
 #include <QActionEvent>
+#include <QApplication>
 #include <QCalendarWidget>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDateTime>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLocale>
 #include <QMenu>
 #include <QPainter>
 #include <QProcess>
 #include <QScreen>
+#include <QStyleHints>
 #include <QTextCharFormat>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -148,8 +151,16 @@ Bar::Bar(QWidget* parent)
             updateClock();
             return;
         }
+        const auto appearance = tde::desktop().appearance;
         tde::setDesktop(tde::loadDesktopConfig());
         m_locking->setIdleMinutes(tde::desktop().lock.after);
+        if (tde::desktop().appearance != appearance)
+            applyTheme();
+    });
+    // A theme that follows the system changes along with it.
+    connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {
+        if (tde::desktop().appearance.theme == u"system")
+            applyTheme();
     });
     applySession();
 
@@ -287,6 +298,8 @@ QMenu* Bar::createCalendarMenu()
     connect(menu, &QMenu::aboutToHide, this, [this] {
         m_clock->setChecked(false);
         m_calendarClosed.start();
+        if (m_rebuildPending)
+            QTimer::singleShot(200, this, &Bar::rebuildPanels);
     });
     return menu;
 }
@@ -304,6 +317,31 @@ void Bar::showCalendar()
     m_calendarMenu->popup(QPoint(below.x() - size.width() / 2, below.y()));
 }
 
+void Bar::applyTheme()
+{
+    tde::theme::apply(*qApp, tde::desktop().appearance);
+    m_clock->setStyleSheet(buttonStyle(u"font-weight: bold; padding: 0 10px;"_s));
+    m_system->setStyleSheet(buttonStyle(u"padding: 0 10px;"_s));
+    updateStatusIcon();
+    update();
+    rebuildPanels();
+}
+
+void Bar::rebuildPanels()
+{
+    // Not under the pointer of whoever uses one, as when the dark style was switched in it.
+    if (m_calendarMenu->isVisible() || m_system->menu()->isVisible()) {
+        m_rebuildPending = true;
+        return;
+    }
+    m_rebuildPending = false;
+    m_calendarMenu->deleteLater();
+    m_calendarMenu = createCalendarMenu();
+    QMenu* quickSettings = m_system->menu();
+    m_system->setMenu(createQuickSettings());
+    quickSettings->deleteLater();
+}
+
 QMenu* Bar::createQuickSettings()
 {
     auto* menu = new QMenu(this);
@@ -313,6 +351,11 @@ QMenu* Bar::createQuickSettings()
     action->setDefaultWidget(panel);
     menu->addAction(action);
     connect(menu, &QMenu::aboutToShow, panel, &QuickSettings::refresh);
+    // Once it has closed and the button let go of it.
+    connect(menu, &QMenu::aboutToHide, this, [this] {
+        if (m_rebuildPending)
+            QTimer::singleShot(200, this, &Bar::rebuildPanels);
+    });
     // The menu keeps the size it measured until told its action changed.
     connect(panel, &QuickSettings::resized, menu, [menu, action] {
         QActionEvent changed(QEvent::ActionChanged, action);
