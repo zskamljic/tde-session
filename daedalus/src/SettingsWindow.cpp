@@ -19,6 +19,7 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QListWidget>
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -39,6 +40,7 @@ QLabel* headerTitle(const QString& text, QWidget* parent)
 
 SettingsWindow::SettingsWindow(QWidget* parent)
     : QWidget(parent)
+    , m_watcher({shell::sessionConfigPath()})
 {
     m_settings.config = shell::loadSessionConfig();
     // Written once the changes settle, as a value being typed or stepped through is one change.
@@ -100,7 +102,27 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     layout->addWidget(sidebar);
     layout->addWidget(content, 1);
 
-    const auto addPage = [&](const QString& name, const QString& icon, const QString& title, QWidget* page) {
+    buildPages();
+    connect(&m_watcher, &tde::ConfigWatcher::changed, this, &SettingsWindow::reload);
+
+    connect(m_pages, &QListWidget::currentRowChanged, this, [this, title](int row) {
+        m_stack->setCurrentIndex(row);
+        title->setText(m_pages->item(row)->text());
+    });
+    m_pages->setCurrentRow(0);
+}
+
+void SettingsWindow::buildPages()
+{
+    const int row = std::max(0, m_pages->currentRow());
+    const QSignalBlocker blocker(m_pages);
+    m_pages->clear();
+    m_names.clear();
+    while (QWidget* page = m_stack->widget(0)) {
+        m_stack->removeWidget(page);
+        page->deleteLater();
+    }
+    const auto addPage = [this](const QString& name, const QString& icon, const QString& title, QWidget* page) {
         new QListWidgetItem(tde::theme::symbolicIcon(icon), title, m_pages);
         m_stack->addWidget(page);
         m_names << name;
@@ -120,11 +142,20 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     addPage(u"apps"_s, u"applications-system"_s, u"Default Apps"_s, new DefaultAppsPage(m_stack));
     addPage(u"datetime"_s, u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));
 
-    connect(m_pages, &QListWidget::currentRowChanged, this, [this, title](int row) {
-        m_stack->setCurrentIndex(row);
-        title->setText(m_pages->item(row)->text());
-    });
-    m_pages->setCurrentRow(0);
+    m_pages->setCurrentRow(row);
+    m_stack->setCurrentIndex(row);
+}
+
+void SettingsWindow::reload()
+{
+    // What this window saved itself comes back the same; the pages stay as they are.
+    if (m_saving.isActive())
+        return;
+    shell::SessionConfig config = shell::loadSessionConfig();
+    if (config == m_settings.config)
+        return;
+    m_settings.config = std::move(config);
+    buildPages();
 }
 
 bool SettingsWindow::showPage(const QString& name)

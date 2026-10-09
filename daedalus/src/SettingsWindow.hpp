@@ -2,6 +2,8 @@
 
 #include "Pages.hpp"
 
+#include <tde/ConfigWatcher.hpp>
+
 #include <QTimer>
 #include <QWidget>
 
@@ -29,12 +31,16 @@ public slots:
 
 private:
     void save();
+    // Makes the pages, again when the settings were changed elsewhere, as in an editor.
+    void buildPages();
+    void reload();
 
     Settings m_settings;
     QTimer m_saving;
     QListWidget* m_pages = nullptr;
     QStackedWidget* m_stack = nullptr;
     QStringList m_names; // of the pages, in order
+    tde::ConfigWatcher m_watcher;
 };
 
 } // namespace daedalus
