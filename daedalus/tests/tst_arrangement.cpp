@@ -28,6 +28,15 @@ private slots:
         QCOMPARE(daedalus::Arrangement::snap(QRect(1920, 30, 1280, 720), {laptop}), QPoint(1920, 0));
     }
 
+    void middlesLineUpToo()
+    {
+        const QRect laptop(0, 0, 1920, 1200);
+        QCOMPARE(daedalus::Arrangement::snap(QRect(1920, 230, 1280, 720), {laptop}, 100), QPoint(1920, 240));
+        QCOMPARE(daedalus::Arrangement::snap(QRect(1920, 60, 1280, 720), {laptop}, 100), QPoint(1920, 0));
+        // Further than the pull, it stays where it was let go.
+        QCOMPARE(daedalus::Arrangement::snap(QRect(1920, 120, 1280, 720), {laptop}, 100), QPoint(1920, 120));
+    }
+
     void droppedFarAwayComesBack()
     {
         const QRect laptop(0, 0, 1920, 1200);

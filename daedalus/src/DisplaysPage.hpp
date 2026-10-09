@@ -34,8 +34,9 @@ public:
     QSize sizeHint() const override { return {560, 220}; }
 
     // Where `area` goes next to `others`: the nearest place touching one of them that
-    // overlaps none. Exposed for testing.
-    static QPoint snap(const QRect& area, const std::vector<QRect>& others);
+    // overlaps none, edges or middles lined up when that is at most `pull` further away; by
+    // default a fortieth of the other's size. Exposed for testing.
+    static QPoint snap(const QRect& area, const std::vector<QRect>& others, int pull = -1);
 
 signals:
     void selected(const QString& name);
@@ -56,6 +57,7 @@ private:
     std::vector<Item> m_items;
     QString m_selected;
     std::optional<QPointF> m_grab; // where the dragged display was taken, in the layout
+    QPoint m_dragged; // where the pointer has it, which it is shown snapped from
     QRect m_bounds; // of all of them, as they were when the drag began
 };
 

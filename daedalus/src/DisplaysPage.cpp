@@ -103,7 +103,7 @@ QRectF Arrangement::onWidget(const QRect& area) const
     return QRectF(origin() + QPointF(area.topLeft()) * s, QSizeF(area.size()) * s);
 }
 
-QPoint Arrangement::snap(const QRect& area, const std::vector<QRect>& others)
+QPoint Arrangement::snap(const QRect& area, const std::vector<QRect>& others, int pull)
 {
     if (others.empty())
         return area.topLeft();
@@ -132,16 +132,18 @@ QPoint Arrangement::snap(const QRect& area, const std::vector<QRect>& others)
         consider({other.right() + 1, y});
         consider({x, other.top() - area.height()});
         consider({x, other.bottom() + 1});
-        // And lined up with its edges.
-        const double pull = std::max(other.width(), other.height()) * 0.025;
-        consider({other.left() - area.width(), other.top()}, pull);
-        consider({other.right() + 1, other.top()}, pull);
-        consider({other.left(), other.top() - area.height()}, pull);
-        consider({other.left(), other.bottom() + 1}, pull);
-        consider({other.left() - area.width(), other.bottom() + 1 - area.height()}, pull);
-        consider({other.right() + 1, other.bottom() + 1 - area.height()}, pull);
-        consider({other.right() + 1 - area.width(), other.top() - area.height()}, pull);
-        consider({other.right() + 1 - area.width(), other.bottom() + 1}, pull);
+        // And lined up with its edges, or its middle.
+        const double lineUp = pull >= 0 ? pull : std::max(other.width(), other.height()) * 0.025;
+        const int middleX = other.x() + (other.width() - area.width()) / 2;
+        const int middleY = other.y() + (other.height() - area.height()) / 2;
+        for (const int y : {other.top(), other.bottom() + 1 - area.height(), middleY}) {
+            consider({other.left() - area.width(), y}, lineUp);
+            consider({other.right() + 1, y}, lineUp);
+        }
+        for (const int x : {other.left(), other.right() + 1 - area.width(), middleX}) {
+            consider({x, other.top() - area.height()}, lineUp);
+            consider({x, other.bottom() + 1}, lineUp);
+        }
     }
     return best;
 }
@@ -190,8 +192,10 @@ void Arrangement::mousePressEvent(QMouseEvent* event)
         m_selected = item.name;
         emit selected(item.name);
         // One display alone has nowhere to go.
-        if (m_items.size() > 1)
+        if (m_items.size() > 1) {
             m_grab = (event->position() - origin()) / scale() - QPointF(item.area.topLeft());
+            m_dragged = item.area.topLeft();
+        }
         update();
         return;
     }
@@ -204,7 +208,16 @@ void Arrangement::mouseMoveEvent(QMouseEvent* event)
     const auto it = std::ranges::find(m_items, m_selected, &Item::name);
     if (it == m_items.end())
         return;
-    it->area.moveTopLeft(((event->position() - origin()) / scale() - *m_grab).toPoint());
+    // Shown where it will go: touching the others, and lined up with them within a few
+    // pixels of this drawing.
+    constexpr int Pull = 14;
+    m_dragged = ((event->position() - origin()) / scale() - *m_grab).toPoint();
+    std::vector<QRect> others;
+    for (const Item& item : m_items) {
+        if (item.name != m_selected)
+            others.push_back(item.area);
+    }
+    it->area.moveTopLeft(snap(QRect(m_dragged, it->area.size()), others, int(Pull / scale())));
     update();
 }
 
@@ -214,14 +227,8 @@ void Arrangement::mouseReleaseEvent(QMouseEvent*)
         return;
     m_grab.reset();
     const auto it = std::ranges::find(m_items, m_selected, &Item::name);
-    if (it == m_items.end())
-        return;
-    std::vector<QRect> others;
-    for (const Item& item : m_items) {
-        if (item.name != m_selected)
-            others.push_back(item.area);
-    }
-    emit moved(m_selected, snap(it->area, others));
+    if (it != m_items.end())
+        emit moved(m_selected, it->area.topLeft());
 }
 
 // DisplaysPage ----------------------------------------------------------------------------
