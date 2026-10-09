@@ -8,6 +8,9 @@ namespace hermes {
 DisplayLayouts::DisplayLayouts(QObject* parent)
     : QObject(parent)
 {
+    m_retry.setSingleShot(true);
+    m_retry.setInterval(1500);
+    connect(&m_retry, &QTimer::timeout, this, &DisplayLayouts::arrange);
     connect(&m_displays, &shell::Displays::changed, this, [this] {
         arrange();
         findPrimary();
@@ -47,11 +50,15 @@ void DisplayLayouts::arrange()
     if (!shell::sameSettings(wanted, m_displays.settings())) {
         m_displays.apply(wanted, [this](bool succeeded) {
             // Displays that changed meanwhile, as a dock's do one by one, are arranged again
-            // with the next change.
-            if (!succeeded) {
-                qWarning("tde-hermes: the displays could not be arranged as they were kept");
-                m_plugged.clear();
+            // with the next change, or a little later when none comes.
+            if (succeeded) {
+                m_failures = 0;
+                return;
             }
+            qWarning("tde-hermes: the displays could not be arranged as they were kept");
+            m_plugged.clear();
+            if (++m_failures <= 3)
+                m_retry.start();
         });
     }
 }

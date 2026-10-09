@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QScreen>
+#include <QTimer>
 
 namespace hermes {
 
@@ -32,6 +33,8 @@ private:
     shell::SessionConfig::Displays m_settings;
     QStringList m_plugged; // the displays arranged last
     QPointer<QScreen> m_primary;
+    QTimer m_retry; // after arranging them failed
+    int m_failures = 0; // in a row
 };
 
 } // namespace hermes
