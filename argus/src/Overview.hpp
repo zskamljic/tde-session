@@ -19,6 +19,7 @@ namespace argus {
 using shell::Application;
 
 class AppGrid;
+class Canvas;
 class Wallpaper;
 
 // Where a window goes in the overview: its preview, scaled to fit, and its title below.
@@ -64,7 +65,6 @@ signals:
     void closeRequested(quint64 chosen);
 
 protected:
-    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -72,6 +72,9 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // The windows over the desktop, on the canvas, which redraw() has drawn again.
+    void paint(QPainter& painter);
+    void redraw();
     bool showingApps() const;
     void updateMode();
     bool handleKey(QKeyEvent* event);
@@ -90,6 +93,7 @@ private:
     Toplevels& m_toplevels;
     const Wallpaper& m_wallpaper;
     bool m_primary;
+    Canvas* m_canvas = nullptr;
     QLineEdit* m_search = nullptr;
     QToolButton* m_appsButton = nullptr;
     AppGrid* m_grid = nullptr;

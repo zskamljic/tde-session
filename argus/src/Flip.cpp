@@ -1,6 +1,7 @@
 #include "Flip.hpp"
 
 #include "Background.hpp"
+#include "Canvas.hpp"
 
 #include <tde/Theme.hpp>
 
@@ -58,30 +59,32 @@ Flip::Flip(Toplevels& toplevels, const Wallpaper& wallpaper, QWidget* parent)
     , m_wallpaper(wallpaper)
 {
     setWindowTitle(u"Windows"_s);
-    connect(&m_offset, &QVariantAnimation::valueChanged, this, qOverload<>(&QWidget::update));
-    connect(&m_shown, &QVariantAnimation::valueChanged, this, qOverload<>(&QWidget::update));
+    m_canvas = new Canvas(this, [this](QPainter& painter) { paint(painter); });
+    connect(&m_offset, &QVariantAnimation::valueChanged, this, &Flip::redraw);
+    connect(&m_shown, &QVariantAnimation::valueChanged, this, &Flip::redraw);
     connect(&m_shown, &QVariantAnimation::finished, this, [this] {
-        if (isClosing()) {
-            m_images.clear();
+        if (isClosing())
             finish();
-        }
     });
-    connect(&m_toplevels, &Toplevels::previewChanged, this, [this](quint64 id) {
-        if (!isVisible())
-            return;
-        if (const Toplevel* window = m_toplevels.find(id))
-            cacheImage(*window);
-        update();
+    connect(&m_toplevels, &Toplevels::previewChanged, this, [this] {
+        if (isVisible())
+            redraw();
     });
+}
+
+void Flip::redraw()
+{
+    m_canvas->update();
+}
+
+void Flip::resizeEvent(QResizeEvent* event)
+{
+    Picker::resizeEvent(event);
+    m_canvas->setGeometry(rect());
 }
 
 void Flip::opened()
 {
-    m_images.clear();
-    for (int i = 0; i < count(); ++i) {
-        if (const Toplevel* shown = window(i))
-            cacheImage(*shown);
-    }
     m_offset.jump(0);
     m_shown.jump(0);
     m_shown.go(1, m_showTime);
@@ -96,15 +99,6 @@ void Flip::closing()
 {
     m_offset.stop();
     m_shown.go(0, int(m_showTime * m_shown.now()));
-}
-
-void Flip::cacheImage(const Toplevel& window)
-{
-    if (window.preview.isNull())
-        return;
-    // Scaled once, so turning them each frame costs less.
-    const QSize size = (sizeOf(window) * devicePixelRatioF()).toSize();
-    m_images[window.id] = window.preview.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 }
 
 std::vector<Flip::Card> Flip::cards() const
@@ -174,11 +168,10 @@ QTransform Flip::transform(const Pose& pose, const QSizeF& size) const
     return transform;
 }
 
-void Flip::paintEvent(QPaintEvent*)
+void Flip::paint(QPainter& painter)
 {
     const auto& colors = tde::theme::colors();
     const double shown = m_shown.now();
-    QPainter painter(this);
     paintBackdrop(painter, *this, m_wallpaper, shown);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
@@ -213,10 +206,11 @@ void Flip::paintEvent(QPaintEvent*)
             painter.setPen(QPen(QColor(255, 255, 255, int(GlowAlpha * (Glow + 1 - ring) / Glow * shown)), ring * 3.0));
             painter.drawPath(shape);
         }
-        if (const auto image = m_images.find(shownWindow->id); image != m_images.end()) {
+        // The picture as it was taken, turned in one go, which keeps it sharp.
+        if (!shownWindow->preview.isNull()) {
             painter.save();
             painter.setClipPath(shape);
-            painter.drawImage(area, image->second);
+            painter.drawImage(area, shownWindow->preview);
             painter.restore();
         } else {
             paintPlaceholder(painter, shape, m_toplevels.iconOf(*shownWindow));

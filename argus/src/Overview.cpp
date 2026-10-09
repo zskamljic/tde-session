@@ -2,6 +2,7 @@
 
 #include "AppGrid.hpp"
 #include "Background.hpp"
+#include "Canvas.hpp"
 #include <Layer.hpp>
 
 #include <Icons.hpp>
@@ -126,6 +127,7 @@ Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* sc
     setMouseTracking(true);
     // The windows show through while it opens and closes.
     setAttribute(Qt::WA_TranslucentBackground);
+    m_canvas = new Canvas(this, [this](QPainter& painter) { paint(painter); });
 
     // Typing anywhere goes to the search field, which hands the keys that move around on to us.
     m_search = new QLineEdit(this);
@@ -186,7 +188,7 @@ Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* sc
     connect(&m_shown, &QVariantAnimation::valueChanged, this, [this] {
         for (auto* fade : m_fades)
             fade->setOpacity(m_shown.now());
-        update();
+        redraw();
     });
     connect(&m_shown, &QVariantAnimation::finished, this, [this] {
         if (m_closing) {
@@ -288,7 +290,7 @@ void Overview::updateMode()
 {
     if (!showingApps()) {
         m_grid->hide();
-        update();
+        redraw();
         return;
     }
     const QString query = m_search->text().trimmed();
@@ -304,7 +306,7 @@ void Overview::updateMode()
     }
     m_hovered = 0;
     m_grid->show();
-    update();
+    redraw();
 }
 
 void Overview::launch(const Application* app)
@@ -350,14 +352,18 @@ void Overview::relayout()
     }
     if (!std::ranges::any_of(m_slots, [this](const Slot& slot) { return slot.id == m_hovered; }))
         m_hovered = 0;
-    update();
+    redraw();
 }
 
-void Overview::paintEvent(QPaintEvent*)
+void Overview::redraw()
+{
+    m_canvas->update();
+}
+
+void Overview::paint(QPainter& painter)
 {
     const auto& colors = tde::theme::colors();
     const double shown = m_shown.now();
-    QPainter painter(this);
     paintBackdrop(painter, *this, m_wallpaper, shown);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
@@ -436,6 +442,7 @@ void Overview::paintEvent(QPaintEvent*)
 void Overview::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
+    m_canvas->setGeometry(rect());
     relayout();
 }
 
@@ -455,7 +462,7 @@ void Overview::setHovered(quint64 id)
 {
     if (id != m_hovered) {
         m_hovered = id;
-        update();
+        redraw();
     }
 }
 
@@ -467,7 +474,7 @@ void Overview::mouseMoveEvent(QMouseEvent* event)
     const bool onClose = slot && slot->closeButton.contains(event->position().toPoint());
     if (onClose != m_hoveringClose) {
         m_hoveringClose = onClose;
-        update();
+        redraw();
     }
     setHovered(slot ? slot->id : 0);
 }

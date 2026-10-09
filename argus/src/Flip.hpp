@@ -3,15 +3,14 @@
 #include "Picker.hpp"
 #include <Tween.hpp>
 
-#include <QImage>
 #include <QPointF>
 #include <QTransform>
 
-#include <map>
 #include <vector>
 
 namespace argus {
 
+class Canvas;
 class Wallpaper;
 
 // Where a window is drawn: around its centre, as wide as given, turned about the vertical axis
@@ -50,7 +49,7 @@ protected:
     void moved() override;
     void closing() override;
 
-    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
 
@@ -61,7 +60,9 @@ private:
         double opacity = 1;
     };
 
-    void cacheImage(const Toplevel& window);
+    // The windows over the desktop, on the canvas, which redraw() has drawn again.
+    void paint(QPainter& painter);
+    void redraw();
     // The cards in the order they are drawn, from the back.
     std::vector<Card> cards() const;
     QSizeF sizeOf(const Toplevel& window) const; // drawn in front
@@ -71,7 +72,7 @@ private:
     int cardAt(QPointF pos) const;
 
     const Wallpaper& m_wallpaper;
-    std::map<quint64, QImage> m_images; // the pictures, scaled to their size in front
+    Canvas* m_canvas = nullptr;
     shell::Tween m_offset; // how far it flipped, following the moves
     shell::Tween m_shown; // from 0 with the windows where they are, to 1 with them stacked
     int m_showTime = 300;

@@ -1,4 +1,4 @@
-find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus OpenGLWidgets)
 find_package(LayerShellQt 6 REQUIRED)
 find_package(Tde 0.2 REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -46,5 +46,5 @@ add_executable(tde-argus
 target_include_directories(tde-argus PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-argus PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tde-argus PRIVATE
-    Qt6::Gui Qt6::Widgets Qt6::DBus LayerShellQt::Interface Tde::Tde PkgConfig::WAYLAND_CLIENT tde-shell)
+    Qt6::Gui Qt6::Widgets Qt6::DBus Qt6::OpenGLWidgets LayerShellQt::Interface Tde::Tde PkgConfig::WAYLAND_CLIENT tde-shell)
 install(TARGETS tde-argus)
