@@ -11,6 +11,7 @@ add_executable(tde-daedalus
     src/BluetoothPage.cpp
     src/DefaultAppsPage.cpp
     src/DisplaysPage.cpp
+    src/Fingerprints.cpp
     src/KeyboardPage.cpp
     src/LockPage.cpp
     src/MousePage.cpp
@@ -28,9 +29,10 @@ install(FILES tde-daedalus.desktop DESTINATION share/applications)
 
 if(TDE_SESSION_BUILD_TESTS)
     find_package(Qt6 REQUIRED COMPONENTS Test)
-    add_executable(tst_lockpage tests/tst_lockpage.cpp src/LockPage.cpp src/Widgets.cpp)
+    add_executable(tst_lockpage tests/tst_lockpage.cpp src/LockPage.cpp src/Fingerprints.cpp
+        src/Widgets.cpp)
     target_include_directories(tst_lockpage PRIVATE src)
-    target_link_libraries(tst_lockpage PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
+    target_link_libraries(tst_lockpage PRIVATE Qt6::Widgets Qt6::DBus Qt6::Test Tde::Tde tde-shell)
     add_test(NAME tst_lockpage COMMAND tst_lockpage)
 
     add_executable(tst_arrangement tests/tst_arrangement.cpp src/DisplaysPage.cpp src/Widgets.cpp)

@@ -1,5 +1,7 @@
 #include "LockPage.hpp"
 
+#include "Fingerprints.hpp"
+
 #include <DesktopSettings.hpp>
 
 #include <tde/DesktopConfig.hpp>
@@ -53,6 +55,13 @@ LockPage::LockPage(QWidget* parent)
     automatic->addRow(u"Delay"_s, u"How long without input before it locks"_s, delay);
     automatic->addNote(u"Super+L locks it at any time, and it locks before the computer sleeps. Programs such as "
                        "video players keep it from locking while they play."_s);
+
+    // With a fingerprint reader, fingers to unlock with.
+    auto* fingerprints = new FingerprintGroup(this);
+    if (fingerprints->isAvailable())
+        addWidget(fingerprints);
+    else
+        fingerprints->deleteLater();
 }
 
 } // namespace daedalus
