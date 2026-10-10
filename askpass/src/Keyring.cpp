@@ -2,6 +2,8 @@
 
 #include <libsecret/secret.h>
 
+#include <memory>
+
 namespace askpass {
 namespace {
 
@@ -26,19 +28,23 @@ const SecretSchema* schema()
     return &schema;
 }
 
+struct ErrorFree {
+    void operator()(GError* error) const { g_error_free(error); }
+};
+// What went wrong, freed along with this; libsecret's failures are not told apart here.
+using Error = std::unique_ptr<GError, ErrorFree>;
+
 } // namespace
 
 std::optional<std::string> keptPassphrase(const std::string& key)
 {
     GError* error = nullptr;
-    gchar* secret = secret_password_lookup_sync(schema(), nullptr, &error, "key", key.c_str(), nullptr);
-    if (error)
-        g_error_free(error);
+    const std::unique_ptr<gchar, decltype(&secret_password_free)> secret(
+        secret_password_lookup_sync(schema(), nullptr, &error, "key", key.c_str(), nullptr), &secret_password_free);
+    const Error failed(error);
     if (!secret)
         return std::nullopt;
-    std::string passphrase = secret;
-    secret_password_free(secret);
-    return passphrase;
+    return std::string(secret.get());
 }
 
 bool keepPassphrase(const std::string& key, const std::string& passphrase)
@@ -47,8 +53,7 @@ bool keepPassphrase(const std::string& key, const std::string& passphrase)
     const std::string label = "SSH key " + key;
     const bool kept = secret_password_store_sync(schema(), SECRET_COLLECTION_DEFAULT, label.c_str(), passphrase.c_str(),
         nullptr, &error, "key", key.c_str(), nullptr);
-    if (error)
-        g_error_free(error);
+    const Error failed(error);
     return kept;
 }
 
@@ -56,8 +61,7 @@ void forgetPassphrase(const std::string& key)
 {
     GError* error = nullptr;
     secret_password_clear_sync(schema(), nullptr, &error, "key", key.c_str(), nullptr);
-    if (error)
-        g_error_free(error);
+    const Error failed(error);
 }
 
 } // namespace askpass
