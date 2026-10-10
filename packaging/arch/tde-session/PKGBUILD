@@ -52,7 +52,7 @@ optdepends=(
   'fprintd: unlocking the screen with a finger'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('8a78f699f9786f0218987bc5bd22ef10bf8540989fd5c965d1629f9103afbf4f')
 
 build() {
   cmake -B build -S "$pkgname-$pkgver" -G Ninja \

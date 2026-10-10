@@ -45,6 +45,6 @@ pkgbase = tde-session
 	optdepends = gnome-keyring: remembering the passphrases of SSH keys
 	optdepends = fprintd: unlocking the screen with a finger
 	source = tde-session-0.2.0.tar.gz::https://github.com/zskamljic/tde-session/archive/refs/tags/v0.2.0.tar.gz
-	sha256sums = SKIP
+	sha256sums = 8a78f699f9786f0218987bc5bd22ef10bf8540989fd5c965d1629f9103afbf4f
 
 pkgname = tde-session
