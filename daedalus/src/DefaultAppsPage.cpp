@@ -77,7 +77,8 @@ bool setDefault(const QStringList& mimeTypes, const QString& appId)
         const QString path = userFolder() + u'/' + name;
         const QString text = readFile(path);
         const bool common = name == u"mimeapps.list";
-        if (!common && std::ranges::none_of(mimeTypes, [&](const QString& type) { return !defaultIn(text, type).isEmpty(); }))
+        if (!common
+            && std::ranges::none_of(mimeTypes, [&](const QString& type) { return !defaultIn(text, type).isEmpty(); }))
             continue;
         QDir().mkpath(userFolder());
         QSaveFile file(path);
@@ -204,8 +205,11 @@ DefaultAppsPage::DefaultAppsPage(QWidget* parent)
     terminal->addItem(u"The first one installed"_s, QString());
     const QString chosen = tde::loadDesktopConfig().terminal;
     for (const shell::Application& app : apps) {
-        if (app.categories.contains(u"TerminalEmulator"_s) && app.inMenus)
-            terminal->addItem(shell::applicationIcon(&app, app.icon), app.name, programOf(app));
+        // Those run through another program, as Flatpak's are, cannot be named by theirs.
+        const QString program = programOf(app);
+        if (app.categories.contains(u"TerminalEmulator"_s) && app.inMenus && program != u"flatpak"
+            && program != u"env")
+            terminal->addItem(shell::applicationIcon(&app, app.icon), app.name, program);
     }
     if (!chosen.isEmpty() && terminal->findData(chosen) < 0)
         terminal->addItem(chosen, chosen);
@@ -213,8 +217,8 @@ DefaultAppsPage::DefaultAppsPage(QWidget* parent)
     connect(terminal, &QComboBox::activated, this, [terminal] {
         const QString program = terminal->currentData().toString();
         // None chosen leaves it to $TERMINAL and the usual ones.
-        if (!shell::setDesktopSetting(tde::desktopConfigPath(), {}, u"terminal"_s,
-                program.isEmpty() ? u"nil"_s : tde::luaString(program)))
+        if (!shell::setDesktopSetting(
+                tde::desktopConfigPath(), {}, u"terminal"_s, program.isEmpty() ? u"nil"_s : tde::luaString(program)))
             qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
     });
     tools->addRow(u"Terminal"_s, u"Opens folders and runs programs that need one"_s, terminal);
