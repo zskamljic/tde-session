@@ -14,6 +14,7 @@ namespace hermes {
 // A program playing music or video, as MPRIS tells it.
 struct Player {
     QString service; // its name on the session bus
+    QString owner; // the unique one, which its signals come from
     QString identity; // "Firefox", "Spotify"
     QString desktopEntry;
     QString title;
@@ -51,7 +52,7 @@ private slots:
     void propertiesChanged();
 
 private:
-    void add(const QString& service);
+    void add(const QString& service, const QString& owner);
     void refresh(Player& player);
     void call(const QString& method);
     void fetchArt();

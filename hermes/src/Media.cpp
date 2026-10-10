@@ -43,11 +43,13 @@ Media::Media(QObject* parent)
     : QObject(parent)
 {
     auto bus = QDBusConnection::sessionBus();
-    bus.connect(u"org.freedesktop.DBus"_s, u"/org/freedesktop/DBus"_s, u"org.freedesktop.DBus"_s,
-        u"NameOwnerChanged"_s, this, SLOT(nameOwnerChanged(QString, QString, QString)));
+    bus.connect(u"org.freedesktop.DBus"_s, u"/org/freedesktop/DBus"_s, u"org.freedesktop.DBus"_s, u"NameOwnerChanged"_s,
+        this, SLOT(nameOwnerChanged(QString, QString, QString)));
+    // Of every player at once, told apart by who sends it.
+    bus.connect(QString(), Path, Properties, u"PropertiesChanged"_s, this, SLOT(propertiesChanged()));
     for (const QString& name : bus.interface()->registeredServiceNames().value()) {
         if (name.startsWith(Prefix))
-            add(name);
+            add(name, bus.interface()->serviceOwner(name).value());
     }
 }
 
@@ -62,16 +64,17 @@ void Media::nameOwnerChanged(const QString& name, const QString&, const QString&
         return;
     std::erase_if(m_players, [&](const Player& player) { return player.service == name; });
     if (!newOwner.isEmpty())
-        add(name);
+        add(name, newOwner);
     else
         emit changed();
     fetchArt();
 }
 
-void Media::add(const QString& service)
+void Media::add(const QString& service, const QString& owner)
 {
     Player player;
     player.service = service;
+    player.owner = owner;
     const QVariantMap root = allProperties(service, Root);
     player.identity = root.value(u"Identity"_s).toString();
     player.desktopEntry = root.value(u"DesktopEntry"_s).toString();
@@ -81,8 +84,6 @@ void Media::add(const QString& service)
         m_players.insert(m_players.begin(), std::move(player));
     else
         m_players.push_back(std::move(player));
-    QDBusConnection::sessionBus().connect(
-        service, Path, Properties, u"PropertiesChanged"_s, this, SLOT(propertiesChanged()));
     emit changed();
     fetchArt();
 }
@@ -102,25 +103,18 @@ void Media::refresh(Player& player)
 
 void Media::propertiesChanged()
 {
-    // The signal does not say which player, as several share the path: the sender does.
+    // The signal does not say which player, as they share the path: its sender does.
     const QString sender = message().service();
-    bool found = false;
-    for (auto it = m_players.begin(); it != m_players.end(); ++it) {
-        const QString owner = QDBusConnection::sessionBus().interface()->serviceOwner(it->service).value();
-        if (it->service != sender && owner != sender)
-            continue;
-        found = true;
-        const bool wasPlaying = it->playing;
-        refresh(*it);
-        // One that starts playing takes charge.
-        if (it->playing && !wasPlaying)
-            std::rotate(m_players.begin(), it, it + 1);
-        break;
-    }
-    if (found) {
-        emit changed();
-        fetchArt();
-    }
+    const auto it = std::ranges::find(m_players, sender, &Player::owner);
+    if (it == m_players.end())
+        return;
+    const bool wasPlaying = it->playing;
+    refresh(*it);
+    // One that starts playing takes charge.
+    if (it->playing && !wasPlaying)
+        std::rotate(m_players.begin(), it, it + 1);
+    emit changed();
+    fetchArt();
 }
 
 void Media::call(const QString& method)

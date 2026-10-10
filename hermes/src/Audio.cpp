@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <string_view>
@@ -152,12 +153,12 @@ void Audio::surveyBluetooth()
     if (pa_context_get_state(m_loop->context) != PA_CONTEXT_READY)
         return;
     // Cards, then sources, then what records from them, each answer asking the next question.
-    auto* survey = new Survey;
+    // Handed through libpulse's callbacks, and let go of by the last.
     struct Step {
         Audio* self;
-        Survey* survey;
+        std::shared_ptr<Survey> survey;
     };
-    auto* step = new Step {this, survey};
+    auto* step = std::make_unique<Step>(Step {this, std::make_shared<Survey>()}).release();
     release(pa_context_get_card_info_list(
         m_loop->context,
         [](pa_context* context, const pa_card_info* card, int last, void* data) {
@@ -174,8 +175,7 @@ void Audio::surveyBluetooth()
                 uint32_t priority = 0;
                 for (uint32_t i = 0; i < card->n_profiles; ++i) {
                     const pa_card_profile_info2* profile = card->profiles2[i];
-                    if (std::string_view(profile->name).starts_with("a2dp-sink")
-                        && profile->available != 0
+                    if (std::string_view(profile->name).starts_with("a2dp-sink") && profile->available != 0
                         && (found.best.empty() || profile->priority > priority)) {
                         found.best = profile->name;
                         priority = profile->priority;
@@ -212,11 +212,10 @@ void Audio::surveyBluetooth()
                                 return;
                             }
                             // All answered: decided on the bar's thread.
-                            Audio* self = step->self;
-                            std::shared_ptr<Survey> survey(step->survey);
-                            delete step;
+                            const std::unique_ptr<Step> done(step);
                             QMetaObject::invokeMethod(
-                                self, [self, survey] { self->keepQuality(*survey); }, Qt::QueuedConnection);
+                                done->self, [self = done->self, survey = done->survey] { self->keepQuality(*survey); },
+                                Qt::QueuedConnection);
                         },
                         step));
                 },
@@ -232,8 +231,8 @@ void Audio::keepQuality(const Survey& survey)
     Locked lock(m_loop->mainloop);
     for (const Survey::Card& card : survey.cards) {
         if (isHeadsetProfile(card.active) && !card.best.empty())
-            release(pa_context_set_card_profile_by_index(
-                m_loop->context, card.index, card.best.c_str(), nullptr, nullptr));
+            release(
+                pa_context_set_card_profile_by_index(m_loop->context, card.index, card.best.c_str(), nullptr, nullptr));
     }
 }
 
