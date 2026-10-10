@@ -96,31 +96,29 @@ void Locking::lock(std::function<void()> whenLocked)
     if (m_locker)
         return;
 
-    m_locker = new QProcess(this);
+    m_locker = std::make_unique<QProcess>();
     m_locker->setProgram(u"tde-cerberus"_s);
     if (m_seconds)
         m_locker->setArguments({u"--seconds"_s});
     m_locker->setProcessChannelMode(QProcess::ForwardedErrorChannel);
-    connect(m_locker, &QProcess::readyReadStandardOutput, this, [this] {
+    connect(m_locker.get(), &QProcess::readyReadStandardOutput, this, [this] {
         if (m_locker->readAllStandardOutput().contains("locked")) {
             m_locked = true;
             settled();
         }
     });
-    connect(m_locker, &QProcess::finished, this, [this] {
+    connect(m_locker.get(), &QProcess::finished, this, [this] {
         // Unlocked, or refused as another lock screen holds the session: either way, nothing
-        // is waiting for this one any more.
-        m_locker->deleteLater();
-        m_locker = nullptr;
+        // is waiting for this one any more. It goes once its signal is over.
+        m_locker.release()->deleteLater();
         m_locked = false;
         settled();
     });
-    connect(m_locker, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+    connect(m_locker.get(), &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart)
             return;
         qWarning("tde-hermes: could not start tde-cerberus to lock the screen");
-        m_locker->deleteLater();
-        m_locker = nullptr;
+        m_locker.release()->deleteLater();
         settled();
     });
     m_locker->start();

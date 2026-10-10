@@ -20,6 +20,10 @@
 #include <memory>
 
 class QMenu;
+
+namespace tde {
+class ConfigWatcher;
+}
 class QToolButton;
 
 namespace hermes {
@@ -73,9 +77,10 @@ private:
     NotificationServer m_notifications;
     std::unique_ptr<Banners> m_banners; // a window of its own
     Sounds m_sounds;
-    Locking* m_locking = nullptr;
-    PowerSaving* m_powerSaving = nullptr;
-    PolkitAgent* m_polkit = nullptr;
+    std::unique_ptr<Locking> m_locking;
+    std::unique_ptr<PowerSaving> m_powerSaving;
+    std::unique_ptr<PolkitAgent> m_polkit;
+    std::unique_ptr<tde::ConfigWatcher> m_configWatcher; // of the desktop's and the session's config
     Taskbar* m_taskbar = nullptr;
     QToolButton* m_clock = nullptr;
     QMenu* m_calendarMenu = nullptr; // behind the clock

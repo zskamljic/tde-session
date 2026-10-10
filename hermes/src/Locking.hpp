@@ -6,6 +6,7 @@
 #include <QObject>
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 class QProcess;
@@ -46,7 +47,7 @@ private:
     void takeSleepInhibitor();
     void settled();
 
-    QProcess* m_locker = nullptr;
+    std::unique_ptr<QProcess> m_locker; // the lock screen, while it runs
     int m_idleMinutes = 0;
     bool m_seconds = false;
     bool m_locked = false;

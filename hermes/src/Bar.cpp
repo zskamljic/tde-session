@@ -125,16 +125,16 @@ Bar::Bar(QWidget* parent)
     m_calendarMenu = createCalendarMenu();
 
     m_tray = new Tray(this);
-    m_locking = new Locking(this);
-    m_powerSaving = new PowerSaving(this);
-    m_polkit = new PolkitAgent(this);
+    m_locking = std::make_unique<Locking>();
+    m_powerSaving = std::make_unique<PowerSaving>();
+    m_polkit = std::make_unique<PolkitAgent>();
     if (!m_polkit->start())
         qWarning("tde-hermes: another program asks for passwords for polkit already");
     m_locking->setIdleMinutes(tde::desktop().lock.after);
     QDBusConnection::sessionBus().registerObject(
         QString::fromLatin1(BusPath), &m_keys, QDBusConnection::ExportScriptableSlots);
     QDBusConnection::sessionBus().registerObject(
-        QString::fromLatin1(BusPath) + u"/Locking"_s, m_locking, QDBusConnection::ExportScriptableSlots);
+        QString::fromLatin1(BusPath) + u"/Locking"_s, m_locking.get(), QDBusConnection::ExportScriptableSlots);
     // Edits to the desktop's config and the session's take effect at once.
     connect(&m_displays, &DisplayLayouts::primaryScreenChanged, this, &Bar::placeOn);
     const auto applySession = [this] {
@@ -144,8 +144,9 @@ Bar::Bar(QWidget* parent)
         m_displays.setSettings(config.displays);
         m_powerSaving->setTimes(config.power.blank, config.power.suspend, config.power.suspendOnBattery);
     };
-    auto* watcher = new tde::ConfigWatcher({tde::desktopConfigPath(), shell::sessionConfigPath()}, this);
-    connect(watcher, &tde::ConfigWatcher::changed, this, [this, applySession](const QString& path) {
+    m_configWatcher
+        = std::make_unique<tde::ConfigWatcher>(QStringList {tde::desktopConfigPath(), shell::sessionConfigPath()});
+    connect(m_configWatcher.get(), &tde::ConfigWatcher::changed, this, [this, applySession](const QString& path) {
         if (path == shell::sessionConfigPath()) {
             applySession();
             updateClock();
