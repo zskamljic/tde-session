@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 using namespace Qt::StringLiterals;
 
@@ -158,15 +159,15 @@ void SoundDevices::query()
                 collecting->found.push_back(deviceOf(*info));
                 return;
             }
+            const std::unique_ptr<Collecting> done(collecting);
             QMetaObject::invokeMethod(
                 collecting->devices,
                 [devices = collecting->devices, found = std::move(collecting->found)]() mutable {
                     devices->received(true, std::move(found));
                 },
                 Qt::QueuedConnection);
-            delete collecting;
         },
-        new Collecting {this, true, {}}));
+        std::make_unique<Collecting>(Collecting {this, true, {}}).release()));
     release(pa_context_get_source_info_list(
         m_loop->context,
         [](pa_context*, const pa_source_info* info, int last, void* data) {
@@ -177,15 +178,15 @@ void SoundDevices::query()
                     collecting->found.push_back(deviceOf(*info));
                 return;
             }
+            const std::unique_ptr<Collecting> done(collecting);
             QMetaObject::invokeMethod(
                 collecting->devices,
                 [devices = collecting->devices, found = std::move(collecting->found)]() mutable {
                     devices->received(false, std::move(found));
                 },
                 Qt::QueuedConnection);
-            delete collecting;
         },
-        new Collecting {this, false, {}}));
+        std::make_unique<Collecting>(Collecting {this, false, {}}).release()));
 }
 
 void SoundDevices::received(bool output, std::vector<SoundDevice> devices)

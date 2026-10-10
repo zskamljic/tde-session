@@ -9,6 +9,7 @@
 #include <QComboBox>
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 using namespace Qt::StringLiterals;
@@ -57,11 +58,8 @@ LockPage::LockPage(QWidget* parent)
                        "video players keep it from locking while they play."_s);
 
     // With a fingerprint reader, fingers to unlock with.
-    auto* fingerprints = new FingerprintGroup(this);
-    if (fingerprints->isAvailable())
-        addWidget(fingerprints);
-    else
-        fingerprints->deleteLater();
+    if (auto fingerprints = std::make_unique<FingerprintGroup>(); fingerprints->isAvailable())
+        addWidget(std::move(fingerprints));
 }
 
 } // namespace daedalus

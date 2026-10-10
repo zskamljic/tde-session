@@ -18,6 +18,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <memory>
 
 using namespace Qt::StringLiterals;
 
@@ -130,7 +131,7 @@ NotificationCard::NotificationCard(
     }
 
     // The actions other than the default one, which a click on the notification picks.
-    auto* actions = new QHBoxLayout;
+    auto actions = std::make_unique<QHBoxLayout>();
     actions->setContentsMargins(0, 6, 0, 0);
     const QStringList list = notification.actions;
     for (qsizetype i = 0; i + 1 < list.size(); i += 2) {
@@ -147,9 +148,7 @@ NotificationCard::NotificationCard(
         actions->addWidget(button);
     }
     if (actions->count() > 0)
-        text->addLayout(actions);
-    else
-        delete actions;
+        text->addLayout(actions.release()); // the text's layout owns it from now on
 
     if (mode == Mode::Banner) {
         const int duration = notification.bannerTime();
@@ -317,7 +316,8 @@ void NotificationList::rebuild()
     for (const Notification& notification : m_server.notifications()) {
         if (notification.banner)
             continue;
-        auto* card = new NotificationCard(m_server, notification, NotificationCard::Mode::List);
+        auto* card
+            = new NotificationCard(m_server, notification, NotificationCard::Mode::List, m_cards->parentWidget());
         connect(card, &NotificationCard::handled, this, &NotificationList::handled);
         connect(card, &NotificationCard::actionPicked, this, &NotificationList::actionPicked);
         m_cards->insertWidget(m_cards->count() - 1, card);

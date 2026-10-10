@@ -11,6 +11,7 @@
 #include <QPixmap>
 
 #include <functional>
+#include <memory>
 
 using namespace Qt::StringLiterals;
 
@@ -146,13 +147,13 @@ void popUpDBusMenu(const QString& service, const QString& path, QPoint pos, QWid
 {
     readLayout(service, path, 0, parent, [service, path, pos, parent](const MenuNode& root) {
         // Popups on Wayland belong to a window.
-        auto* menu = new QMenu(parent);
-        menu->setAttribute(Qt::WA_DeleteOnClose);
-        fillMenu(menu, root, service, path);
-        if (menu->isEmpty()) {
-            delete menu;
+        auto owned = std::make_unique<QMenu>(parent);
+        fillMenu(owned.get(), root, service, path);
+        if (owned->isEmpty())
             return;
-        }
+        // It goes once closed.
+        QMenu* menu = owned.release();
+        menu->setAttribute(Qt::WA_DeleteOnClose);
         sendEvent(service, path, 0, u"opened"_s);
         QObject::connect(menu, &QMenu::aboutToHide, [service, path] { sendEvent(service, path, 0, u"closed"_s); });
         menu->popup(pos);

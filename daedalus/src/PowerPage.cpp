@@ -1,7 +1,5 @@
 #include "PowerPage.hpp"
 
-#include <PowerProfiles.hpp>
-
 #include <QComboBox>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -9,7 +7,6 @@
 #include <QDBusReply>
 #include <QDBusVariant>
 #include <QLabel>
-#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -171,24 +168,22 @@ PowerPage::PowerPage(Settings& settings, QWidget* parent)
             }
         };
         m_batteryUpdate = update;
-        auto* timer = new QTimer(this);
-        connect(timer, &QTimer::timeout, this, update);
-        timer->start(5000);
+        connect(&m_batteryTimer, &QTimer::timeout, this, update);
+        m_batteryTimer.start(5000);
     }
 
-    auto* profiles = new shell::PowerProfiles(this);
-    if (profiles->isAvailable()) {
+    if (m_profiles.isAvailable()) {
         auto* mode = new QComboBox(this);
-        const auto fill = [mode, profiles] {
+        const auto fill = [this, mode] {
             mode->clear();
-            for (const QString& profile : profiles->offered())
+            for (const QString& profile : m_profiles.offered())
                 mode->addItem(shell::powerProfileName(profile), profile);
-            mode->setCurrentIndex(std::max(0, mode->findData(profiles->active())));
+            mode->setCurrentIndex(std::max(0, mode->findData(m_profiles.active())));
         };
         fill();
-        connect(profiles, &shell::PowerProfiles::changed, mode, fill);
-        connect(mode, &QComboBox::activated, this,
-            [mode, profiles] { profiles->setActive(mode->currentData().toString()); });
+        connect(&m_profiles, &shell::PowerProfiles::changed, mode, fill);
+        connect(
+            mode, &QComboBox::activated, this, [this, mode] { m_profiles.setActive(mode->currentData().toString()); });
         Group* modes = addGroup(u"Power Mode"_s);
         modes->addRow(u"Power mode"_s, u"Faster, or longer on battery"_s, mode);
     }

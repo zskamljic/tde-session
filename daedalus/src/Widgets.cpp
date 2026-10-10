@@ -216,4 +216,9 @@ void Page::addWidget(QWidget* widget, Qt::Alignment alignment)
     m_column->insertWidget(m_column->count() - 1, widget, 0, alignment);
 }
 
+void Page::addWidget(std::unique_ptr<QWidget> widget, Qt::Alignment alignment)
+{
+    addWidget(widget.release(), alignment); // the column's parent owns it from now on
+}
+
 } // namespace daedalus

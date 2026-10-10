@@ -5,6 +5,8 @@
 #include <QWidget>
 #include <Tween.hpp>
 
+#include <memory>
+
 class QHBoxLayout;
 class QLabel;
 class QVBoxLayout;
@@ -73,6 +75,8 @@ public:
 
     Group* addGroup(const QString& title = {});
     void addWidget(QWidget* widget, Qt::Alignment alignment = {});
+    // One made without a parent, which the page takes.
+    void addWidget(std::unique_ptr<QWidget> widget, Qt::Alignment alignment = {});
 
 private:
     QVBoxLayout* m_column = nullptr;

@@ -2,6 +2,10 @@
 
 #include "Pages.hpp"
 
+#include <PowerProfiles.hpp>
+
+#include <QTimer>
+
 #include <functional>
 
 namespace daedalus {
@@ -16,6 +20,8 @@ protected:
     void showEvent(QShowEvent* event) override;
 
 private:
+    shell::PowerProfiles m_profiles;
+    QTimer m_batteryTimer;
     std::function<void()> m_batteryUpdate; // shows the batteries as they are now
 };
 
