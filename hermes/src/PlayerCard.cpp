@@ -105,6 +105,12 @@ PlayerCard::PlayerCard(Media& media, QWidget* parent)
     sync();
 }
 
+void PlayerCard::resizeEvent(QResizeEvent* event)
+{
+    QFrame::resizeEvent(event);
+    sync();
+}
+
 void PlayerCard::sync()
 {
     const Player* player = m_media.current();
@@ -113,7 +119,8 @@ void PlayerCard::sync()
         return;
     const qreal ratio = devicePixelRatioF();
     const QColor text = tde::theme::colors().text;
-    const auto icon = [&](const QString& name) { return shell::tintedIcon(name, QSize(IconSize, IconSize), ratio, text); };
+    const auto icon
+        = [&](const QString& name) { return shell::tintedIcon(name, QSize(IconSize, IconSize), ratio, text); };
     const QIcon appIcon = QIcon::fromTheme(player->desktopEntry, QIcon::fromTheme(u"multimedia-player"_s));
     m_art->setPixmap(coverOf(m_media.art(), appIcon, ratio));
     // As wide as there is room for, cut short with an ellipsis.

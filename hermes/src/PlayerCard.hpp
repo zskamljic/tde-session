@@ -15,6 +15,10 @@ class PlayerCard : public QFrame {
 public:
     explicit PlayerCard(Media& media, QWidget* parent = nullptr);
 
+protected:
+    // What plays is cut short to the width it has.
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void sync();
 
