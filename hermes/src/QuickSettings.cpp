@@ -44,20 +44,6 @@ QWidget* row(QWidget* parent, QHBoxLayout*& layout)
     return widget;
 }
 
-QToolButton* flatButton(QWidget* parent)
-{
-    auto* button = new QToolButton(parent);
-    button->setAutoRaise(true);
-    button->setIconSize(QSize(IconSize, IconSize));
-    button->setFixedSize(32, 32);
-    const auto& colors = tde::theme::colors();
-    button->setStyleSheet(u"QToolButton { background: transparent; border: none; border-radius: 16px; }"
-                          " QToolButton:hover { background: %1; }"
-                          " QToolButton:pressed, QToolButton:checked { background: %2; }"_s.arg(
-                              colors.hover.name(QColor::HexArgb), colors.pressed.name(QColor::HexArgb)));
-    return button;
-}
-
 // A level from 0 to Steps, with a round knob on a thin track, filled in up to it.
 QSlider* slider(QWidget* parent)
 {
@@ -76,6 +62,20 @@ QSlider* slider(QWidget* parent)
 }
 
 } // namespace
+
+QToolButton* roundButton(QWidget* parent)
+{
+    auto* button = new QToolButton(parent);
+    button->setAutoRaise(true);
+    button->setIconSize(QSize(IconSize, IconSize));
+    button->setFixedSize(32, 32);
+    const auto& colors = tde::theme::colors();
+    button->setStyleSheet(u"QToolButton { background: transparent; border: none; border-radius: 16px; }"
+                          " QToolButton:hover { background: %1; }"
+                          " QToolButton:pressed, QToolButton:checked { background: %2; }"_s.arg(
+                              colors.hover.name(QColor::HexArgb), colors.pressed.name(QColor::HexArgb)));
+    return button;
+}
 
 QString volumeIconName(double volume, bool muted)
 {
@@ -108,7 +108,7 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
 
     QHBoxLayout* line = nullptr;
     m_volumeRow = row(this, line);
-    m_mute = flatButton(m_volumeRow);
+    m_mute = roundButton(m_volumeRow);
     m_mute->setToolTip(u"Mute"_s);
     connect(m_mute, &QToolButton::clicked, this, [this] { m_audio.setMuted(!m_audio.isMuted()); });
     m_volume = slider(m_volumeRow);
@@ -164,7 +164,7 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     m_networkIcon->setAlignment(Qt::AlignCenter);
     m_networkText = new QLabel(m_networkRow);
     m_networkText->setTextFormat(Qt::PlainText);
-    m_wifiSwitch = flatButton(m_networkRow);
+    m_wifiSwitch = roundButton(m_networkRow);
     m_wifiSwitch->setCheckable(true);
     m_wifiSwitch->setToolTip(u"Wi-Fi"_s);
     m_wifiSwitch->setIcon(symbolic(u"network-wireless-symbolic"_s, this));
@@ -186,7 +186,7 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     m_bluetoothIcon->setAlignment(Qt::AlignCenter);
     m_bluetoothText = new QLabel(m_bluetoothRow);
     m_bluetoothText->setTextFormat(Qt::PlainText);
-    m_bluetoothSwitch = flatButton(m_bluetoothRow);
+    m_bluetoothSwitch = roundButton(m_bluetoothRow);
     m_bluetoothSwitch->setCheckable(true);
     m_bluetoothSwitch->setToolTip(u"Bluetooth"_s);
     m_bluetoothSwitch->setIcon(symbolic(u"bluetooth-active-symbolic"_s, this));
@@ -309,7 +309,7 @@ void QuickSettings::syncToggles()
 
 QToolButton* QuickSettings::actionButton(const QString& icon, const QString& name, void (QuickSettings::*signal)())
 {
-    QToolButton* button = flatButton(this);
+    QToolButton* button = roundButton(this);
     // As wide as the panel, the icon before the words with room between them.
     button->setMinimumSize(0, 36);
     button->setMaximumSize(QWIDGETSIZE_MAX, 36);
@@ -333,7 +333,7 @@ QToolButton* QuickSettings::actionButton(const QString& icon, const QString& nam
 
 QToolButton* QuickSettings::settingsButton(const QString& page, const QString& name)
 {
-    QToolButton* button = flatButton(this);
+    QToolButton* button = roundButton(this);
     button->setToolTip(name);
     button->setIcon(symbolic(u"go-next-symbolic"_s, this));
     connect(button, &QToolButton::clicked, this, [this, page] { emit settingsRequested(page); });
@@ -433,7 +433,7 @@ void QuickSettings::syncBluetooth()
 
 QToolButton* QuickSettings::listButton(QWidget* parent, const QString& icon, const QString& name, const QString& state)
 {
-    QToolButton* button = flatButton(parent);
+    QToolButton* button = roundButton(parent);
     button->setMinimumSize(0, 30);
     button->setMaximumSize(QWIDGETSIZE_MAX, 30);
     button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);

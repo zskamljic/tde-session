@@ -1,6 +1,7 @@
 #include "PlayerCard.hpp"
 
 #include "Media.hpp"
+#include "QuickSettings.hpp"
 
 #include <Icons.hpp>
 #include <tde/Theme.hpp>
@@ -22,16 +23,8 @@ constexpr int IconSize = 16;
 
 QToolButton* controlButton(const QString& tooltip, QWidget* parent)
 {
-    const auto& colors = tde::theme::colors();
-    auto* button = new QToolButton(parent);
-    button->setAutoRaise(true);
+    QToolButton* button = roundButton(parent);
     button->setToolTip(tooltip);
-    button->setIconSize(QSize(IconSize, IconSize));
-    button->setFixedSize(32, 32);
-    button->setStyleSheet(u"QToolButton { background: transparent; border: none; border-radius: 16px; }"
-                          " QToolButton:hover { background: %1; }"
-                          " QToolButton:pressed { background: %2; }"_s.arg(
-                              colors.hover.name(QColor::HexArgb), colors.pressed.name(QColor::HexArgb)));
     return button;
 }
 

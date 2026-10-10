@@ -107,6 +107,10 @@ private:
     QLabel* m_batteryText;
 };
 
+// A round, flat button for an icon, highlighted under the pointer and while on, as the bar's
+// panels have them.
+QToolButton* roundButton(QWidget* parent);
+
 // The name of a symbolic icon for `volume` from 0 to 1, or muted.
 QString volumeIconName(double volume, bool muted);
 
