@@ -6,8 +6,11 @@
 #include <QObject>
 #include <QVariantMap>
 
+#include <memory>
+
 namespace argus {
 
+class PortalRequest;
 class Screenshot;
 
 // The Screenshot of xdg-desktop-portal for TDE: programs that ask for a screenshot, or for a
@@ -23,6 +26,7 @@ public:
     static constexpr const char* ObjectPath = "/org/freedesktop/portal/desktop";
 
     explicit ScreenshotPortal(argus::Screenshot& screenshot, QObject* parent = nullptr);
+    ~ScreenshotPortal() override;
 
     bool registerOnBus();
     uint version() const { return 2; }
@@ -41,6 +45,7 @@ private:
     argus::Screenshot& m_screenshot;
     QDBusMessage m_call; // the request waiting for its answer
     QString m_handle;
+    std::unique_ptr<PortalRequest> m_request; // while the portal may close it
 };
 
 } // namespace argus

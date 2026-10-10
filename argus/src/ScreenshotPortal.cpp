@@ -41,15 +41,21 @@ const QDBusArgument& operator>>(const QDBusArgument& argument, PortalColor& colo
     return argument;
 }
 
+bool option(const QVariantMap& options, const QString& name)
+{
+    return options.value(name).toBool();
+}
+
+} // namespace
+
 // The portal's handle on a request, through which it may close it early.
-class Request : public QObject {
+class PortalRequest : public QObject {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.impl.portal.Request")
 
 public:
-    explicit Request(Screenshot& screenshot, QObject* parent)
-        : QObject(parent)
-        , m_screenshot(screenshot)
+    explicit PortalRequest(Screenshot& screenshot)
+        : m_screenshot(screenshot)
     {
     }
 
@@ -60,12 +66,6 @@ private:
     Screenshot& m_screenshot;
 };
 
-bool option(const QVariantMap& options, const QString& name)
-{
-    return options.value(name).toBool();
-}
-
-} // namespace
 } // namespace argus
 
 Q_DECLARE_METATYPE(argus::PortalColor)
@@ -78,6 +78,8 @@ ScreenshotPortal::ScreenshotPortal(argus::Screenshot& screenshot, QObject* paren
 {
     qDBusRegisterMetaType<PortalColor>();
 }
+
+ScreenshotPortal::~ScreenshotPortal() = default;
 
 bool ScreenshotPortal::registerOnBus()
 {
@@ -133,15 +135,17 @@ void ScreenshotPortal::answerLater(const QDBusObjectPath& handle)
     setDelayedReply(true);
     m_call = message();
     m_handle = handle.path();
-    connection().registerObject(m_handle, new Request(m_screenshot, this), QDBusConnection::ExportAllSlots);
+    m_request = std::make_unique<PortalRequest>(m_screenshot);
+    connection().registerObject(m_handle, m_request.get(), QDBusConnection::ExportAllSlots);
 }
 
 void ScreenshotPortal::answer(uint response, const QVariantMap& results)
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
-    if (QObject* request = bus.objectRegisteredAt(m_handle)) {
+    if (m_request) {
         bus.unregisterObject(m_handle);
-        request->deleteLater();
+        // It may be what asked for this, by closing.
+        m_request.release()->deleteLater();
     }
     bus.send(m_call.createReply({QVariant::fromValue(response), QVariant::fromValue(results)}));
 }
