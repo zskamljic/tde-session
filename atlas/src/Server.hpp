@@ -226,7 +226,7 @@ private:
     wl_event_source* m_snapPreviewTimer = nullptr; // while it grows into place
     wlr_box m_snapPreviewFrom {};
     wlr_box m_snapPreviewTo {};
-    timespec m_snapPreviewStart {};
+    uint64_t m_snapPreviewStart = 0; // ms, of the monotonic clock
 
     // Title bars drawn here: the one under the pointer, the one whose button is held, and a
     // title held down, which becomes a move once the pointer goes.

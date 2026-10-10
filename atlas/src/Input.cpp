@@ -1,5 +1,6 @@
 #include "Server.hpp"
 
+#include "Animation.hpp"
 #include "Lock.hpp"
 #include "Parts.hpp"
 
@@ -912,7 +913,7 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
     // It grows out of the window being dragged.
     m_snapPreviewFrom = m_grabbed ? m_grabbed->geometry() : box;
     m_snapPreviewTo = box;
-    clock_gettime(CLOCK_MONOTONIC, &m_snapPreviewStart);
+    m_snapPreviewStart = monotonicMs();
     if (!m_snapPreviewTimer) {
         m_snapPreviewTimer = wl_event_loop_add_timer(
             eventLoop,
@@ -927,19 +928,14 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
 
 void Server::stepSnapPreview()
 {
-    timespec now {};
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    const double elapsed = double(now.tv_sec - m_snapPreviewStart.tv_sec) * 1000
-        + double(now.tv_nsec - m_snapPreviewStart.tv_nsec) / 1e6;
-    const double t = windowAnimationTime > 0 ? std::min(1.0, elapsed / windowAnimationTime) : 1.0;
-    const double eased = 1 - std::pow(1 - t, 3);
-    const auto between = [eased](int a, int b) { return int(std::lround(a + (b - a) * eased)); };
-    wlr_scene_rect_set_size(m_snapPreview, std::max(1, between(m_snapPreviewFrom.width, m_snapPreviewTo.width)),
-        std::max(1, between(m_snapPreviewFrom.height, m_snapPreviewTo.height)));
-    wlr_scene_node_set_position(&m_snapPreview->node, between(m_snapPreviewFrom.x, m_snapPreviewTo.x),
-        between(m_snapPreviewFrom.y, m_snapPreviewTo.y));
+    const double t = progress(monotonicMs() - m_snapPreviewStart, windowAnimationTime);
+    const auto at = [t](int from, int to) { return int(std::lround(between(from, to, t))); };
+    wlr_scene_rect_set_size(m_snapPreview, std::max(1, at(m_snapPreviewFrom.width, m_snapPreviewTo.width)),
+        std::max(1, at(m_snapPreviewFrom.height, m_snapPreviewTo.height)));
+    wlr_scene_node_set_position(
+        &m_snapPreview->node, at(m_snapPreviewFrom.x, m_snapPreviewTo.x), at(m_snapPreviewFrom.y, m_snapPreviewTo.y));
     if (t < 1) {
-        wl_event_source_timer_update(m_snapPreviewTimer, 8);
+        wl_event_source_timer_update(m_snapPreviewTimer, FrameInterval);
     } else {
         wl_event_source_remove(m_snapPreviewTimer);
         m_snapPreviewTimer = nullptr;

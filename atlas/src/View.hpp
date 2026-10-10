@@ -105,7 +105,6 @@ protected:
     wlr_scene_tree* m_captureContent = nullptr;
 
 private:
-    static uint64_t now(); // ms, of the monotonic clock
     WindowCapture& capture();
     void stepMorph();
     void endMorph();

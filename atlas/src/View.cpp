@@ -1,12 +1,12 @@
 #include "View.hpp"
 
+#include "Animation.hpp"
 #include "Capture.hpp"
 #include "Parts.hpp"
 #include "Placement.hpp"
 
 #include <algorithm>
 #include <cmath>
-#include <ctime>
 #include <vector>
 
 namespace atlas {
@@ -101,22 +101,15 @@ void View::place()
         y = placed.y;
     }
     moveTo(x, y);
-    m_placedAt = now();
+    m_placedAt = monotonicMs();
     m_placedSize = size();
-}
-
-uint64_t View::now()
-{
-    timespec time {};
-    clock_gettime(CLOCK_MONOTONIC, &time);
-    return uint64_t(time.tv_sec) * 1000 + uint64_t(time.tv_nsec) / 1'000'000;
 }
 
 bool View::placedRecently() const
 {
     // Programs that read their settings once shown take a moment for it.
     constexpr uint64_t Moment = 1500; // ms
-    return mapped && !handled && !isTiled() && !fullscreen && now() - m_placedAt < Moment;
+    return mapped && !handled && !isTiled() && !fullscreen && monotonicMs() - m_placedAt < Moment;
 }
 
 void View::sizeCommitted()
@@ -215,7 +208,7 @@ void View::animateTo(const wlr_box& box)
     m_morphFrom = from;
     m_morphTo = box;
     m_morphExtents = extents;
-    m_morphStart = now();
+    m_morphStart = monotonicMs();
     m_morphTimer = wl_event_loop_add_timer(
         server.eventLoop,
         [](void* data) {
@@ -229,30 +222,28 @@ void View::animateTo(const wlr_box& box)
 void View::stepMorph()
 {
     constexpr uint64_t Patience = 300; // ms the window may take to draw itself once there
-    constexpr int Step = 8; // ms
-    const uint64_t elapsed = now() - m_morphStart;
-    const int duration = std::max(server.windowAnimationTime, 1);
-    const double t = std::min(1.0, double(elapsed) / duration);
-    const double eased = 1 - std::pow(1 - t, 3);
-    const auto between = [eased](int a, int b) { return a + (b - a) * eased; };
-    const double width = between(m_morphFrom.width, m_morphTo.width);
-    const double height = between(m_morphFrom.height, m_morphTo.height);
+    const uint64_t elapsed = monotonicMs() - m_morphStart;
+    const double t = progress(elapsed, server.windowAnimationTime);
+    const double width = between(m_morphFrom.width, m_morphTo.width, t);
+    const double height = between(m_morphFrom.height, m_morphTo.height, t);
     // The picture's parts beside the window, as shadows are, grow along with it.
     const double scaleX = width / std::max(m_morphFrom.width, 1);
     const double scaleY = height / std::max(m_morphFrom.height, 1);
     wlr_scene_node_set_position(&m_morph->node,
-        int(std::lround(between(m_morphFrom.x, m_morphTo.x) + m_morphExtents.x * scaleX)),
-        int(std::lround(between(m_morphFrom.y, m_morphTo.y) + m_morphExtents.y * scaleY)));
+        int(std::lround(between(m_morphFrom.x, m_morphTo.x, t) + m_morphExtents.x * scaleX)),
+        int(std::lround(between(m_morphFrom.y, m_morphTo.y, t) + m_morphExtents.y * scaleY)));
     wlr_scene_buffer_set_dest_size(m_morph, std::max(1, int(std::lround(m_morphExtents.width * scaleX))),
         std::max(1, int(std::lround(m_morphExtents.height * scaleY))));
+    // There, it shows the window once that drew itself in its new size, or has taken too long.
     if (t >= 1) {
-        const wlr_box now = geometry();
-        if ((now.width == m_morphTo.width && now.height == m_morphTo.height) || elapsed > uint64_t(duration) + Patience) {
+        const wlr_box arrived = geometry();
+        if ((arrived.width == m_morphTo.width && arrived.height == m_morphTo.height)
+            || elapsed > uint64_t(server.windowAnimationTime) + Patience) {
             endMorph();
             return;
         }
     }
-    wl_event_source_timer_update(m_morphTimer, Step);
+    wl_event_source_timer_update(m_morphTimer, FrameInterval);
 }
 
 void View::endMorph()
