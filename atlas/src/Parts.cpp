@@ -26,27 +26,18 @@ Output::Output(Server& server, wlr_output* output)
     m_destroy.connect(output->events.destroy, [this] { this->server.outputDestroyed(*this); });
 }
 
-Output::~Output()
-{
-    if (m_retry)
-        wl_event_source_remove(m_retry);
-}
-
 void Output::retry(int delay)
 {
-    if (!m_retry) {
-        m_retry = wl_event_loop_add_timer(
-            server.eventLoop,
-            [](void* data) {
-                auto* self = static_cast<Output*>(data);
-                // Turned on meanwhile, as by the settings: nothing to do.
-                if (!self->output->enabled)
-                    self->server.turnOn(*self);
-                return 0;
-            },
-            this);
-    }
-    wl_event_source_timer_update(m_retry, delay);
+    if (!m_retry)
+        m_retry = addTimer<&Output::retried>(server.eventLoop, this);
+    wl_event_source_timer_update(m_retry.get(), delay);
+}
+
+void Output::retried()
+{
+    // Turned on meanwhile, as by the settings: nothing to do.
+    if (!output->enabled)
+        server.turnOn(*this);
 }
 
 wlr_box Output::box() const

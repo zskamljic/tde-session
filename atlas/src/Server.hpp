@@ -2,6 +2,7 @@
 
 #include "Decoration.hpp"
 #include "Listener.hpp"
+#include "Owned.hpp"
 #include "Settings.hpp"
 #include "wlr.hpp"
 
@@ -53,6 +54,8 @@ public:
     bool isLocked() const { return m_locked; }
     void unlocked();
     void lockAbandoned();
+    // Starts a lock screen in place of one that went away.
+    void relock();
     void outputFramed(const Output& output);
 
     // Whether a layer surface, such as the overview, holds the keyboard.
@@ -197,12 +200,12 @@ private:
     wlr_xdg_shell* m_xdgShell = nullptr;
     wlr_layer_shell_v1* m_layerShell = nullptr;
     wlr_output_manager_v1* m_outputManager = nullptr;
-    wl_event_source* m_layoutIdle = nullptr; // to see layout changes once they are all done
-    int m_keyboardWatch = -1; // inotify, on where the system keeps the keyboard layout
-    wl_event_source* m_keyboardWatchSource = nullptr;
+    EventSource m_layoutIdle; // to see layout changes once they are all done
+    FileDescriptor m_keyboardWatch; // inotify, on where the system keeps the keyboard layout
+    EventSource m_keyboardWatchSource;
     Settings m_settings;
-    int m_settingsWatch = -1; // inotify, on the folders of the session's settings
-    wl_event_source* m_settingsWatchSource = nullptr;
+    FileDescriptor m_settingsWatch; // inotify, on the folders of the session's settings
+    EventSource m_settingsWatchSource;
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
     wlr_xwayland* m_xwayland = nullptr;
 
@@ -223,7 +226,7 @@ private:
     uint32_t m_resizeEdges = 0;
     Tile m_snapTarget = Tile::None;
     wlr_scene_rect* m_snapPreview = nullptr;
-    wl_event_source* m_snapPreviewTimer = nullptr; // while it grows into place
+    EventSource m_snapPreviewTimer; // while it grows into place
     wlr_box m_snapPreviewFrom {};
     wlr_box m_snapPreviewTo {};
     uint64_t m_snapPreviewStart = 0; // ms, of the monotonic clock
@@ -265,7 +268,7 @@ private:
     bool m_locked = false;
     std::unique_ptr<SessionLock> m_lock;
     wlr_scene_rect* m_lockCover = nullptr; // hides everything while the lock screen has not drawn
-    wl_event_source* m_relock = nullptr; // starts a lock screen again when one went away
+    EventSource m_relock; // starts a lock screen again when one went away
     Listener m_newLock;
     Listener m_newLayerSurface;
     Listener m_newInput;

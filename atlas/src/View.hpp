@@ -114,7 +114,7 @@ private:
 
     // The picture standing in for the window while it moves to a tile.
     wlr_scene_buffer* m_morph = nullptr;
-    wl_event_source* m_morphTimer = nullptr;
+    EventSource m_morphTimer;
     wlr_box m_morphFrom {};
     wlr_box m_morphTo {};
     wlr_box m_morphExtents {}; // of the picture, relative to the window where it started

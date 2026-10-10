@@ -33,18 +33,10 @@ Server::~Server()
              &m_requestPrimarySelection, &m_requestStartDrag, &m_startDrag, &m_dragIconDestroy, &m_requestActivate,
              &m_newInhibitor, &m_newCaptureSource, &m_outputPowerMode, &m_newXwaylandSurface, &m_xwaylandReady})
         listener->disconnect();
-    if (m_layoutIdle)
-        wl_event_source_remove(m_layoutIdle);
-    if (m_snapPreviewTimer)
-        wl_event_source_remove(m_snapPreviewTimer);
-    if (m_keyboardWatchSource)
-        wl_event_source_remove(m_keyboardWatchSource);
-    if (m_keyboardWatch >= 0)
-        close(m_keyboardWatch);
-    if (m_settingsWatchSource)
-        wl_event_source_remove(m_settingsWatchSource);
-    if (m_settingsWatch >= 0)
-        close(m_settingsWatch);
+    // The loop's sources go before the loop does.
+    for (EventSource* source :
+        {&m_layoutIdle, &m_snapPreviewTimer, &m_keyboardWatchSource, &m_settingsWatchSource, &m_relock})
+        source->reset();
     wl_display_destroy_clients(display);
     m_popups.clear();
     m_views.clear();
@@ -289,14 +281,15 @@ void Server::layoutChanged()
 {
     if (m_layoutIdle)
         return;
-    m_layoutIdle = wl_event_loop_add_idle(
+    m_layoutIdle.reset(wl_event_loop_add_idle(
         eventLoop,
         [](void* data) {
             auto* server = static_cast<Server*>(data);
-            server->m_layoutIdle = nullptr;
+            // An idle source goes by itself once it ran.
+            [[maybe_unused]] wl_event_source* ran = server->m_layoutIdle.release();
             server->outputLayoutChanged();
         },
-        this);
+        this));
 }
 
 void Server::outputLayoutChanged()

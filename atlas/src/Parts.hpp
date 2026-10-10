@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Owned.hpp"
 #include "Server.hpp"
 #include "View.hpp"
 
@@ -11,7 +12,6 @@ namespace atlas {
 class Output {
 public:
     Output(Server& server, wlr_output* output);
-    ~Output();
 
     Output(const Output&) = delete;
     Output& operator=(const Output&) = delete;
@@ -29,7 +29,9 @@ public:
     void retry(int delay);
 
 private:
-    wl_event_source* m_retry = nullptr;
+    void retried();
+
+    EventSource m_retry;
     Listener m_frame;
     Listener m_requestState;
     Listener m_destroy;

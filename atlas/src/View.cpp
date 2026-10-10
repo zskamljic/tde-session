@@ -192,15 +192,14 @@ void View::animateTo(const wlr_box& box)
     endMorph();
     const wlr_box from = geometry();
     wlr_box extents {};
-    wlr_buffer* picture = server.windowAnimationTime > 0 && mapped && !minimized && !wlr_box_empty(&from)
+    const LockedBuffer picture = server.windowAnimationTime > 0 && mapped && !minimized && !wlr_box_empty(&from)
         ? capture().snapshot(extents)
         : nullptr;
     setGeometry(box);
     if (!picture)
         return;
-    // In the window's place in the stack, which hides meanwhile.
-    m_morph = wlr_scene_buffer_create(tree->node.parent, picture);
-    wlr_buffer_unlock(picture);
+    // In the window's place in the stack, which hides meanwhile; the scene holds on to the picture.
+    m_morph = wlr_scene_buffer_create(tree->node.parent, picture.get());
     if (!m_morph)
         return;
     wlr_scene_node_place_above(&m_morph->node, &tree->node);
@@ -209,13 +208,7 @@ void View::animateTo(const wlr_box& box)
     m_morphTo = box;
     m_morphExtents = extents;
     m_morphStart = monotonicMs();
-    m_morphTimer = wl_event_loop_add_timer(
-        server.eventLoop,
-        [](void* data) {
-            static_cast<View*>(data)->stepMorph();
-            return 0;
-        },
-        this);
+    m_morphTimer = addTimer<&View::stepMorph>(server.eventLoop, this);
     stepMorph();
 }
 
@@ -243,15 +236,12 @@ void View::stepMorph()
             return;
         }
     }
-    wl_event_source_timer_update(m_morphTimer, FrameInterval);
+    wl_event_source_timer_update(m_morphTimer.get(), FrameInterval);
 }
 
 void View::endMorph()
 {
-    if (m_morphTimer) {
-        wl_event_source_remove(m_morphTimer);
-        m_morphTimer = nullptr;
-    }
+    m_morphTimer.reset();
     if (!m_morph)
         return;
     wlr_scene_node_destroy(&m_morph->node);

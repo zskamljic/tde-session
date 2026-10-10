@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+typedef struct _cairo cairo_t;
+
 namespace atlas {
 
 class View;
@@ -49,7 +51,10 @@ private:
     };
 
     State current() const;
+    // Draws `state` into a buffer, which the scene shows from then on.
     void draw(const State& state);
+    // The bar itself, with `cr` scaled to it.
+    void paint(cairo_t* cr, const State& state) const;
     wlr_box buttonBox(Part part, int width) const;
 
     View& m_view;

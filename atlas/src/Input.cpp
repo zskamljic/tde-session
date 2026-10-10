@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <format>
 #include <fstream>
+#include <memory>
 #include <regex>
 #include <set>
 #include <string_view>
@@ -24,6 +25,16 @@ namespace {
 
 constexpr uint32_t BindingModifiers = WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO;
 constexpr int SnapEdge = 4; // pixels from the screen edge where a dragged window snaps
+
+// What changes to a watched folder are of interest: files written, moved in, made or removed.
+constexpr uint32_t WatchedChanges = IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE;
+
+// Reads what inotify told, which only says that something changed.
+void drain(int fd)
+{
+    alignas(inotify_event) char events[4096];
+    while (read(fd, events, sizeof events) > 0) { }
+}
 
 // Keys that were taken for a binding; their release does not go to the window either.
 std::set<uint32_t> s_consumedKeys;
@@ -68,13 +79,14 @@ void setSystemKeymap(wlr_keyboard* keyboard)
 {
     std::string layout, variant, options;
     const xkb_rule_names names = keyboardLayout(layout, variant, options);
-    xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    const std::unique_ptr<xkb_context, decltype(&xkb_context_unref)> context(
+        xkb_context_new(XKB_CONTEXT_NO_FLAGS), &xkb_context_unref);
+    std::unique_ptr<xkb_keymap, decltype(&xkb_keymap_unref)> keymap(
+        xkb_keymap_new_from_names(context.get(), &names, XKB_KEYMAP_COMPILE_NO_FLAGS), &xkb_keymap_unref);
+    // A layout xkbcommon does not know: its own default.
     if (!keymap)
-        keymap = xkb_keymap_new_from_names(context, nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    wlr_keyboard_set_keymap(keyboard, keymap);
-    xkb_keymap_unref(keymap);
-    xkb_context_unref(context);
+        keymap.reset(xkb_keymap_new_from_names(context.get(), nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS));
+    wlr_keyboard_set_keymap(keyboard, keymap.get());
 }
 
 bool isSuper(xkb_keysym_t sym)
@@ -257,27 +269,20 @@ void Server::watchKeyboardLayout()
     // Set for the session, it stays as it is.
     if (!environment("XKB_DEFAULT_LAYOUT").empty())
         return;
-    m_keyboardWatch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-    if (m_keyboardWatch < 0)
+    m_keyboardWatch = FileDescriptor(inotify_init1(IN_NONBLOCK | IN_CLOEXEC));
+    if (!m_keyboardWatch)
         return;
     // localectl writes the file anew; the folder may not be there before it first does.
     for (const char* folder : {"/etc/X11", "/etc/X11/xorg.conf.d"})
-        inotify_add_watch(m_keyboardWatch, folder, IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE);
-    m_keyboardWatchSource = wl_event_loop_add_fd(
-        eventLoop, m_keyboardWatch, WL_EVENT_READABLE,
-        [](int fd, uint32_t, void* data) {
-            alignas(inotify_event) char events[4096];
-            while (read(fd, events, sizeof events) > 0) { }
-            static_cast<Server*>(data)->keyboardLayoutChanged();
-            return 0;
-        },
-        this);
+        inotify_add_watch(m_keyboardWatch.get(), folder, WatchedChanges);
+    m_keyboardWatchSource = addReader<&Server::keyboardLayoutChanged>(eventLoop, m_keyboardWatch.get(), this);
 }
 
 void Server::keyboardLayoutChanged()
 {
+    drain(m_keyboardWatch.get());
     // The folder made since starting is watched from now on.
-    inotify_add_watch(m_keyboardWatch, "/etc/X11/xorg.conf.d", IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE);
+    inotify_add_watch(m_keyboardWatch.get(), "/etc/X11/xorg.conf.d", WatchedChanges);
     for (const auto& keyboard : m_keyboards) {
         if (!keyboard->virtualKeyboard)
             setSystemKeymap(keyboard->keyboard);
@@ -310,18 +315,9 @@ void Server::configurePointer(const Pointer& pointer) const
 
 void Server::watchSettings()
 {
-    m_settingsWatch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-    if (m_settingsWatch >= 0) {
-        m_settingsWatchSource = wl_event_loop_add_fd(
-            eventLoop, m_settingsWatch, WL_EVENT_READABLE,
-            [](int fd, uint32_t, void* data) {
-                alignas(inotify_event) char events[4096];
-                while (read(fd, events, sizeof events) > 0) { }
-                static_cast<Server*>(data)->applySettings();
-                return 0;
-            },
-            this);
-    }
+    m_settingsWatch = FileDescriptor(inotify_init1(IN_NONBLOCK | IN_CLOEXEC));
+    if (m_settingsWatch)
+        m_settingsWatchSource = addReader<&Server::applySettings>(eventLoop, m_settingsWatch.get(), this);
     applySettings();
 }
 
@@ -329,13 +325,12 @@ void Server::applySettings()
 {
     // The file's folder, or the nearest one there is, to see it made; editors save by
     // replacing the file, so the folder is watched rather than the file.
-    if (m_settingsWatch >= 0) {
+    if (m_settingsWatch) {
+        drain(m_settingsWatch.get());
         std::string folder = settingsPath();
         while (!folder.empty()) {
             folder.erase(folder.rfind('/'));
-            if (inotify_add_watch(m_settingsWatch, folder.empty() ? "/" : folder.c_str(),
-                    IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE)
-                >= 0)
+            if (inotify_add_watch(m_settingsWatch.get(), folder.empty() ? "/" : folder.c_str(), WatchedChanges) >= 0)
                 break;
         }
     }
@@ -890,10 +885,7 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
     if (tile == Tile::None) {
         if (m_snapPreview)
             wlr_scene_node_set_enabled(&m_snapPreview->node, false);
-        if (m_snapPreviewTimer) {
-            wl_event_source_remove(m_snapPreviewTimer);
-            m_snapPreviewTimer = nullptr;
-        }
+        m_snapPreviewTimer.reset();
         return;
     }
     wlr_box box = area;
@@ -914,15 +906,8 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
     m_snapPreviewFrom = m_grabbed ? m_grabbed->geometry() : box;
     m_snapPreviewTo = box;
     m_snapPreviewStart = monotonicMs();
-    if (!m_snapPreviewTimer) {
-        m_snapPreviewTimer = wl_event_loop_add_timer(
-            eventLoop,
-            [](void* data) {
-                static_cast<Server*>(data)->stepSnapPreview();
-                return 0;
-            },
-            this);
-    }
+    if (!m_snapPreviewTimer)
+        m_snapPreviewTimer = addTimer<&Server::stepSnapPreview>(eventLoop, this);
     stepSnapPreview();
 }
 
@@ -934,12 +919,10 @@ void Server::stepSnapPreview()
         std::max(1, at(m_snapPreviewFrom.height, m_snapPreviewTo.height)));
     wlr_scene_node_set_position(
         &m_snapPreview->node, at(m_snapPreviewFrom.x, m_snapPreviewTo.x), at(m_snapPreviewFrom.y, m_snapPreviewTo.y));
-    if (t < 1) {
-        wl_event_source_timer_update(m_snapPreviewTimer, FrameInterval);
-    } else {
-        wl_event_source_remove(m_snapPreviewTimer);
-        m_snapPreviewTimer = nullptr;
-    }
+    if (t < 1)
+        wl_event_source_timer_update(m_snapPreviewTimer.get(), FrameInterval);
+    else
+        m_snapPreviewTimer.reset();
 }
 
 } // namespace atlas

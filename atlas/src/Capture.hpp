@@ -1,6 +1,6 @@
 #pragma once
 
-#include "wlr.hpp"
+#include "Owned.hpp"
 
 namespace atlas {
 
@@ -20,7 +20,7 @@ public:
     wlr_ext_image_capture_source_v1* source() { return &m_source.base; }
     // The window as it is now, in a buffer locked for the caller, with where it is drawn
     // relative to the window in `extents`; null when it shows nothing.
-    wlr_buffer* snapshot(wlr_box& extents);
+    LockedBuffer snapshot(wlr_box& extents);
 
     // For wlroots, through the source --------------------------------------------------
 
@@ -45,11 +45,11 @@ private:
     wlr_box extents() const;
     double scale() const;
     // The window drawn into a buffer of the swapchain; null when there is nothing to draw.
-    wlr_buffer* render();
+    LockedBuffer render();
 
     View& m_view;
     Source m_source {};
-    wlr_swapchain* m_swapchain = nullptr; // of the size the window is drawn at
+    Swapchain m_swapchain; // of the size the window is drawn at
     void frame();
 
     wlr_box m_extents {};

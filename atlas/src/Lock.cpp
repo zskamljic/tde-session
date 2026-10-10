@@ -166,17 +166,15 @@ void Server::lockAbandoned()
     // The lock screen died without unlocking: the session stays locked, and a new one is
     // started to let the user back in.
     m_lock.reset();
-    if (!m_relock) {
-        m_relock = wl_event_loop_add_timer(
-            eventLoop,
-            [](void*) {
-                Server::spawn("tde-cerberus");
-                return 0;
-            },
-            nullptr);
-    }
+    if (!m_relock)
+        m_relock = addTimer<&Server::relock>(eventLoop, this);
     // A moment later, so one that fails at once is not started over and over.
-    wl_event_source_timer_update(m_relock, 1000);
+    wl_event_source_timer_update(m_relock.get(), 1000);
+}
+
+void Server::relock()
+{
+    spawn("tde-cerberus");
 }
 
 void Server::outputFramed(const Output& output)

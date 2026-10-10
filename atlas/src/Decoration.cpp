@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 namespace atlas {
 namespace {
@@ -43,21 +44,21 @@ void setColor(cairo_t* cr, const Color& color)
     cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
 }
 
-// Pixels drawn with cairo, handed to the scene as a buffer it can read.
+// Pixels drawn with cairo, handed to the scene as a buffer it can read. wlroots destroys it
+// once nothing holds it any more, along with the cairo surface it owns.
 struct CairoBuffer {
     wlr_buffer base;
     cairo_surface_t* surface;
+
+    CairoBuffer(cairo_surface_t* surface, int width, int height);
+    ~CairoBuffer() { cairo_surface_destroy(surface); }
 
     static CairoBuffer* from(wlr_buffer* buffer) { return reinterpret_cast<CairoBuffer*>(buffer); }
 };
 static_assert(offsetof(CairoBuffer, base) == 0);
 
 const wlr_buffer_impl CairoBufferImpl {
-    .destroy =
-        [](wlr_buffer* buffer) {
-            cairo_surface_destroy(CairoBuffer::from(buffer)->surface);
-            delete CairoBuffer::from(buffer);
-        },
+    .destroy = [](wlr_buffer* buffer) { const std::unique_ptr<CairoBuffer> owned(CairoBuffer::from(buffer)); },
     .get_dmabuf = nullptr,
     .get_shm = nullptr,
     .begin_data_ptr_access =
@@ -72,6 +73,13 @@ const wlr_buffer_impl CairoBufferImpl {
         },
     .end_data_ptr_access = [](wlr_buffer*) { },
 };
+
+CairoBuffer::CairoBuffer(cairo_surface_t* surface, int width, int height)
+    : base {}
+    , surface(surface)
+{
+    wlr_buffer_init(&base, &CairoBufferImpl, width, height);
+}
 
 void roundedTop(cairo_t* cr, double width, double height, double radius)
 {
@@ -165,14 +173,8 @@ wlr_box Decoration::buttonBox(Part part, int width) const
     return {x, (TitleHeight - ButtonSize) / 2, ButtonSize, ButtonSize};
 }
 
-void Decoration::draw(const State& state)
+void Decoration::paint(cairo_t* cr, const State& state) const
 {
-    const int width = int(std::ceil(state.width * state.scale));
-    const int height = int(std::ceil(TitleHeight * state.scale));
-    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-    cairo_t* cr = cairo_create(surface);
-    cairo_scale(cr, state.scale, state.scale);
-
     // The bar, its top corners rounded unless the window fills a tile of the screen.
     roundedTop(cr, state.width, TitleHeight, state.square ? 0 : CornerRadius);
     setColor(cr, Header);
@@ -185,10 +187,14 @@ void Decoration::draw(const State& state)
     const int buttons = SideMargin + 3 * ButtonSize + 2 * ButtonGap + SideMargin;
     const int titleWidth = state.width - 2 * buttons;
     if (titleWidth > 0 && !state.title.empty()) {
-        PangoLayout* layout = pango_cairo_create_layout(cr);
-        PangoFontDescription* font = pango_font_description_from_string("Sans Bold 10");
-        pango_layout_set_font_description(layout, font);
-        pango_font_description_free(font);
+        const std::unique_ptr<PangoLayout, decltype(&g_object_unref)> owned(
+            pango_cairo_create_layout(cr), &g_object_unref);
+        PangoLayout* layout = owned.get();
+        {
+            const std::unique_ptr<PangoFontDescription, decltype(&pango_font_description_free)> font(
+                pango_font_description_from_string("Sans Bold 10"), &pango_font_description_free);
+            pango_layout_set_font_description(layout, font.get());
+        }
         pango_layout_set_text(layout, state.title.c_str(), -1);
         pango_layout_set_width(layout, titleWidth * PANGO_SCALE);
         pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
@@ -200,7 +206,6 @@ void Decoration::draw(const State& state)
         setColor(cr, state.activated ? Text : DimText);
         cairo_move_to(cr, buttons, (TitleHeight - textHeight) / 2.0);
         pango_cairo_show_layout(cr, layout);
-        g_object_unref(layout);
     }
 
     for (const Part part : {Part::Minimize, Part::Maximize, Part::Close}) {
@@ -262,12 +267,22 @@ void Decoration::draw(const State& state)
         }
         cairo_stroke(cr);
     }
+}
 
-    cairo_destroy(cr);
+void Decoration::draw(const State& state)
+{
+    const int width = int(std::ceil(state.width * state.scale));
+    const int height = int(std::ceil(TitleHeight * state.scale));
+    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+    {
+        const std::unique_ptr<cairo_t, decltype(&cairo_destroy)> cr(cairo_create(surface), &cairo_destroy);
+        cairo_scale(cr.get(), state.scale, state.scale);
+        paint(cr.get(), state);
+    }
     cairo_surface_flush(surface);
 
-    auto* buffer = new CairoBuffer {.base = {}, .surface = surface};
-    wlr_buffer_init(&buffer->base, &CairoBufferImpl, width, height);
+    // Owned by wlroots from now on, which destroys it through CairoBufferImpl.
+    auto* buffer = std::make_unique<CairoBuffer>(surface, width, height).release();
     for (wlr_scene_buffer* node : {m_bar, m_captureBar}) {
         wlr_scene_buffer_set_buffer(node, &buffer->base);
         wlr_scene_buffer_set_dest_size(node, state.width, TitleHeight);

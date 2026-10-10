@@ -79,8 +79,6 @@ WindowCapture::~WindowCapture()
 {
     // Copies still going are told it is gone.
     wlr_ext_image_capture_source_v1_finish(&m_source.base);
-    if (m_swapchain)
-        wlr_swapchain_destroy(m_swapchain);
 }
 
 WindowCapture& WindowCapture::fromSource(wlr_ext_image_capture_source_v1* source)
@@ -130,16 +128,14 @@ void WindowCapture::start()
     // With alpha, and the modifier left to the allocator.
     wlr_drm_format_set formats {};
     wlr_drm_format_set_add(&formats, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_INVALID);
-    wlr_swapchain* swapchain
-        = wlr_swapchain_create(server.allocator, width, height, wlr_drm_format_set_get(&formats, DRM_FORMAT_ARGB8888));
+    Swapchain swapchain(
+        wlr_swapchain_create(server.allocator, width, height, wlr_drm_format_set_get(&formats, DRM_FORMAT_ARGB8888)));
     wlr_drm_format_set_finish(&formats);
     if (!swapchain)
         return;
-    if (m_swapchain)
-        wlr_swapchain_destroy(m_swapchain);
-    m_swapchain = swapchain;
+    m_swapchain = std::move(swapchain);
     // Tells the copies the size and formats it takes.
-    wlr_ext_image_capture_source_v1_set_constraints_from_swapchain(&m_source.base, m_swapchain, server.renderer);
+    wlr_ext_image_capture_source_v1_set_constraints_from_swapchain(&m_source.base, m_swapchain.get(), server.renderer);
 }
 
 void WindowCapture::requestFrame()
@@ -165,18 +161,17 @@ void WindowCapture::frame()
     m_waiting = false;
     // The window may have changed size since; the copies then take the new one.
     start();
-    wlr_buffer* buffer = render();
+    const LockedBuffer buffer = render();
     if (!buffer)
         return;
     pixman_region32_t damage;
     pixman_region32_init_rect(&damage, 0, 0, buffer->width, buffer->height);
-    FrameEvent event {.base = {.damage = &damage}, .buffer = buffer};
+    FrameEvent event {.base = {.damage = &damage}, .buffer = buffer.get()};
     wl_signal_emit_mutable(&m_source.base.events.frame, &event.base);
     pixman_region32_fini(&damage);
-    wlr_buffer_unlock(buffer);
 }
 
-wlr_buffer* WindowCapture::snapshot(wlr_box& extents)
+LockedBuffer WindowCapture::snapshot(wlr_box& extents)
 {
     start();
     extents = m_extents;
@@ -192,19 +187,17 @@ void WindowCapture::copy(wlr_ext_image_copy_capture_frame_v1* frame, wlr_buffer*
     wlr_ext_image_copy_capture_frame_v1_ready(frame, WL_OUTPUT_TRANSFORM_NORMAL, &now);
 }
 
-wlr_buffer* WindowCapture::render()
+LockedBuffer WindowCapture::render()
 {
     if (!m_swapchain)
         return nullptr;
     wlr_renderer* renderer = m_view.server.renderer;
-    wlr_buffer* buffer = wlr_swapchain_acquire(m_swapchain);
+    LockedBuffer buffer(wlr_swapchain_acquire(m_swapchain.get()));
     if (!buffer)
         return nullptr;
-    wlr_render_pass* pass = wlr_renderer_begin_buffer_pass(renderer, buffer, nullptr);
-    if (!pass) {
-        wlr_buffer_unlock(buffer);
+    wlr_render_pass* pass = wlr_renderer_begin_buffer_pass(renderer, buffer.get(), nullptr);
+    if (!pass)
         return nullptr;
-    }
 
     // Nothing first, then the parts from the bottom up.
     wlr_render_rect_options clear {};
@@ -212,7 +205,7 @@ wlr_buffer* WindowCapture::render()
     clear.color = {0, 0, 0, 0};
     clear.blend_mode = WLR_RENDER_BLEND_MODE_NONE;
     wlr_render_pass_add_rect(pass, &clear);
-    std::vector<wlr_texture*> textures; // made here, to destroy after drawing
+    std::vector<Texture> textures; // made here, kept until drawn
     for (const Part& part : partsOf(m_view.captureNode())) {
         // A program's buffer the scene made a texture of already: that one. Those in shared
         // memory are let go of once copied into it, so no other could be made.
@@ -221,9 +214,7 @@ wlr_buffer* WindowCapture::render()
             client && client->texture && client->texture->renderer == renderer) {
             texture = client->texture;
         } else {
-            texture = wlr_texture_from_buffer(renderer, part.buffer->buffer);
-            if (texture)
-                textures.push_back(texture);
+            texture = textures.emplace_back(wlr_texture_from_buffer(renderer, part.buffer->buffer)).get();
         }
         if (!texture)
             continue;
@@ -245,13 +236,8 @@ wlr_buffer* WindowCapture::render()
         options.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED;
         wlr_render_pass_add_texture(pass, &options);
     }
-    const bool drawn = wlr_render_pass_submit(pass);
-    for (wlr_texture* texture : textures)
-        wlr_texture_destroy(texture);
-    if (!drawn) {
-        wlr_buffer_unlock(buffer);
+    if (!wlr_render_pass_submit(pass))
         return nullptr;
-    }
     return buffer;
 }
 
