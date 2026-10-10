@@ -43,12 +43,15 @@ void DisplayLayouts::arrange()
     if (plugged == m_plugged)
         return;
     m_plugged = plugged;
+    // Other displays have tries of their own.
+    if (plugged != m_failedWith)
+        m_failures = 0;
     const shell::DisplayLayout* kept = m_settings.find(plugged);
     if (!kept)
         return;
     const std::vector<shell::DisplaySetting> wanted = shell::settingsOf(*kept, displays);
     if (!shell::sameSettings(wanted, m_displays.settings())) {
-        m_displays.apply(wanted, [this](bool succeeded) {
+        m_displays.apply(wanted, [this, plugged](bool succeeded) {
             // Displays that changed meanwhile, as a dock's do one by one, are arranged again
             // with the next change, or a little later when none comes.
             if (succeeded) {
@@ -57,6 +60,7 @@ void DisplayLayouts::arrange()
             }
             qWarning("tde-hermes: the displays could not be arranged as they were kept");
             m_plugged.clear();
+            m_failedWith = plugged;
             if (++m_failures <= 3)
                 m_retry.start();
         });

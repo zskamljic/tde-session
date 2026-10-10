@@ -34,7 +34,8 @@ private:
     QStringList m_plugged; // the displays arranged last
     QPointer<QScreen> m_primary;
     QTimer m_retry; // after arranging them failed
-    int m_failures = 0; // in a row
+    int m_failures = 0; // in a row, with the displays in m_failedWith
+    QStringList m_failedWith;
 };
 
 } // namespace hermes
