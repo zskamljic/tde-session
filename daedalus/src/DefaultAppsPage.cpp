@@ -207,8 +207,7 @@ DefaultAppsPage::DefaultAppsPage(QWidget* parent)
     for (const shell::Application& app : apps) {
         // Those run through another program, as Flatpak's are, cannot be named by theirs.
         const QString program = programOf(app);
-        if (app.categories.contains(u"TerminalEmulator"_s) && app.inMenus && program != u"flatpak"
-            && program != u"env")
+        if (app.categories.contains(u"TerminalEmulator"_s) && app.inMenus && program != u"flatpak" && program != u"env")
             terminal->addItem(shell::applicationIcon(&app, app.icon), app.name, program);
     }
     if (!chosen.isEmpty() && terminal->findData(chosen) < 0)
