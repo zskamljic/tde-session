@@ -1,0 +1,14 @@
+[Unit]
+Description=TDE overview and desktop (Argus)
+Documentation=https://github.com/zskamljic/tde-session
+# Up and down with the session, which starts it; the portal may start it too.
+PartOf=tde-session.target
+After=tde-session.target
+
+[Service]
+Type=dbus
+BusName=io.github.zskamljic.Argus
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/tde-argus
+# Back at once should it crash.
+Restart=on-failure
+RestartSec=1

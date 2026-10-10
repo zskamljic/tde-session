@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.freedesktop.impl.portal.desktop.tde.argus
 Exec=@CMAKE_INSTALL_PREFIX@/bin/tde-argus
+SystemdService=tde-argus.service

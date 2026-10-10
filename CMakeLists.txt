@@ -10,6 +10,7 @@ if(TDE_SESSION_BUILD_TESTS)
     enable_testing()
 endif()
 
+include(GNUInstallDirs)
 set(TDE_DATA_DIR ${CMAKE_INSTALL_PREFIX}/share/tde)
 configure_file(tde-session.in tde-session @ONLY)
 
@@ -18,10 +19,15 @@ install(FILES tde.desktop DESTINATION share/wayland-sessions)
 install(FILES data/autostart DESTINATION share/tde)
 install(FILES data/tde-session.target DESTINATION lib/systemd/user)
 install(FILES data/tde-portals.conf DESTINATION share/xdg-desktop-portal)
+# The bar and the overview, which the session's target starts and systemd starts again
+# should they crash.
+foreach(unit tde-hermes tde-argus)
+    configure_file(data/systemd/${unit}.service.in ${unit}.service @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${unit}.service DESTINATION lib/systemd/user)
+endforeach()
 # Screenshots and colours picked for other programs, by Argus.
 install(FILES data/portal/tde-argus.portal DESTINATION share/xdg-desktop-portal/portals)
 # What to share of the screen, asked by Argus too, as XDG_CURRENT_DESKTOP names the session.
-include(GNUInstallDirs)
 install(FILES data/portal/xdg-desktop-portal-wlr.conf
     DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/xdg-desktop-portal-wlr RENAME TDE)
 configure_file(data/dbus/org.freedesktop.impl.portal.desktop.tde.argus.service.in

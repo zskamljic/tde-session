@@ -157,12 +157,16 @@ KeePassXC or another Secret Service), to unlock the key without asking; one that
 works is forgotten and asked for again. Administrator passwords that polkit asks for are asked
 for by the bar.
 
-The programs started with the session are listed in `/usr/share/tde/autostart`; a copy in
-`~/.config/tde/autostart` takes its place. Programs that start at login the usual way, from
-`/etc/xdg/autostart` and `~/.config/autostart`, start too, as systemd services that
-`tde-session.target` brings up and takes down with the session; those meant only for other
-desktops do not. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and friends, or else from the
-system layout that `localectl`, and Daedalus, set; Atlas follows changes to it at once.
+Hermes and Argus run as the systemd user services `tde-hermes.service` and `tde-argus.service`,
+which `tde-session.target` starts; should either crash, systemd starts it again at once (a lock
+screen it started stays). Other programs started with the session are listed in
+`/usr/share/tde/autostart`; a copy in `~/.config/tde/autostart` takes its place, and should no
+longer start the bar and the overview, as copies made before did. Programs that start at login
+the usual way, from `/etc/xdg/autostart` and `~/.config/autostart`, start too, as systemd
+services that `tde-session.target` brings up and takes down with the session; those meant only
+for other desktops do not. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and friends, or else
+from the system layout that `localectl`, and Daedalus, set; Atlas follows changes to it at
+once.
 
 ## Testing in a virtual machine
 

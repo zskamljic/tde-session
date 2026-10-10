@@ -1,3 +1,3 @@
 # Started by the compositor once it is up; copy to ~/.config/tde/autostart to change it.
-tde-hermes &
-tde-argus &
+# The bar and the overview are not here: systemd starts them with the session, and again
+# should they crash (tde-hermes.service and tde-argus.service).
