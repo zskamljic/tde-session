@@ -2,6 +2,8 @@
 
 #include "AuthDialog.hpp"
 
+#include <LoginSession.hpp>
+
 #include <PolkitQt1/Subject>
 
 #include <QCoreApplication>
@@ -42,7 +44,11 @@ PolkitAgent::~PolkitAgent()
 
 bool PolkitAgent::start()
 {
-    const PolkitQt1::UnixSessionSubject session(QCoreApplication::applicationPid());
+    // For the user's session, which the bar may not be in when systemd runs it.
+    const auto login = shell::loginSession();
+    const PolkitQt1::UnixSessionSubject session = login
+        ? PolkitQt1::UnixSessionSubject(login->id)
+        : PolkitQt1::UnixSessionSubject(QCoreApplication::applicationPid());
     return registerListener(session, u"/io/github/zskamljic/Hermes/PolicyKit1/AuthenticationAgent"_s);
 }
 

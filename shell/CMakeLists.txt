@@ -38,6 +38,7 @@ add_library(tde-shell STATIC
     src/DesktopSettings.cpp
     src/Displays.cpp
     src/Icons.cpp
+    src/LoginSession.cpp
     src/PowerProfiles.cpp
     src/SessionConfig.cpp
     src/Wifi.cpp

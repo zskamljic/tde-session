@@ -1,5 +1,7 @@
 #include "Locking.hpp"
 
+#include <LoginSession.hpp>
+
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -31,14 +33,10 @@ Locking::Locking(QObject* parent)
     takeSleepInhibitor();
 
     // The session this bar belongs to, which `loginctl lock-session` asks to lock.
-    auto bySession = QDBusMessage::createMethodCall(Login, LoginPath, Manager, u"GetSessionByPID"_s);
-    bySession << uint(QCoreApplication::applicationPid());
-    const QDBusReply<QDBusObjectPath> session = bus.call(bySession);
-    if (session.isValid())
-        bus.connect(
-            Login, session.value().path(), u"org.freedesktop.login1.Session"_s, u"Lock"_s, this, SLOT(lockRequested()));
+    if (const auto session = shell::loginSession())
+        bus.connect(Login, session->path, u"org.freedesktop.login1.Session"_s, u"Lock"_s, this, SLOT(lockRequested()));
     else
-        qWarning("tde-hermes: no login session to lock on request: %s", qPrintable(session.error().message()));
+        qWarning("tde-hermes: no login session to lock on request");
 }
 
 Locking::~Locking() = default;
