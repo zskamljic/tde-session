@@ -2,6 +2,7 @@
 
 #include "Notifications.hpp"
 
+#include <Layouts.hpp>
 #include <tde/Theme.hpp>
 
 #include <LayerShellQt/Window>
@@ -311,12 +312,7 @@ NotificationList::NotificationList(NotificationServer& server, QWidget* parent)
 void NotificationList::rebuild()
 {
     // Everything but the stretch at the end.
-    while (m_cards->count() > 1) {
-        QLayoutItem* item = m_cards->takeAt(0);
-        if (QWidget* widget = item->widget())
-            widget->deleteLater();
-        delete item;
-    }
+    shell::clearLayout(*m_cards, 1);
     int shown = 0;
     for (const Notification& notification : m_server.notifications()) {
         if (notification.banner)

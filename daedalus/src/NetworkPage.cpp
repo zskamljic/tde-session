@@ -1,10 +1,10 @@
 #include "NetworkPage.hpp"
 
+#include <Layouts.hpp>
 #include <WifiPassword.hpp>
 #include <tde/Dialog.hpp>
-#include <tde/Toast.hpp>
-
 #include <tde/Theme.hpp>
+#include <tde/Toast.hpp>
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -129,15 +129,8 @@ void NetworkPage::sync()
     m_shownWired = m_wifi.wired();
     m_shownEnabled = m_wifi.isEnabled();
 
-    // Later, as the button that asked for this may be among them.
     QLayout* layout = m_content->layout();
-    while (QLayoutItem* item = layout->takeAt(0)) {
-        if (QWidget* widget = item->widget()) {
-            widget->hide();
-            widget->deleteLater();
-        }
-        delete item;
-    }
+    shell::clearLayout(*layout);
 
     if (!m_wifi.isAvailable() && m_shownWired.empty()) {
         auto* none = new Group({}, m_content);

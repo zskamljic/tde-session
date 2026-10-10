@@ -1,5 +1,6 @@
 #include "KeyboardPage.hpp"
 
+#include <Layouts.hpp>
 #include <tde/Dialog.hpp>
 
 #include <QComboBox>
@@ -167,14 +168,7 @@ void KeyboardPage::load()
 void KeyboardPage::sync()
 {
     QLayout* layout = m_content->layout();
-    // Later, as the button that asked for this may be among them.
-    while (QLayoutItem* item = layout->takeAt(0)) {
-        if (QWidget* widget = item->widget()) {
-            widget->hide();
-            widget->deleteLater();
-        }
-        delete item;
-    }
+    shell::clearLayout(*layout);
 
     auto* sources = new Group(u"Input Sources"_s, m_content);
     auto* add = new QPushButton(u"Add…"_s, sources);

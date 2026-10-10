@@ -1,5 +1,6 @@
 #include "BluetoothPage.hpp"
 
+#include <Layouts.hpp>
 #include <tde/Dialog.hpp>
 #include <tde/Toast.hpp>
 
@@ -233,14 +234,7 @@ void BluetoothPage::sync()
     }
 
     QLayout* layout = m_content->layout();
-    // Later, as the button that asked for this may be among them.
-    while (QLayoutItem* item = layout->takeAt(0)) {
-        if (QWidget* widget = item->widget()) {
-            widget->hide();
-            widget->deleteLater();
-        }
-        delete item;
-    }
+    shell::clearLayout(*layout);
 
     auto* top = new Group({}, m_content);
     layout->addWidget(top);

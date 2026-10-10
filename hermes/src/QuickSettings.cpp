@@ -5,6 +5,7 @@
 #include "SystemStatus.hpp"
 
 #include <Icons.hpp>
+#include <Layouts.hpp>
 #include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
@@ -414,10 +415,7 @@ void QuickSettings::syncBluetooth()
     if (devices == m_shownDevices)
         return;
     m_shownDevices = std::move(devices);
-    while (QLayoutItem* item = m_deviceList->takeAt(0)) {
-        delete item->widget();
-        delete item;
-    }
+    shell::clearLayout(*m_deviceList);
     for (const shell::BluetoothDevice& device : m_shownDevices) {
         QToolButton* button = listButton(m_devices,
             device.icon.isEmpty() ? u"bluetooth-active-symbolic"_s : device.icon + u"-symbolic"_s, device.name,
@@ -471,10 +469,7 @@ void QuickSettings::syncWifi()
     if (networks == m_shownNetworks)
         return;
     m_shownNetworks = std::move(networks);
-    while (QLayoutItem* item = m_networkList->takeAt(0)) {
-        delete item->widget();
-        delete item;
-    }
+    shell::clearLayout(*m_networkList);
     for (const shell::WifiNetwork& network : m_shownNetworks) {
         const QString state = network.active ? u"Connected"_s : network.needsPassword() ? u"Secured"_s : QString();
         QToolButton* button = listButton(m_networks, shell::wifiIconName(network.strength), network.ssid, state);
