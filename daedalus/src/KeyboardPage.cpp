@@ -236,11 +236,10 @@ void KeyboardPage::sync()
     if (compose->findData(composeNow) < 0)
         compose->insertItem(1, composeNow, composeNow);
     compose->setCurrentIndex(compose->findData(composeNow));
-    connect(compose, &QComboBox::activated, this, [this, compose] {
-        save(m_sources, withOption(m_options, u"compose"_s, compose->currentData().toString()));
-    });
-    special->addRow(u"Compose key"_s, u"Followed by others, types what is not on the keyboard: ' then e for é"_s,
-        compose);
+    connect(compose, &QComboBox::activated, this,
+        [this, compose] { save(m_sources, withOption(m_options, u"compose"_s, compose->currentData().toString())); });
+    special->addRow(
+        u"Compose key"_s, u"Followed by others, types what is not on the keyboard: ' then e for é"_s, compose);
     special->addNote(u"Right Alt is the AltGr key of many layouts, which then types only what Compose does."_s);
     layout->addWidget(special);
 }

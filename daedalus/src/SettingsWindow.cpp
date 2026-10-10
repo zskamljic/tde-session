@@ -19,8 +19,8 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QSignalBlocker>
 #include <QListWidget>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -129,8 +129,8 @@ void SettingsWindow::buildPages()
     };
     addPage(u"network"_s, u"network-wireless"_s, u"Network"_s, new NetworkPage(m_stack));
     addPage(u"bluetooth"_s, u"bluetooth-active"_s, u"Bluetooth"_s, new BluetoothPage(m_stack));
-    addPage(u"appearance"_s, u"preferences-desktop-wallpaper"_s, u"Appearance"_s,
-        new BackgroundPage(m_settings, m_stack));
+    addPage(
+        u"appearance"_s, u"preferences-desktop-wallpaper"_s, u"Appearance"_s, new BackgroundPage(m_settings, m_stack));
     addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));
     addPage(u"sound"_s, u"audio-speakers"_s, u"Sound"_s, new SoundPage(m_stack));
     addPage(u"power"_s, u"battery-good"_s, u"Power"_s, new PowerPage(m_settings, m_stack));

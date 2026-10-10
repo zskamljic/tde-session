@@ -141,8 +141,8 @@ QString edited(QString text, const QString& table, const QString& key, const QSt
     }
 
     // The table the file returns holds the others, one brace deep.
-    const QRegularExpressionMatch found = matchAt(
-        text, depth, uR"(\b%1\s*=\s*\{)"_s.arg(QRegularExpression::escape(table)), 1, 0, text.size());
+    const QRegularExpressionMatch found
+        = matchAt(text, depth, uR"(\b%1\s*=\s*\{)"_s.arg(QRegularExpression::escape(table)), 1, 0, text.size());
     if (!found.hasMatch())
         return text.insert(end, u"    %1 = { %2 = %3 },\n"_s.arg(table, key, value));
     const qsizetype open = found.capturedEnd() - 1;

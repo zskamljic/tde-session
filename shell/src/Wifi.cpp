@@ -289,7 +289,8 @@ std::optional<QString> Wifi::password(const QString& ssid) const
     const auto network = std::ranges::find(m_networks, ssid, &WifiNetwork::ssid);
     if (network == m_networks.end() || network->connection.isEmpty())
         return std::nullopt;
-    QDBusMessage call = QDBusMessage::createMethodCall(NetworkManager, network->connection, Connection, u"GetSecrets"_s);
+    QDBusMessage call
+        = QDBusMessage::createMethodCall(NetworkManager, network->connection, Connection, u"GetSecrets"_s);
     call << u"802-11-wireless-security"_s;
     call.setInteractiveAuthorizationAllowed(true);
     // Long enough for a password to be typed, when polkit asks for one.

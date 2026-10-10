@@ -500,8 +500,8 @@ void Overview::paint(QPainter& painter)
     };
     if (m_dragging) {
         const auto slot = std::ranges::find(m_slots, m_pressed, &Slot::id);
-        drawHeld(m_pressed, m_dragPos, slot == m_slots.end() ? 240.0 : double(std::max(slot->preview.width(),
-                                                                                  slot->preview.height())));
+        drawHeld(m_pressed, m_dragPos,
+            slot == m_slots.end() ? 240.0 : double(std::max(slot->preview.width(), slot->preview.height())));
     }
     if (m_dropId != 0) {
         // The whole screen is where it goes.

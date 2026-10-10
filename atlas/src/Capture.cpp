@@ -56,8 +56,8 @@ wlr_box boxOf(const Part& part)
 const wlr_ext_image_capture_source_v1_interface SourceImpl {
     .start = [](wlr_ext_image_capture_source_v1* source, bool) { WindowCapture::fromSource(source).start(); },
     .stop = nullptr,
-    .request_frame =
-        [](wlr_ext_image_capture_source_v1* source, bool) { WindowCapture::fromSource(source).requestFrame(); },
+    .request_frame
+    = [](wlr_ext_image_capture_source_v1* source, bool) { WindowCapture::fromSource(source).requestFrame(); },
     .copy_frame =
         [](wlr_ext_image_capture_source_v1* source, wlr_ext_image_copy_capture_frame_v1* frame,
             wlr_ext_image_capture_source_v1_frame_event* event) {

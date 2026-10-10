@@ -5,8 +5,8 @@
 
 #include <Catalog.hpp>
 
-#include <QRect>
 #include <QPoint>
+#include <QRect>
 #include <QWidget>
 
 #include <optional>

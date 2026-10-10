@@ -72,7 +72,8 @@ bool Fingerprint::call(const char* method, const char* types, const char* argume
 {
     sd_bus_error error = SD_BUS_ERROR_NULL;
     const int result = types
-        ? sd_bus_call_method(m_bus, Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, types, argument)
+        ? sd_bus_call_method(
+              m_bus, Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, types, argument)
         : sd_bus_call_method(m_bus, Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, "");
     if (result < 0)
         std::fprintf(stderr, "tde-cerberus: the fingerprint reader: %s: %s\n", method,

@@ -70,8 +70,8 @@ private slots:
     void setsTopLevelValues()
     {
         QTemporaryDir dir;
-        const QString path = write(dir,
-            "return {\n    -- terminal = \"kitty\",\n    appearance = { terminal = \"x\" },\n}\n");
+        const QString path
+            = write(dir, "return {\n    -- terminal = \"kitty\",\n    appearance = { terminal = \"x\" },\n}\n");
         QVERIFY(shell::setDesktopSetting(path, {}, u"terminal"_s, u"\"foot\""_s));
         QVERIFY(shell::setDesktopSetting(path, {}, u"terminal"_s, u"\"ghostty\""_s));
         QCOMPARE(read(path),

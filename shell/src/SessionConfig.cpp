@@ -236,8 +236,8 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"            speed = %1, scroll_speed = %2, natural_scroll = %3,"_s.arg(config.input.touchpad.speed)
             .arg(config.input.touchpad.scrollSpeed)
             .arg(boolText(config.input.touchpad.naturalScroll)),
-        u"            tap_to_click = %1, disable_while_typing = %2,"_s.arg(boolText(config.input.touchpad.tapToClick),
-            boolText(config.input.touchpad.disableWhileTyping)),
+        u"            tap_to_click = %1, disable_while_typing = %2,"_s.arg(
+            boolText(config.input.touchpad.tapToClick), boolText(config.input.touchpad.disableWhileTyping)),
         u"        },"_s,
         u"    },"_s,
         u"}"_s,

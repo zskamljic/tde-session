@@ -345,8 +345,8 @@ void Bar::rebuildPanels()
 QMenu* Bar::createQuickSettings()
 {
     auto* menu = new QMenu(this);
-    auto* panel = new QuickSettings(m_audio, m_brightness, m_network, m_wifi, m_bluetooth, m_battery, m_notifications,
-        m_profiles, menu);
+    auto* panel = new QuickSettings(
+        m_audio, m_brightness, m_network, m_wifi, m_bluetooth, m_battery, m_notifications, m_profiles, menu);
     auto* action = new QWidgetAction(menu);
     action->setDefaultWidget(panel);
     menu->addAction(action);
@@ -382,16 +382,16 @@ QMenu* Bar::createQuickSettings()
     // Written to the desktop's config, which every TDE program follows; GTK programs follow
     // the GNOME setting.
     connect(panel, &QuickSettings::darkStyleRequested, this, [](bool dark) {
-        if (!shell::setDesktopString(tde::desktopConfigPath(), u"appearance"_s, u"theme"_s,
-                dark ? u"arc-dark"_s : u"arc"_s))
+        if (!shell::setDesktopString(
+                tde::desktopConfigPath(), u"appearance"_s, u"theme"_s, dark ? u"arc-dark"_s : u"arc"_s))
             qWarning("tde-hermes: cannot write %s", qPrintable(tde::desktopConfigPath()));
         QProcess::startDetached(u"gsettings"_s,
             {u"set"_s, u"org.gnome.desktop.interface"_s, u"color-scheme"_s, dark ? u"prefer-dark"_s : u"default"_s});
     });
     connect(panel, &QuickSettings::screenshotRequested, this, then([] {
-        QDBusConnection::sessionBus().call(QDBusMessage::createMethodCall(u"io.github.zskamljic.Argus"_s,
-                                               u"/io/github/zskamljic/Argus/Screenshot"_s,
-                                               u"io.github.zskamljic.Argus.Screenshot"_s, u"Show"_s),
+        QDBusConnection::sessionBus().call(
+            QDBusMessage::createMethodCall(u"io.github.zskamljic.Argus"_s, u"/io/github/zskamljic/Argus/Screenshot"_s,
+                u"io.github.zskamljic.Argus.Screenshot"_s, u"Show"_s),
             QDBus::NoBlock);
     }));
     // A network never used before that wants a password has it asked for, once the menu is gone.
