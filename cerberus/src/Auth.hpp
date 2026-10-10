@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Owned.hpp"
 #include "Password.hpp"
 
 #include <atomic>
@@ -19,7 +20,7 @@ public:
     Authenticator(const Authenticator&) = delete;
     Authenticator& operator=(const Authenticator&) = delete;
 
-    int fd() const { return m_event; }
+    int fd() const { return m_event.get(); }
     bool busy() const { return m_thread.joinable(); }
 
     // Starts checking `password`, a copy of which is kept only until then.
@@ -31,7 +32,7 @@ private:
     void work();
 
     std::string m_user;
-    int m_event = -1;
+    FileDescriptor m_event;
     Password m_password;
     std::atomic<bool> m_accepted = false;
     std::thread m_thread;

@@ -1,10 +1,9 @@
 #include "Fingerprint.hpp"
 
-#include <systemd/sd-bus.h>
-
 #include <poll.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string_view>
 
@@ -14,47 +13,50 @@ namespace {
 constexpr const char* Service = "net.reactivated.Fprint";
 constexpr const char* DeviceInterface = "net.reactivated.Fprint.Device";
 
+// A list of strings sd-bus made, each freed and then the list.
+void freeStrings(char** strings)
+{
+    for (char** string = strings; *string; ++string)
+        std::free(*string);
+    std::free(strings);
+}
+
 } // namespace
 
 Fingerprint::Fingerprint(const std::string& user)
     : m_user(user)
 {
-    if (sd_bus_open_system(&m_bus) < 0) {
-        m_bus = nullptr;
+    using Message = Owned<sd_bus_message, sd_bus_message_unref>;
+    sd_bus* bus = nullptr;
+    if (sd_bus_open_system(&bus) < 0)
         return;
-    }
+    m_bus.reset(bus);
+
     // The reader fprintd uses by default, if there is one; fprintd starts when asked.
-    sd_bus_message* reply = nullptr;
+    sd_bus_message* answer = nullptr;
+    const int found = sd_bus_call_method(m_bus.get(), Service, "/net/reactivated/Fprint/Manager",
+        "net.reactivated.Fprint.Manager", "GetDefaultDevice", nullptr, &answer, "");
+    Message reply(answer);
     const char* path = nullptr;
-    if (sd_bus_call_method(m_bus, Service, "/net/reactivated/Fprint/Manager", "net.reactivated.Fprint.Manager",
-            "GetDefaultDevice", nullptr, &reply, "")
-            < 0
-        || sd_bus_message_read(reply, "o", &path) < 0) {
-        sd_bus_message_unref(reply);
+    if (found < 0 || sd_bus_message_read(reply.get(), "o", &path) < 0)
         return;
-    }
     m_device = path;
-    sd_bus_message_unref(reply);
 
-    // Only with fingers to match.
-    reply = nullptr;
-    if (sd_bus_call_method(m_bus, Service, m_device.c_str(), DeviceInterface, "ListEnrolledFingers", nullptr, &reply,
-            "s", m_user.c_str())
-        < 0) {
-        // No fingers is an error too, the usual one.
-        sd_bus_message_unref(reply);
+    // Only with fingers to match; none is an error too, the usual one.
+    answer = nullptr;
+    const int listed = sd_bus_call_method(m_bus.get(), Service, m_device.c_str(), DeviceInterface,
+        "ListEnrolledFingers", nullptr, &answer, "s", m_user.c_str());
+    reply.reset(answer);
+    char** names = nullptr;
+    if (listed < 0 || sd_bus_message_read_strv(reply.get(), &names) < 0)
         return;
-    }
-    char** fingers = nullptr;
-    const bool enrolled = sd_bus_message_read_strv(reply, &fingers) >= 0 && fingers && fingers[0];
-    for (char** finger = fingers; finger && *finger; ++finger)
-        free(*finger);
-    free(fingers);
-    sd_bus_message_unref(reply);
-    if (!enrolled)
+    const Owned<char*, freeStrings> fingers(names);
+    if (!fingers || !fingers.get()[0])
         return;
 
-    sd_bus_match_signal(m_bus, &m_signal, Service, m_device.c_str(), DeviceInterface, "VerifyStatus", status, this);
+    sd_bus_slot* slot = nullptr;
+    sd_bus_match_signal(m_bus.get(), &slot, Service, m_device.c_str(), DeviceInterface, "VerifyStatus", status, this);
+    m_signal.reset(slot);
     start();
 }
 
@@ -63,9 +65,6 @@ Fingerprint::~Fingerprint()
     stop();
     if (m_claimed)
         call("Release");
-    sd_bus_slot_unref(m_signal);
-    if (m_bus)
-        sd_bus_flush_close_unref(m_bus);
 }
 
 bool Fingerprint::call(const char* method, const char* types, const char* argument)
@@ -73,8 +72,8 @@ bool Fingerprint::call(const char* method, const char* types, const char* argume
     sd_bus_error error = SD_BUS_ERROR_NULL;
     const int result = types
         ? sd_bus_call_method(
-              m_bus, Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, types, argument)
-        : sd_bus_call_method(m_bus, Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, "");
+              m_bus.get(), Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, types, argument)
+        : sd_bus_call_method(m_bus.get(), Service, m_device.c_str(), DeviceInterface, method, &error, nullptr, "");
     if (result < 0)
         std::fprintf(stderr, "tde-cerberus: the fingerprint reader: %s: %s\n", method,
             error.message ? error.message : std::strerror(-result));
@@ -112,12 +111,12 @@ void Fingerprint::restart()
 
 int Fingerprint::fd() const
 {
-    return m_bus && m_signal ? sd_bus_get_fd(m_bus) : -1;
+    return m_bus && m_signal ? sd_bus_get_fd(m_bus.get()) : -1;
 }
 
 short Fingerprint::events() const
 {
-    const int events = m_bus ? sd_bus_get_events(m_bus) : 0;
+    const int events = m_bus ? sd_bus_get_events(m_bus.get()) : 0;
     return short(events > 0 ? events : POLLIN);
 }
 
@@ -150,7 +149,7 @@ bool Fingerprint::process()
     if (!m_bus)
         return false;
     const State before = m_state;
-    while (sd_bus_process(m_bus, nullptr) > 0) { }
+    while (sd_bus_process(m_bus.get(), nullptr) > 0) { }
     // Calls wait until the signal's handling is over.
     if (m_again) {
         m_again = false;

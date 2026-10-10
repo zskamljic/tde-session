@@ -7,28 +7,54 @@
 #include <cstdlib>
 #include <cstring>
 #include <string_view>
+#include <utility>
 
 namespace cerberus {
 namespace {
 
+// Replies to PAM, in memory of malloc() as PAM frees them once handed over; until then,
+// freed here.
+class Replies {
+public:
+    explicit Replies(int count)
+        : m_items(static_cast<pam_response*>(std::calloc(size_t(count), sizeof(pam_response))))
+        , m_count(count)
+    {
+    }
+    ~Replies()
+    {
+        if (!m_items)
+            return;
+        for (int i = 0; i < m_count; ++i)
+            std::free(m_items[i].resp);
+        std::free(m_items);
+    }
+    Replies(const Replies&) = delete;
+    Replies& operator=(const Replies&) = delete;
+
+    explicit operator bool() const { return m_items != nullptr; }
+    pam_response& operator[](int i) { return m_items[i]; }
+    pam_response* release() { return std::exchange(m_items, nullptr); }
+
+private:
+    pam_response* m_items;
+    int m_count;
+};
+
 // Answers PAM's questions: the password to those asked without echo, nothing to the rest.
 int converse(int count, const pam_message** messages, pam_response** responses, void* data)
 {
-    auto* replies = static_cast<pam_response*>(std::calloc(size_t(count), sizeof(pam_response)));
+    Replies replies(count);
     if (!replies)
         return PAM_BUF_ERR;
     for (int i = 0; i < count; ++i) {
         if (messages[i]->msg_style == PAM_PROMPT_ECHO_OFF || messages[i]->msg_style == PAM_PROMPT_ECHO_ON) {
             replies[i].resp = strdup(static_cast<const char*>(data));
-            if (!replies[i].resp) {
-                for (int j = 0; j < i; ++j)
-                    std::free(replies[j].resp);
-                std::free(replies);
+            if (!replies[i].resp)
                 return PAM_BUF_ERR;
-            }
         }
     }
-    *responses = replies;
+    *responses = replies.release();
     return PAM_SUCCESS;
 }
 
@@ -44,8 +70,6 @@ Authenticator::~Authenticator()
 {
     if (m_thread.joinable())
         m_thread.join();
-    if (m_event >= 0)
-        close(m_event);
 }
 
 void Authenticator::check(const Password& password)
@@ -70,13 +94,13 @@ void Authenticator::work()
     m_password.clear();
     m_accepted = accepted;
     const uint64_t one = 1;
-    [[maybe_unused]] const ssize_t written = write(m_event, &one, sizeof(one));
+    [[maybe_unused]] const ssize_t written = write(m_event.get(), &one, sizeof(one));
 }
 
 std::optional<bool> Authenticator::result()
 {
     uint64_t count = 0;
-    if (read(m_event, &count, sizeof(count)) != sizeof(count))
+    if (read(m_event.get(), &count, sizeof(count)) != sizeof(count))
         return std::nullopt;
     if (m_thread.joinable())
         m_thread.join();

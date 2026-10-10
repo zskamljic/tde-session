@@ -1,11 +1,10 @@
 #pragma once
 
-#include <string>
+#include "Owned.hpp"
 
-typedef struct sd_bus sd_bus;
-typedef struct sd_bus_slot sd_bus_slot;
-typedef struct sd_bus_message sd_bus_message;
-typedef struct sd_bus_error sd_bus_error;
+#include <systemd/sd-bus.h>
+
+#include <string>
 
 namespace cerberus {
 
@@ -44,8 +43,8 @@ private:
     void stop();
 
     std::string m_user;
-    sd_bus* m_bus = nullptr;
-    sd_bus_slot* m_signal = nullptr;
+    Owned<sd_bus, sd_bus_flush_close_unref> m_bus;
+    Owned<sd_bus_slot, sd_bus_slot_unref> m_signal; // fprintd's word on a finger, while it is listened to
     std::string m_device; // its object path
     State m_state = State::Unavailable;
     bool m_claimed = false;

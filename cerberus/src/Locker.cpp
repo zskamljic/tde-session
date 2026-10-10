@@ -3,6 +3,7 @@
 #include "Auth.hpp"
 #include "Face.hpp"
 #include "Fingerprint.hpp"
+#include "Owned.hpp"
 #include "Password.hpp"
 
 #include "ext-session-lock-v1-client-protocol.h"
@@ -27,12 +28,6 @@
 
 namespace cerberus {
 namespace {
-
-// Owns a Wayland object and destroys it with the request its protocol provides.
-template <typename T, void (*Destroy)(T*)> struct Deleter {
-    void operator()(T* object) const { Destroy(object); }
-};
-template <typename T, void (*Destroy)(T*)> using Owned = std::unique_ptr<T, Deleter<T, Destroy>>;
 
 struct XkbDeleter {
     void operator()(xkb_context* context) const { xkb_context_unref(context); }
@@ -100,7 +95,6 @@ public:
         : m_seconds(seconds)
     {
     }
-    ~Locker();
     Locker(const Locker&) = delete;
     Locker& operator=(const Locker&) = delete;
 
@@ -144,8 +138,8 @@ private:
     int m_repeatRate = 25;
     int m_repeatDelay = 600;
     uint32_t m_repeatKey = 0;
-    int m_repeatTimer = -1;
-    int m_clockTimer = -1;
+    FileDescriptor m_repeatTimer;
+    FileDescriptor m_clockTimer;
 
     std::unique_ptr<Authenticator> m_auth;
     std::unique_ptr<Fingerprint> m_fingerprint;
@@ -157,14 +151,6 @@ private:
     bool m_finished = false;
     bool m_unlocked = false;
 };
-
-Locker::~Locker()
-{
-    for (const int fd : {m_repeatTimer, m_clockTimer}) {
-        if (fd >= 0)
-            close(fd);
-    }
-}
 
 void Locker::global(void* data, wl_registry* registry, uint32_t name, const char* interface, uint32_t version)
 {
@@ -252,33 +238,27 @@ void Locker::draw(Output& output)
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width);
     const std::size_t size = std::size_t(stride) * std::size_t(height);
 
-    const int fd = memfd_create("tde-cerberus", MFD_CLOEXEC);
-    if (fd < 0 || ftruncate(fd, off_t(size)) < 0) {
-        if (fd >= 0)
-            close(fd);
+    const FileDescriptor fd(memfd_create("tde-cerberus", MFD_CLOEXEC));
+    if (!fd || ftruncate(fd.get(), off_t(size)) < 0)
         return;
-    }
     auto buffer = std::make_unique<Buffer>();
     buffer->owner = this;
     buffer->size = size;
-    buffer->data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    buffer->data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd.get(), 0);
     if (buffer->data == MAP_FAILED) {
         buffer->data = nullptr;
-        close(fd);
         return;
     }
-    wl_shm_pool* pool = wl_shm_create_pool(m_shm.get(), fd, int(size));
-    buffer->buffer.reset(wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_ARGB8888));
-    wl_shm_pool_destroy(pool);
-    close(fd);
+    const Owned<wl_shm_pool, wl_shm_pool_destroy> pool(wl_shm_create_pool(m_shm.get(), fd.get(), int(size)));
+    buffer->buffer.reset(wl_shm_pool_create_buffer(pool.get(), 0, width, height, stride, WL_SHM_FORMAT_ARGB8888));
 
-    cairo_surface_t* surface = cairo_image_surface_create_for_data(
-        static_cast<unsigned char*>(buffer->data), CAIRO_FORMAT_ARGB32, width, height, stride);
-    cairo_t* cr = cairo_create(surface);
-    cairo_scale(cr, output.scale, output.scale);
-    cerberus::draw(cr, output.width, output.height, m_face);
-    cairo_destroy(cr);
-    cairo_surface_destroy(surface);
+    {
+        const Owned<cairo_surface_t, cairo_surface_destroy> surface(cairo_image_surface_create_for_data(
+            static_cast<unsigned char*>(buffer->data), CAIRO_FORMAT_ARGB32, width, height, stride));
+        const Owned<cairo_t, cairo_destroy> cr(cairo_create(surface.get()));
+        cairo_scale(cr.get(), output.scale, output.scale);
+        cerberus::draw(cr.get(), output.width, output.height, m_face);
+    }
 
     static const wl_buffer_listener listener {
         .release =
@@ -314,9 +294,9 @@ void Locker::setUpSeat(uint32_t capabilities)
         static const wl_keyboard_listener listener {
             .keymap =
                 [](void* data, wl_keyboard*, uint32_t format, int32_t fd, uint32_t size) {
+                    const FileDescriptor keymap(fd);
                     if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
-                        static_cast<Locker*>(data)->keymap(fd, size);
-                    close(fd);
+                        static_cast<Locker*>(data)->keymap(keymap.get(), size);
                 },
             .enter = [](void*, wl_keyboard*, uint32_t, wl_surface*, wl_array*) { },
             .leave = [](void* data, wl_keyboard*, uint32_t, wl_surface*) { static_cast<Locker*>(data)->stopRepeat(); },
@@ -447,14 +427,14 @@ void Locker::startRepeat(uint32_t key)
     timer.it_value.tv_sec = m_repeatDelay / 1000;
     timer.it_value.tv_nsec = (m_repeatDelay % 1000) * 1'000'000L;
     timer.it_interval.tv_nsec = 1'000'000'000L / m_repeatRate;
-    timerfd_settime(m_repeatTimer, 0, &timer, nullptr);
+    timerfd_settime(m_repeatTimer.get(), 0, &timer, nullptr);
 }
 
 void Locker::stopRepeat()
 {
     m_repeatKey = 0;
     const itimerspec off {};
-    timerfd_settime(m_repeatTimer, 0, &off, nullptr);
+    timerfd_settime(m_repeatTimer.get(), 0, &off, nullptr);
 }
 
 void Locker::fingerprintChanged()
@@ -538,12 +518,12 @@ int Locker::run()
     // The outputs' scales and the keymap.
     wl_display_roundtrip(m_display);
 
-    m_repeatTimer = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
-    m_clockTimer = timerfd_create(CLOCK_REALTIME, TFD_CLOEXEC | TFD_NONBLOCK);
+    m_repeatTimer = FileDescriptor(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
+    m_clockTimer = FileDescriptor(timerfd_create(CLOCK_REALTIME, TFD_CLOEXEC | TFD_NONBLOCK));
     itimerspec everySecond {};
     everySecond.it_value.tv_sec = 1;
     everySecond.it_interval.tv_sec = 1;
-    timerfd_settime(m_clockTimer, 0, &everySecond, nullptr);
+    timerfd_settime(m_clockTimer.get(), 0, &everySecond, nullptr);
     m_face.time = timeText(m_seconds);
     m_face.date = formatted("%A, %-d %B");
 
@@ -564,8 +544,8 @@ int Locker::run()
         pollfd fds[] {
             {wl_display_get_fd(m_display), POLLIN, 0},
             {m_auth->fd(), POLLIN, 0},
-            {m_repeatTimer, POLLIN, 0},
-            {m_clockTimer, POLLIN, 0},
+            {m_repeatTimer.get(), POLLIN, 0},
+            {m_clockTimer.get(), POLLIN, 0},
             {m_fingerprint->fd(), m_fingerprint->events(), 0},
         };
         if (poll(fds, std::size(fds), -1) < 0) {
@@ -582,11 +562,12 @@ int Locker::run()
             break;
 
         uint64_t expirations = 0;
-        if ((fds[2].revents & POLLIN) && read(m_repeatTimer, &expirations, sizeof(expirations)) > 0 && m_repeatKey) {
+        if ((fds[2].revents & POLLIN) && read(m_repeatTimer.get(), &expirations, sizeof(expirations)) > 0
+            && m_repeatKey) {
             for (uint64_t i = 0; i < expirations; ++i)
                 press(xkb_state_key_get_one_sym(m_state.get(), m_repeatKey + 8), m_repeatKey);
         }
-        if ((fds[3].revents & POLLIN) && read(m_clockTimer, &expirations, sizeof(expirations)) > 0)
+        if ((fds[3].revents & POLLIN) && read(m_clockTimer.get(), &expirations, sizeof(expirations)) > 0)
             tickClock();
         if (fds[1].revents & POLLIN) {
             if (const auto accepted = m_auth->result())
