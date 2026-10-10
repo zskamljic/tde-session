@@ -1,12 +1,13 @@
 #include "LoginSession.hpp"
 
+#include "BusProperties.hpp"
+
 #include <QCoreApplication>
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusReply>
-#include <QDBusVariant>
 
 #include <unistd.h>
 
@@ -17,14 +18,9 @@ namespace {
 
 const QString Login = u"org.freedesktop.login1"_s;
 const QString Manager = u"org.freedesktop.login1.Manager"_s;
-const QString Properties = u"org.freedesktop.DBus.Properties"_s;
-
 QVariant property(const QString& path, const QString& interface, const QString& name)
 {
-    QDBusMessage call = QDBusMessage::createMethodCall(Login, path, Properties, u"Get"_s);
-    call << interface << name;
-    const QDBusReply<QDBusVariant> reply = QDBusConnection::systemBus().call(call);
-    return reply.isValid() ? reply.value().variant() : QVariant();
+    return shell::property(QDBusConnection::systemBus(), Login, path, interface, name);
 }
 
 } // namespace

@@ -1,5 +1,7 @@
 #include "Wifi.hpp"
 
+#include "BusProperties.hpp"
+
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -41,10 +43,7 @@ using ConnectionSettings = QMap<QString, QVariantMap>;
 
 QVariantMap properties(const QString& path, const QString& interface)
 {
-    QDBusMessage call = QDBusMessage::createMethodCall(NetworkManager, path, Properties, u"GetAll"_s);
-    call << interface;
-    const QDBusReply<QVariantMap> reply = QDBusConnection::systemBus().call(call);
-    return reply.isValid() ? reply.value() : QVariantMap();
+    return allProperties(QDBusConnection::systemBus(), NetworkManager, path, interface);
 }
 
 QList<QDBusObjectPath> paths(const QVariant& value)

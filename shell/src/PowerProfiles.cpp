@@ -1,5 +1,7 @@
 #include "PowerProfiles.hpp"
 
+#include "BusProperties.hpp"
+
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -44,13 +46,11 @@ PowerProfiles::PowerProfiles(QObject* parent)
 
 void PowerProfiles::refresh()
 {
-    QDBusMessage call = QDBusMessage::createMethodCall(m_service, m_path, Properties, u"GetAll"_s);
-    call << m_interface;
-    const QDBusReply<QVariantMap> reply = QDBusConnection::systemBus().call(call, QDBus::Block, 2000);
-    if (!reply.isValid())
+    const QVariantMap properties = allProperties(QDBusConnection::systemBus(), m_service, m_path, m_interface);
+    if (properties.isEmpty())
         return;
-    const QString active = reply.value().value(u"ActiveProfile"_s).toString();
-    const auto profiles = qdbus_cast<QList<QVariantMap>>(reply.value().value(u"Profiles"_s));
+    const QString active = properties.value(u"ActiveProfile"_s).toString();
+    const auto profiles = qdbus_cast<QList<QVariantMap>>(properties.value(u"Profiles"_s));
     QStringList offered;
     for (const QString& name : Order) {
         if (std::ranges::any_of(profiles, [&](const QVariantMap& p) { return p.value(u"Profile"_s) == name; }))

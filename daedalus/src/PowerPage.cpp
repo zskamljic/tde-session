@@ -1,5 +1,7 @@
 #include "PowerPage.hpp"
 
+#include <BusProperties.hpp>
+
 #include <QComboBox>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -16,16 +18,6 @@ using namespace Qt::StringLiterals;
 
 namespace daedalus {
 namespace {
-
-const QString Properties = u"org.freedesktop.DBus.Properties"_s;
-
-QVariant busProperty(const QString& service, const QString& path, const QString& interface, const QString& name)
-{
-    QDBusMessage call = QDBusMessage::createMethodCall(service, path, Properties, u"Get"_s);
-    call << interface << name;
-    const QDBusReply<QDBusVariant> reply = QDBusConnection::systemBus().call(call);
-    return reply.isValid() ? reply.value().variant() : QVariant();
-}
 
 QString minutesText(int minutes)
 {
@@ -50,12 +42,9 @@ QComboBox* times(std::vector<int> choices, int current, const QString& never, QW
 const QString UPower = u"org.freedesktop.UPower"_s;
 const QString DeviceInterface = u"org.freedesktop.UPower.Device"_s;
 
-QVariantMap allProperties(const QString& path)
+QVariantMap deviceProperties(const QString& path)
 {
-    QDBusMessage call = QDBusMessage::createMethodCall(UPower, path, Properties, u"GetAll"_s);
-    call << DeviceInterface;
-    const QDBusReply<QVariantMap> reply = QDBusConnection::systemBus().call(call, QDBus::Block, 2000);
-    return reply.isValid() ? reply.value() : QVariantMap();
+    return shell::allProperties(QDBusConnection::systemBus(), UPower, path, DeviceInterface);
 }
 
 // The batteries of the computer itself, not those of mice and headphones.
@@ -67,7 +56,7 @@ QList<QVariantMap> batteries()
     if (!devices.isValid())
         return found;
     for (const QDBusObjectPath& path : devices.value()) {
-        QVariantMap properties = allProperties(path.path());
+        QVariantMap properties = deviceProperties(path.path());
         if (properties.value(u"Type"_s).toUInt() == 2 && properties.value(u"PowerSupply"_s).toBool()
             && properties.value(u"IsPresent"_s).toBool())
             found << properties;
@@ -140,10 +129,9 @@ PowerPage::PowerPage(Settings& settings, QWidget* parent)
         group->addRow(u"State"_s, {}, rows.state);
         group->addRow(u"Health"_s, u"How much it holds of what it did when new"_s, rows.health);
         group->addRow(u"Power"_s, u"Being drawn from it, or charged into it"_s, rows.rate);
-        const QString model
-            = QStringList {battery.value(u"Vendor"_s).toString(), battery.value(u"Model"_s).toString()}
-                  .join(u' ')
-                  .trimmed();
+        const QString model = QStringList {battery.value(u"Vendor"_s).toString(), battery.value(u"Model"_s).toString()}
+                                  .join(u' ')
+                                  .trimmed();
         if (!model.isEmpty()) {
             QLabel* label = valueLabel(this);
             label->setText(model);
@@ -203,8 +191,8 @@ PowerPage::PowerPage(Settings& settings, QWidget* parent)
         settings.save();
     });
     // A computer without a battery is always plugged in.
-    const bool battery = busProperty(u"org.freedesktop.UPower"_s, u"/org/freedesktop/UPower/devices/DisplayDevice"_s,
-        u"org.freedesktop.UPower.Device"_s, u"IsPresent"_s)
+    const bool battery = shell::property(QDBusConnection::systemBus(), UPower,
+        u"/org/freedesktop/UPower/devices/DisplayDevice"_s, u"org.freedesktop.UPower.Device"_s, u"IsPresent"_s)
                              .toBool();
     saving->addRow(battery ? u"Automatic suspend when plugged in"_s : u"Automatic suspend"_s,
         u"Puts the computer to sleep after a while without input"_s, pluggedIn);

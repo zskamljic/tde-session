@@ -1,5 +1,7 @@
 #include "SystemStatus.hpp"
 
+#include <BusProperties.hpp>
+
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -22,10 +24,7 @@ const QString Properties = u"org.freedesktop.DBus.Properties"_s;
 
 QVariantMap allProperties(const QString& service, const QString& path, const QString& interface)
 {
-    auto message = QDBusMessage::createMethodCall(service, path, Properties, u"GetAll"_s);
-    message << interface;
-    const QDBusReply<QVariantMap> reply = QDBusConnection::systemBus().call(message, QDBus::Block, 2000);
-    return reply.isValid() ? reply.value() : QVariantMap();
+    return shell::allProperties(QDBusConnection::systemBus(), service, path, interface);
 }
 
 QString duration(qint64 seconds)

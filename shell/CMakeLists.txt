@@ -34,6 +34,7 @@ endforeach()
 add_library(tde-shell STATIC
     src/Applications.cpp
     src/Bluetooth.cpp
+    src/BusProperties.cpp
     src/Catalog.cpp
     src/DesktopSettings.cpp
     src/Displays.cpp

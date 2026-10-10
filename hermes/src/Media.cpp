@@ -1,5 +1,7 @@
 #include "Media.hpp"
 
+#include <BusProperties.hpp>
+
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -21,12 +23,10 @@ const QString Root = u"org.mpris.MediaPlayer2"_s;
 const QString PlayerInterface = u"org.mpris.MediaPlayer2.Player"_s;
 const QString Properties = u"org.freedesktop.DBus.Properties"_s;
 
-QVariantMap allProperties(const QString& service, const QString& interface)
+// A player's properties, which it should not take long to tell.
+QVariantMap propertiesOf(const QString& service, const QString& interface)
 {
-    QDBusMessage call = QDBusMessage::createMethodCall(service, Path, Properties, u"GetAll"_s);
-    call << interface;
-    const QDBusReply<QVariantMap> reply = QDBusConnection::sessionBus().call(call, QDBus::Block, 1000);
-    return reply.isValid() ? reply.value() : QVariantMap();
+    return shell::allProperties(QDBusConnection::sessionBus(), service, Path, interface, 1000);
 }
 
 // Metadata comes as a{sv} wrapped in a D-Bus argument.
@@ -75,7 +75,7 @@ void Media::add(const QString& service, const QString& owner)
     Player player;
     player.service = service;
     player.owner = owner;
-    const QVariantMap root = allProperties(service, Root);
+    const QVariantMap root = propertiesOf(service, Root);
     player.identity = root.value(u"Identity"_s).toString();
     player.desktopEntry = root.value(u"DesktopEntry"_s).toString();
     refresh(player);
@@ -90,7 +90,7 @@ void Media::add(const QString& service, const QString& owner)
 
 void Media::refresh(Player& player)
 {
-    const QVariantMap properties = allProperties(player.service, PlayerInterface);
+    const QVariantMap properties = propertiesOf(player.service, PlayerInterface);
     const QVariantMap metadata = metadataOf(properties.value(u"Metadata"_s));
     player.title = metadata.value(u"xesam:title"_s).toString();
     player.artist = metadata.value(u"xesam:artist"_s).toStringList().join(u", "_s);

@@ -1,5 +1,7 @@
 #include "PowerSaving.hpp"
 
+#include <BusProperties.hpp>
+
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusReply>
@@ -73,10 +75,8 @@ void PowerSaving::setTimes(int blank, int suspend, int suspendOnBattery)
 
 void PowerSaving::powerSourceChanged()
 {
-    QDBusMessage call = QDBusMessage::createMethodCall(UPower, UPowerPath, Properties, u"Get"_s);
-    call << UPower << u"OnBattery"_s;
-    const QDBusReply<QDBusVariant> reply = QDBusConnection::systemBus().call(call);
-    const bool onBattery = reply.isValid() && reply.value().variant().toBool();
+    const bool onBattery
+        = shell::property(QDBusConnection::systemBus(), UPower, UPowerPath, UPower, u"OnBattery"_s).toBool();
     if (onBattery == m_onBattery)
         return;
     m_onBattery = onBattery;
