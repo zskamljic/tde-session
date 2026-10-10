@@ -5,8 +5,8 @@
 #include <QComboBox>
 #include <QDBusConnection>
 #include <QDBusMessage>
-#include <QDBusReply>
 #include <QDBusObjectPath>
+#include <QDBusReply>
 #include <QDBusVariant>
 #include <QLabel>
 #include <QTimer>
@@ -125,43 +125,52 @@ PowerPage::PowerPage(Settings& settings, QWidget* parent)
     auto& power = settings.config.power;
 
     // Each battery: how full, what it is doing, how worn and how much it gives.
+    struct Shown {
+        QString path; // as the kernel names it
+        QLabel* charge;
+        QLabel* state;
+        QLabel* health;
+        QLabel* rate;
+    };
+    std::vector<Shown> shown;
     const QList<QVariantMap> found = batteries();
     for (qsizetype i = 0; i < found.size(); ++i) {
+        const QVariantMap& battery = found[i];
         Group* group = addGroup(found.size() == 1 ? u"Battery"_s : u"Battery %1"_s.arg(i + 1));
-        QLabel* charge = valueLabel(this);
-        QLabel* state = valueLabel(this);
-        QLabel* health = valueLabel(this);
-        QLabel* rate = valueLabel(this);
-        group->addRow(u"Charge"_s, {}, charge);
-        group->addRow(u"State"_s, {}, state);
-        group->addRow(u"Health"_s, u"How much it holds of what it did when new"_s, health);
-        group->addRow(u"Power"_s, u"Being drawn from it, or charged into it"_s, rate);
-        const QVariantMap& first = found[i];
+        const Shown& rows = shown.emplace_back(Shown {battery.value(u"NativePath"_s).toString(), valueLabel(this),
+            valueLabel(this), valueLabel(this), valueLabel(this)});
+        group->addRow(u"Charge"_s, {}, rows.charge);
+        group->addRow(u"State"_s, {}, rows.state);
+        group->addRow(u"Health"_s, u"How much it holds of what it did when new"_s, rows.health);
+        group->addRow(u"Power"_s, u"Being drawn from it, or charged into it"_s, rows.rate);
         const QString model
-            = QStringList {first.value(u"Vendor"_s).toString(), first.value(u"Model"_s).toString()}.join(u' ').trimmed();
-        if (!model.isEmpty())
-            group->addRow(u"Model"_s, {}, [&] {
-                QLabel* label = valueLabel(this);
-                label->setText(model);
-                return label;
-            }());
-        const QString path = first.value(u"NativePath"_s).toString();
-        const auto update = [=] {
-            QVariantMap battery;
-            for (const QVariantMap& now : batteries()) {
-                if (now.value(u"NativePath"_s) == path)
-                    battery = now;
-            }
-            if (battery.isEmpty())
+            = QStringList {battery.value(u"Vendor"_s).toString(), battery.value(u"Model"_s).toString()}
+                  .join(u' ')
+                  .trimmed();
+        if (!model.isEmpty()) {
+            QLabel* label = valueLabel(this);
+            label->setText(model);
+            group->addRow(u"Model"_s, {}, label);
+        }
+    }
+    if (!shown.empty()) {
+        // As they are now, and again every few seconds while the page shows.
+        const auto update = [this, shown] {
+            if (!isVisible())
                 return;
-            charge->setText(u"%1%"_s.arg(std::lround(battery.value(u"Percentage"_s).toDouble())));
-            state->setText(stateText(battery));
-            const double capacity = battery.value(u"Capacity"_s).toDouble();
-            health->setText(capacity > 0 ? u"%1%"_s.arg(std::lround(capacity)) : u"Not known"_s);
-            const double watts = battery.value(u"EnergyRate"_s).toDouble();
-            rate->setText(watts > 0 ? u"%1 W"_s.arg(watts, 0, 'f', 1) : u"None"_s);
+            for (const QVariantMap& battery : batteries()) {
+                const auto rows = std::ranges::find(shown, battery.value(u"NativePath"_s).toString(), &Shown::path);
+                if (rows == shown.end())
+                    continue;
+                rows->charge->setText(u"%1%"_s.arg(std::lround(battery.value(u"Percentage"_s).toDouble())));
+                rows->state->setText(stateText(battery));
+                const double capacity = battery.value(u"Capacity"_s).toDouble();
+                rows->health->setText(capacity > 0 ? u"%1%"_s.arg(std::lround(capacity)) : u"Not known"_s);
+                const double watts = battery.value(u"EnergyRate"_s).toDouble();
+                rows->rate->setText(watts > 0 ? u"%1 W"_s.arg(watts, 0, 'f', 1) : u"None"_s);
+            }
         };
-        update();
+        m_batteryUpdate = update;
         auto* timer = new QTimer(this);
         connect(timer, &QTimer::timeout, this, update);
         timer->start(5000);
@@ -213,6 +222,13 @@ PowerPage::PowerPage(Settings& settings, QWidget* parent)
         saving->addRow(u"Automatic suspend on battery"_s, {}, onBattery);
     }
     saving->addNote(u"Programs such as video players keep the screens on, and the computer awake, while they play."_s);
+}
+
+void PowerPage::showEvent(QShowEvent* event)
+{
+    Page::showEvent(event);
+    if (m_batteryUpdate)
+        m_batteryUpdate();
 }
 
 } // namespace daedalus
