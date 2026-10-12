@@ -54,7 +54,10 @@ class BackgroundPage : public Page {
 public:
     explicit BackgroundPage(Settings& settings, QWidget* parent = nullptr);
 
+    void desktopChanged(const tde::DesktopConfig& config) override;
+
 private:
+    void addStyleGroup();
     void fillPictures();
     void loadNextThumbnail();
     void addPicture();
@@ -73,6 +76,10 @@ private:
     std::vector<PictureTile*> m_tiles;
     size_t m_nextThumbnail = 0;
     QComboBox* m_mode = nullptr;
+    QComboBox* m_theme = nullptr;
+    QComboBox* m_icons = nullptr;
+    QComboBox* m_cursors = nullptr;
+    QComboBox* m_cursorSize = nullptr;
     QPushButton* m_color = nullptr;
 };
 

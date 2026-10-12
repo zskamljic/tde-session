@@ -1,8 +1,11 @@
 #include "BackgroundPage.hpp"
 
+#include "Themes.hpp"
+
 #include <DesktopSettings.hpp>
 
 #include <tde/DesktopConfig.hpp>
+#include <tde/LuaConfig.hpp>
 #include <tde/Theme.hpp>
 
 #include <QColorDialog>
@@ -19,9 +22,9 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QProcess>
 #include <QPushButton>
 #include <QScreen>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -210,23 +213,7 @@ BackgroundPage::BackgroundPage(Settings& settings, QWidget* parent)
     if (!background.image.isEmpty())
         m_picture = shell::loadBackgroundPicture(background.image, previewScale());
 
-    // The look of the TDE applications and the shell; GTK programs follow between light and dark.
-    auto* theme = new QComboBox(this);
-    theme->addItem(u"Dark"_s, u"arc-dark"_s);
-    theme->addItem(u"Light"_s, u"arc"_s);
-    theme->addItem(u"Follow the System"_s, u"system"_s);
-    theme->setCurrentIndex(std::max(0, theme->findData(tde::loadDesktopConfig().appearance.theme)));
-    connect(theme, &QComboBox::activated, this, [this, theme] {
-        const QString name = theme->currentData().toString();
-        if (!shell::setDesktopString(tde::desktopConfigPath(), u"appearance"_s, u"theme"_s, name))
-            qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
-        if (name != u"system")
-            QProcess::startDetached(u"gsettings"_s,
-                {u"set"_s, u"org.gnome.desktop.interface"_s, u"color-scheme"_s,
-                    name == u"arc" ? u"default"_s : u"prefer-dark"_s});
-    });
-    Group* style = addGroup(u"Style"_s);
-    style->addRow(u"Theme"_s, u"The colours of windows and of the desktop"_s, theme);
+    addStyleGroup();
 
     m_preview = new QLabel(this);
     m_preview->setAlignment(Qt::AlignCenter);
@@ -266,6 +253,97 @@ BackgroundPage::BackgroundPage(Settings& settings, QWidget* parent)
 
     fillPictures();
     showSettings();
+}
+
+void BackgroundPage::addStyleGroup()
+{
+    const auto appearance = tde::loadDesktopConfig().appearance;
+    const auto write = [](const QString& key, const QString& value) {
+        if (!shell::setDesktopSetting(tde::desktopConfigPath(), u"appearance"_s, key, value))
+            qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
+    };
+    const auto themeBox = [this](const std::vector<Theme>& themes, const QString& current) {
+        auto* box = new QComboBox(this);
+        box->setMinimumWidth(200);
+        for (const Theme& theme : themes)
+            box->addItem(theme.name, theme.id);
+        // One set by hand that is not installed shows as it is.
+        if (!current.isEmpty() && box->findData(current) < 0)
+            box->addItem(current, current);
+        box->setCurrentIndex(box->findData(current));
+        return box;
+    };
+    Group* style = addGroup(u"Style"_s);
+
+    // The look of the TDE applications and the shell; GTK programs follow between light and dark.
+    m_theme = new QComboBox(this);
+    m_theme->addItem(u"Dark"_s, u"arc-dark"_s);
+    m_theme->addItem(u"Light"_s, u"arc"_s);
+    m_theme->addItem(u"Follow the System"_s, u"system"_s);
+    m_theme->setCurrentIndex(std::max(0, m_theme->findData(appearance.theme)));
+    connect(m_theme, &QComboBox::activated, this, [this, write] {
+        const QString name = m_theme->currentData().toString();
+        write(u"theme"_s, tde::luaString(name));
+        if (name != u"system")
+            setGnomeString(u"color-scheme"_s, name == u"arc" ? u"default"_s : u"prefer-dark"_s);
+    });
+    style->addRow(u"Theme"_s, u"The colours of windows and of the desktop"_s, m_theme);
+
+    // Without one set, the one GTK programs use, as TDE's programs pick then.
+    const QString icons = appearance.iconTheme.isEmpty() ? gnomeSetting(u"icon-theme"_s) : appearance.iconTheme;
+    m_icons = themeBox(iconThemes(), icons);
+    connect(m_icons, &QComboBox::activated, this, [this, write] {
+        const QString name = m_icons->currentData().toString();
+        write(u"icon_theme"_s, tde::luaString(name));
+        setGnomeString(u"icon-theme"_s, name);
+    });
+    style->addRow(u"Icons"_s, u"Of applications, files and the desktop"_s, m_icons);
+
+    // "default" is whichever the system has made its default.
+    std::vector<Theme> cursors = cursorThemes();
+    std::erase_if(cursors, [](const Theme& theme) { return theme.id == u"default"; });
+    cursors.insert(cursors.begin(), {QString(), u"Default"_s});
+    m_cursors = themeBox(cursors, appearance.cursorTheme);
+    connect(m_cursors, &QComboBox::activated, this, [this, write] {
+        const QString name = m_cursors->currentData().toString();
+        write(u"cursor_theme"_s, tde::luaString(name));
+        setGnomeString(u"cursor-theme"_s, name.isEmpty() ? u"default"_s : name);
+    });
+    style->addRow(u"Pointer"_s, u"How the mouse pointer looks"_s, m_cursors);
+
+    m_cursorSize = new QComboBox(this);
+    for (const auto& [size, name] :
+        {std::pair {24, "Default"}, {32, "Medium"}, {48, "Large"}, {64, "Larger"}, {96, "Largest"}})
+        m_cursorSize->addItem(QString::fromUtf8(name), size);
+    if (m_cursorSize->findData(appearance.cursorSize) < 0)
+        m_cursorSize->addItem(u"%1 pixels"_s.arg(appearance.cursorSize), appearance.cursorSize);
+    m_cursorSize->setCurrentIndex(m_cursorSize->findData(appearance.cursorSize));
+    connect(m_cursorSize, &QComboBox::activated, this, [this, write] {
+        const int size = m_cursorSize->currentData().toInt();
+        write(u"cursor_size"_s, QString::number(size));
+        setGnomeSetting(u"cursor-size"_s, QString::number(size));
+    });
+    style->addRow(u"Pointer size"_s, {}, m_cursorSize);
+
+    // GTK 3 programs draw themselves with a theme of their own; GTK 4 ones follow light and dark.
+    auto* gtk = themeBox(gtkThemes(), gnomeSetting(u"gtk-theme"_s));
+    connect(gtk, &QComboBox::activated, this, [gtk] { setGnomeString(u"gtk-theme"_s, gtk->currentData().toString()); });
+    style->addRow(u"Legacy applications"_s, u"The theme of GTK 3 programs"_s, gtk);
+}
+
+void BackgroundPage::desktopChanged(const tde::DesktopConfig& config)
+{
+    const auto& appearance = config.appearance;
+    const auto show = [](QComboBox* box, const QVariant& value) {
+        const QSignalBlocker blocker(box);
+        if (const int index = box->findData(value); index >= 0)
+            box->setCurrentIndex(index);
+    };
+    show(m_theme, appearance.theme);
+    if (!appearance.iconTheme.isEmpty())
+        show(m_icons, appearance.iconTheme);
+    show(m_cursors, appearance.cursorTheme);
+    show(m_cursorSize, appearance.cursorSize);
 }
 
 void BackgroundPage::fillPictures()

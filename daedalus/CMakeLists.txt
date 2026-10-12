@@ -20,6 +20,7 @@ add_executable(tde-daedalus
     src/PowerPage.cpp
     src/SoundPage.cpp
     src/SettingsWindow.cpp
+    src/Themes.cpp
     src/Widgets.cpp
 )
 target_compile_definitions(tde-daedalus PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
@@ -49,4 +50,9 @@ if(TDE_SESSION_BUILD_TESTS)
     target_include_directories(tst_defaultapps PRIVATE src)
     target_link_libraries(tst_defaultapps PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
     add_test(NAME tst_defaultapps COMMAND tst_defaultapps)
+
+    add_executable(tst_themes tests/tst_themes.cpp src/Themes.cpp)
+    target_include_directories(tst_themes PRIVATE src)
+    target_link_libraries(tst_themes PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME tst_themes COMMAND tst_themes)
 endif()
