@@ -359,6 +359,7 @@ void View::setMinimized(bool wanted)
         setActivated(false);
         server.focusTopmost();
     }
+    server.updateIdleInhibition();
 }
 
 // Lists the window for taskbars and the overview, with handles to switch to it, close it,

@@ -70,6 +70,8 @@ public:
     // Minimizes every window to show the desktop, as Windows 7 did; again, before another
     // window was used, brings back those it minimized.
     void toggleDesktop();
+    // Programs keep the screen from locking and turning off only while their window shows.
+    void updateIdleInhibition();
     View* focusedView() const;
     // The window of another program that a new one is shown for: the one its program last
     // imported through xdg-foreign and still holds on to, as a portal's file picker does with

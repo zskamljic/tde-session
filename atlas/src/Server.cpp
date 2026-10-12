@@ -558,7 +558,23 @@ void Server::layerSurfaceDestroyed(LayerSurface& surface)
 void Server::inhibitorDestroyed(wlr_idle_inhibitor_v1* inhibitor)
 {
     std::erase_if(m_inhibitors, [inhibitor](const auto& i) { return i->inhibitor == inhibitor; });
-    wlr_idle_notifier_v1_set_inhibited(idleNotifier, !m_inhibitors.empty());
+    updateIdleInhibition();
+}
+
+void Server::updateIdleInhibition()
+{
+    // As the protocol has it, only while the surface asking is seen: not when its window is
+    // minimized or gone. Those of no window, as of layer surfaces, count while they are there.
+    const bool inhibited = std::ranges::any_of(m_inhibitors, [this](const auto& entry) {
+        wlr_surface* root = wlr_surface_get_root_surface(entry->inhibitor->surface);
+        for (const auto& view : m_views) {
+            if (view->surface() == root)
+                return view->mapped && !view->minimized;
+        }
+        return true;
+    });
+    if (idleNotifier)
+        wlr_idle_notifier_v1_set_inhibited(idleNotifier, inhibited);
 }
 
 void Server::updateLayerFocus()
@@ -774,6 +790,7 @@ void Server::viewMapped(View& view)
 {
     m_order.insert(m_order.begin(), &view);
     focus(&view);
+    updateIdleInhibition();
 }
 
 void Server::viewUnmapped(View& view)
@@ -788,6 +805,7 @@ void Server::viewUnmapped(View& view)
     std::erase(m_desktopShown, &view);
     if (wasFocused || seat->keyboard_state.focused_surface == view.surface())
         focusTopmost();
+    updateIdleInhibition();
 }
 
 // A window going away is no longer under the pointer, nor held by it.
@@ -837,7 +855,7 @@ void Server::setUpProtocols()
             entry->inhibitor = inhibitor;
             // The listener goes with the entry, so the work is done by the server, from copies.
             entry->destroy.connect(inhibitor->events.destroy, [this, inhibitor] { inhibitorDestroyed(inhibitor); });
-            wlr_idle_notifier_v1_set_inhibited(idleNotifier, true);
+            updateIdleInhibition();
         });
 
     // A program's dialog shown by another, as the portals show theirs, sits on its window.
