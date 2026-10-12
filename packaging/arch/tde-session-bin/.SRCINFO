@@ -1,6 +1,6 @@
 pkgbase = tde-session-bin
 	pkgdesc = The TDE desktop session: a wlroots compositor, overview, bar, lock screen and settings
-	pkgver = 0.2.0
+	pkgver = 0.3.0
 	pkgrel = 1
 	url = https://github.com/zskamljic/tde-session
 	arch = x86_64
@@ -39,10 +39,10 @@ pkgbase = tde-session-bin
 	optdepends = pipewire-pulse: sound, with its volume in the bar
 	optdepends = gnome-keyring: remembering the passphrases of SSH keys
 	optdepends = fprintd: unlocking the screen with a finger
-	provides = tde-session=0.2.0
+	provides = tde-session=0.3.0
 	conflicts = tde-session
-	noextract = tde-session-0.2.0-x86_64.tar.zst
-	source = tde-session-0.2.0-x86_64.tar.zst::https://github.com/zskamljic/tde-session/releases/download/v0.2.0/tde-session-0.2.0-x86_64.tar.zst
+	noextract = tde-session-0.3.0-x86_64.tar.zst
+	source = tde-session-0.3.0-x86_64.tar.zst::https://github.com/zskamljic/tde-session/releases/download/v0.3.0/tde-session-0.3.0-x86_64.tar.zst
 	sha256sums = SKIP
 
 pkgname = tde-session-bin
