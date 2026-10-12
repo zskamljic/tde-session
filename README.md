@@ -41,8 +41,8 @@ the rest go straight behind the clock. Behind the clock are the calendar too and
 program plays music or video, its controls, which the media keys work as well.
 
 The screen locks with Super+L, from the quick settings, after five minutes without input (unless
-a program such as a video player asks it to stay on), before the computer sleeps, and when
-`loginctl lock-session` asks. The password is checked through PAM, by
+a program such as a video player asks it to stay on while its window shows), before the computer
+sleeps, and when `loginctl lock-session` asks. The password is checked through PAM, by
 `/etc/pam.d/tde-cerberus`, as at the login prompt; with a fingerprint reader and fingers added
 in the settings, a finger on it unlocks too, through fprintd. Should the lock screen ever quit without
 unlocking, the session stays covered and a new one is started.
@@ -85,7 +85,9 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 | Ctrl+Alt+F1…F12 | Switch to another virtual terminal |
 
 Dragging a window to the top edge maximizes it, to a side edge fills that half of the screen,
-which the window grows into; Super and a drag moves a window from anywhere in it. New windows
+which the window grows into; Super and a drag moves a window from anywhere in it. Pushing the
+pointer into the top left corner shows the desktop, as the button at the end of Windows 7's
+taskbar did, and doing it again before using another window brings the windows back. New windows
 open in the middle of the screen.
 In Argus, the windows go on showing what they do; a click on one switches to it, a middle click
 or the × on it closes it, and with several displays, dragging it to another display's part of
@@ -116,20 +118,24 @@ Networking, Bluetooth, the battery, the power mode and fingerprints come from Ne
 
 Daedalus, shown as Settings, connects to Wi-Fi networks, shows their passwords and forgets
 them, pairs Bluetooth devices (it is visible to others, and looks for them, while its page
-shows), and sets the theme, light or dark, and the desktop's background (a picture and how it
-covers the screen, or a colour; pictures added there are kept in `~/.local/share/backgrounds`),
+shows), and sets the theme, light or dark, the icons, the pointer and its size, the theme of GTK 3
+programs, and the desktop's background (a picture and how it covers the screen, or a colour;
+pictures added there are kept in `~/.local/share/backgrounds`),
 how the displays are arranged (a display dragged next to another snaps to it) and which one has
 the bar, which output and input sound uses and how loud, the power mode and when the screens
 turn off and the computer sleeps, plugged in and on battery, what Alt+Tab shows of the windows,
 how long the animations take, the keyboard layouts, the keys that switch them and the compose
 key, how fast the mouse and the touchpad move and scroll, and which way, and tapping to click,
-whether and when the screen locks by itself and the fingers that unlock it, which applications
-open web pages, mail, music and the rest, the terminal, and whether the clocks show seconds. Its
+whether and when the screen locks by itself, and before sleeping, and the fingers that unlock it,
+which applications open web pages, mail, music and the rest, the terminal, which programs start
+at login, the hot corner, and whether the clocks show seconds. Its
 Power page shows the battery's charge, health and the power it gives. `tde-daedalus --page
 bluetooth` opens it on a page, or shows the one open there. The session's own settings are in
-`~/.config/tde/session/config.lua`, which Daedalus writes; the theme, the lock screen's delay
-and the terminal are in the desktop config, `~/.config/tde/config.lua`, of which Daedalus
-changes only those values. Both can be edited by hand too, and every part of the session
+`~/.config/tde/session/config.lua`, which Daedalus writes; the theme, the icons, the pointer,
+the lock screen's settings and the terminal are in the desktop config, `~/.config/tde/config.lua`,
+of which Daedalus changes only those values, and GTK programs are told the theme, icons and
+pointer through GNOME's settings. Title bars that Atlas draws put their buttons where the desktop
+config says, as TDE's programs do. Both can be edited by hand too, and every part of the session
 follows them once saved.
 
 Display changes are tried out first, and go back after 15 seconds unless they are kept, in
@@ -164,9 +170,10 @@ screen it started stays). Other programs started with the session are listed in
 longer start the bar and the overview, as copies made before did. Programs that start at login
 the usual way, from `/etc/xdg/autostart` and `~/.config/autostart`, start too, as systemd
 services that `tde-session.target` brings up and takes down with the session; those meant only
-for other desktops do not. Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and friends, or else
-from the system layout that `localectl`, and Daedalus, set; Atlas follows changes to it at
-once.
+for other desktops do not. Daedalus lists them under Startup Applications, to turn off (by a copy
+in `~/.config/autostart` that says so) or to add applications to, from the next login on.
+Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and friends, or else from the system layout
+that `localectl`, and Daedalus, set; Atlas follows changes to it at once.
 
 ## Testing in a virtual machine
 
