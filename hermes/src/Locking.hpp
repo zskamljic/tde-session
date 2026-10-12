@@ -31,6 +31,8 @@ public:
     void lock(std::function<void()> whenLocked = {});
     // How long without input until the screen locks; 0 for never.
     void setIdleMinutes(int minutes);
+    // Whether it locks before the computer sleeps.
+    void setLockBeforeSleep(bool lock) { m_beforeSleep = lock; }
     // Whether the lock screen's clock shows seconds.
     void setClockSeconds(bool seconds) { m_seconds = seconds; }
 
@@ -50,6 +52,7 @@ private:
     std::unique_ptr<QProcess> m_locker; // the lock screen, while it runs
     int m_idleMinutes = 0;
     bool m_seconds = false;
+    bool m_beforeSleep = true;
     bool m_locked = false;
     std::vector<std::function<void()>> m_waiting;
     QDBusUnixFileDescriptor m_sleepInhibitor;

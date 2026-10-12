@@ -154,6 +154,11 @@ void Locking::prepareForSleep(bool sleeping)
         takeSleepInhibitor();
         return;
     }
+    // Sleep goes ahead once locked, or at once when it is not to lock.
+    if (!m_beforeSleep) {
+        m_sleepInhibitor = QDBusUnixFileDescriptor();
+        return;
+    }
     lock([this] { m_sleepInhibitor = QDBusUnixFileDescriptor(); });
 }
 

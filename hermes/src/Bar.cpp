@@ -131,6 +131,7 @@ Bar::Bar(QWidget* parent)
     if (!m_polkit->start())
         qWarning("tde-hermes: another program asks for passwords for polkit already");
     m_locking->setIdleMinutes(tde::desktop().lock.after);
+    m_locking->setLockBeforeSleep(tde::desktop().lock.beforeSleep);
     QDBusConnection::sessionBus().registerObject(
         QString::fromLatin1(BusPath), &m_keys, QDBusConnection::ExportScriptableSlots);
     QDBusConnection::sessionBus().registerObject(
@@ -155,6 +156,7 @@ Bar::Bar(QWidget* parent)
         const auto appearance = tde::desktop().appearance;
         tde::setDesktop(tde::loadDesktopConfig());
         m_locking->setIdleMinutes(tde::desktop().lock.after);
+        m_locking->setLockBeforeSleep(tde::desktop().lock.beforeSleep);
         if (tde::desktop().appearance != appearance)
             applyTheme();
     });
