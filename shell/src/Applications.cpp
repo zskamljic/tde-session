@@ -282,6 +282,74 @@ QStringList applicationFolders()
     return QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
 }
 
+QString applicationFile(const QString& id)
+{
+    // "kde-foo.desktop" may be "kde/foo.desktop": each dash may stand for a folder.
+    QString relative = id;
+    for (;;) {
+        if (const QString found = QStandardPaths::locate(QStandardPaths::ApplicationsLocation, relative);
+            !found.isEmpty())
+            return found;
+        const qsizetype dash = relative.indexOf(u'-');
+        if (dash < 0)
+            return {};
+        relative[dash] = u'/';
+    }
+}
+
+QStringList autostartFolders()
+{
+    QStringList folders;
+    folders << QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + u"/autostart"_s;
+    for (const QString& config : QStandardPaths::standardLocations(QStandardPaths::GenericConfigLocation))
+        folders << config + u"/autostart"_s;
+    folders.removeDuplicates();
+    return folders;
+}
+
+std::vector<AutostartEntry> autostartEntries(const QStringList& folders, const QStringList& desktops)
+{
+    std::vector<AutostartEntry> entries;
+    QHash<QString, qsizetype> byId;
+    for (qsizetype i = 0; i < folders.size(); ++i) {
+        const bool user = i == 0;
+        for (const QFileInfo& file : QDir(folders[i]).entryInfoList({u"*.desktop"_s}, QDir::Files)) {
+            const QString id = file.fileName();
+            if (const auto known = byId.constFind(id); known != byId.cend()) {
+                // Taken already, from a folder before: the system has one too.
+                if (*known >= 0 && !user)
+                    entries[size_t(*known)].system = true;
+                continue;
+            }
+            byId.insert(id, -1);
+            const auto entry = readEntry(file.absoluteFilePath());
+            if (!entry || entry->value(u"Type"_s) != u"Application" || !shownIn(*entry, desktops)
+                || !installed(entry->value(u"TryExec"_s)))
+                continue;
+            // Parts of the system that are not to be turned off, unless the user added them.
+            if (entry->flag(u"NoDisplay"_s) && !user)
+                continue;
+            byId[id] = qsizetype(entries.size());
+            entries.push_back(AutostartEntry {
+                .id = id,
+                .path = file.absoluteFilePath(),
+                .name = entry->localized(u"Name"_s),
+                .comment = entry->localized(u"Comment"_s),
+                .enabled = !entry->flag(u"Hidden"_s) && entry->value(u"X-GNOME-Autostart-enabled"_s) != u"false",
+                .system = !user,
+                .user = user,
+            });
+            if (entries.back().name.isEmpty())
+                entries.back().name = file.completeBaseName();
+        }
+    }
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    std::ranges::sort(entries,
+        [&](const AutostartEntry& a, const AutostartEntry& b) { return collator.compare(a.name, b.name) < 0; });
+    return entries;
+}
+
 std::vector<Application> loadApplications(const QStringList& desktops)
 {
     std::vector<Application> apps;

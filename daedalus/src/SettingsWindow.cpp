@@ -10,6 +10,7 @@
 #include "NetworkPage.hpp"
 #include "PowerPage.hpp"
 #include "SoundPage.hpp"
+#include "StartupPage.hpp"
 
 #include <tde/DesktopConfig.hpp>
 #include <tde/FramelessHelper.hpp>
@@ -139,6 +140,7 @@ void SettingsWindow::buildPages()
         new MousePage(m_settings, m_stack));
     addPage(u"lock"_s, u"system-lock-screen"_s, u"Lock Screen"_s, new LockPage(m_stack));
     addPage(u"apps"_s, u"applications-system"_s, u"Default Apps"_s, new DefaultAppsPage(m_stack));
+    addPage(u"startup"_s, u"system-run"_s, u"Startup Applications"_s, new StartupPage(m_stack));
     addPage(u"datetime"_s, u"preferences-system-time"_s, u"Date & Time"_s, new DateTimePage(m_settings, m_stack));
 
     m_pages->setCurrentRow(row);

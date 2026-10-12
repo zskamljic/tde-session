@@ -53,4 +53,26 @@ bool launch(const Application& app);
 // The folders applications are read from, to notice when some are installed or removed.
 QStringList applicationFolders();
 
+// The .desktop file of the application with the id `id`, as the XDG data folders have it;
+// empty when there is none.
+QString applicationFile(const QString& id);
+
+// A program started at login, from the XDG autostart folders.
+struct AutostartEntry {
+    QString id; // the file's name, e.g. "nm-applet.desktop"
+    QString path; // the file that counts: the user's own, else the system's
+    QString name;
+    QString comment;
+    bool enabled = true; // neither Hidden nor X-GNOME-Autostart-enabled=false
+    bool system = false; // one of that name is in a folder of the system
+    bool user = false; // the user has one of their own, which counts instead
+};
+
+// The autostart folders: the user's first, then those of the system.
+QStringList autostartFolders();
+
+// The entries of `folders`, the user's first, which start in `desktops` and are meant to be
+// shown, sorted by name; one in an earlier folder hides those of its name further on.
+std::vector<AutostartEntry> autostartEntries(const QStringList& folders, const QStringList& desktops);
+
 } // namespace shell

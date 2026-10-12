@@ -20,6 +20,7 @@ add_executable(tde-daedalus
     src/PowerPage.cpp
     src/SoundPage.cpp
     src/SettingsWindow.cpp
+    src/StartupPage.cpp
     src/Themes.cpp
     src/Widgets.cpp
 )
@@ -50,6 +51,11 @@ if(TDE_SESSION_BUILD_TESTS)
     target_include_directories(tst_defaultapps PRIVATE src)
     target_link_libraries(tst_defaultapps PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
     add_test(NAME tst_defaultapps COMMAND tst_defaultapps)
+
+    add_executable(tst_startup tests/tst_startup.cpp src/StartupPage.cpp src/Widgets.cpp)
+    target_include_directories(tst_startup PRIVATE src)
+    target_link_libraries(tst_startup PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
+    add_test(NAME tst_startup COMMAND tst_startup)
 
     add_executable(tst_themes tests/tst_themes.cpp src/Themes.cpp)
     target_include_directories(tst_themes PRIVATE src)
