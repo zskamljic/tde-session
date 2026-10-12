@@ -56,6 +56,8 @@ if(TDE_SESSION_BUILD_TESTS)
     target_include_directories(tst_startup PRIVATE src)
     target_link_libraries(tst_startup PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
     add_test(NAME tst_startup COMMAND tst_startup)
+    # It makes widgets, which need a screen, if one that shows nothing.
+    set_tests_properties(tst_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(tst_themes tests/tst_themes.cpp src/Themes.cpp)
     target_include_directories(tst_themes PRIVATE src)
