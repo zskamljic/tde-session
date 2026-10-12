@@ -9,6 +9,7 @@
 
 namespace atlas {
 
+class SlicedPicture;
 class WindowCapture;
 
 // An application window, of a Wayland program or an X11 one. This part decides where windows
@@ -112,13 +113,15 @@ private:
     void publish();
     void unpublish();
 
-    // The picture standing in for the window while it moves to a tile.
-    wlr_scene_buffer* m_morph = nullptr;
+    // The pictures standing in for the window while it moves to a tile: of how it was, and of
+    // how it is once it drew itself in its new size, which the first fades into.
+    std::unique_ptr<SlicedPicture> m_morphOld;
+    std::unique_ptr<SlicedPicture> m_morphNew;
     EventSource m_morphTimer;
     wlr_box m_morphFrom {};
     wlr_box m_morphTo {};
-    wlr_box m_morphExtents {}; // of the picture, relative to the window where it started
     uint64_t m_morphStart = 0;
+    uint64_t m_morphNewAt = 0; // when the window drew itself in its new size
     uint64_t m_placedAt = 0;
     wlr_box m_placedSize {};
     std::unique_ptr<Decoration> m_decoration;

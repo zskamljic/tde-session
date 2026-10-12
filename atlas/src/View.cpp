@@ -2,6 +2,7 @@
 
 #include "Animation.hpp"
 #include "Capture.hpp"
+#include "Morph.hpp"
 #include "Parts.hpp"
 #include "Placement.hpp"
 
@@ -199,14 +200,11 @@ void View::animateTo(const wlr_box& box)
     if (!picture)
         return;
     // In the window's place in the stack, which hides meanwhile; the scene holds on to the picture.
-    m_morph = wlr_scene_buffer_create(tree->node.parent, picture.get());
-    if (!m_morph)
-        return;
-    wlr_scene_node_place_above(&m_morph->node, &tree->node);
+    m_morphOld = std::make_unique<SlicedPicture>(tree->node.parent, picture.get(), extents, from.width, from.height);
+    wlr_scene_node_place_above(m_morphOld->node(), &tree->node);
     wlr_scene_node_set_enabled(&tree->node, false);
     m_morphFrom = from;
     m_morphTo = box;
-    m_morphExtents = extents;
     m_morphStart = monotonicMs();
     m_morphTimer = addTimer<&View::stepMorph>(server.eventLoop, this);
     stepMorph();
@@ -215,26 +213,45 @@ void View::animateTo(const wlr_box& box)
 void View::stepMorph()
 {
     constexpr uint64_t Patience = 300; // ms the window may take to draw itself once there
-    const uint64_t elapsed = monotonicMs() - m_morphStart;
-    const double t = progress(elapsed, server.windowAnimationTime);
-    const double width = between(m_morphFrom.width, m_morphTo.width, t);
-    const double height = between(m_morphFrom.height, m_morphTo.height, t);
-    // The picture's parts beside the window, as shadows are, grow along with it.
-    const double scaleX = width / std::max(m_morphFrom.width, 1);
-    const double scaleY = height / std::max(m_morphFrom.height, 1);
-    wlr_scene_node_set_position(&m_morph->node,
-        int(std::lround(between(m_morphFrom.x, m_morphTo.x, t) + m_morphExtents.x * scaleX)),
-        int(std::lround(between(m_morphFrom.y, m_morphTo.y, t) + m_morphExtents.y * scaleY)));
-    wlr_scene_buffer_set_dest_size(m_morph, std::max(1, int(std::lround(m_morphExtents.width * scaleX))),
-        std::max(1, int(std::lround(m_morphExtents.height * scaleY))));
-    // There, it shows the window once that drew itself in its new size, or has taken too long.
-    if (t >= 1) {
-        const wlr_box arrived = geometry();
-        if ((arrived.width == m_morphTo.width && arrived.height == m_morphTo.height)
-            || elapsed > uint64_t(server.windowAnimationTime) + Patience) {
-            endMorph();
-            return;
+    const uint64_t now = monotonicMs();
+    const uint64_t elapsed = now - m_morphStart;
+    const int duration = server.windowAnimationTime;
+    const int fadeTime = std::clamp(duration / 2, 1, 150);
+
+    // Once the window drew itself in its new size, a picture of that comes in below the
+    // first, which fades away; neither is stretched where it shows its title and buttons.
+    const wlr_box arrived = geometry();
+    const bool resized = arrived.width != m_morphFrom.width || arrived.height != m_morphFrom.height;
+    if (!m_morphNew && (resized || (arrived.width == m_morphTo.width && arrived.height == m_morphTo.height))) {
+        wlr_box extents {};
+        if (const LockedBuffer picture = capture().snapshot(extents)) {
+            m_morphNew = std::make_unique<SlicedPicture>(
+                tree->node.parent, picture.get(), extents, arrived.width, arrived.height);
+            wlr_scene_node_place_below(m_morphNew->node(), m_morphOld->node());
+            m_morphNewAt = now;
         }
+    }
+    // Towards the size it took, which may be another than asked for.
+    const wlr_box to = m_morphNew ? wlr_box {m_morphTo.x, m_morphTo.y, arrived.width, arrived.height} : m_morphTo;
+    const double t = progress(elapsed, duration);
+    const wlr_box box {
+        int(std::lround(between(m_morphFrom.x, to.x, t))),
+        int(std::lround(between(m_morphFrom.y, to.y, t))),
+        std::max(1, int(std::lround(between(m_morphFrom.width, to.width, t)))),
+        std::max(1, int(std::lround(between(m_morphFrom.height, to.height, t)))),
+    };
+    m_morphOld->place(box);
+    double faded = 0;
+    if (m_morphNew) {
+        m_morphNew->place(box);
+        faded = progress(now - m_morphNewAt, fadeTime);
+        m_morphOld->setOpacity(float(1 - faded));
+    }
+    // There, it shows the window once that drew itself and the first picture is gone, or when
+    // it has taken too long.
+    if (t >= 1 && (faded >= 1 || elapsed > uint64_t(duration) + Patience)) {
+        endMorph();
+        return;
     }
     wl_event_source_timer_update(m_morphTimer.get(), FrameInterval);
 }
@@ -242,10 +259,10 @@ void View::stepMorph()
 void View::endMorph()
 {
     m_morphTimer.reset();
-    if (!m_morph)
+    if (!m_morphOld)
         return;
-    wlr_scene_node_destroy(&m_morph->node);
-    m_morph = nullptr;
+    m_morphOld.reset();
+    m_morphNew.reset();
     wlr_scene_node_set_enabled(&tree->node, mapped && !minimized);
 }
 

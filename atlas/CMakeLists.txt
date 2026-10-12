@@ -38,10 +38,12 @@ add_executable(tde-atlas
     src/Decoration.cpp
     src/Input.cpp
     src/Lock.cpp
+    src/Morph.cpp
     src/Parts.cpp
     src/Placement.cpp
     src/Server.cpp
     src/Settings.cpp
+    src/Slices.cpp
     src/View.cpp
     src/WindowInfo.cpp
     ${wlr_headers}
@@ -63,4 +65,8 @@ if(TDE_SESSION_BUILD_TESTS)
     add_executable(tst_placement tests/tst_placement.cpp src/Placement.cpp)
     target_include_directories(tst_placement PRIVATE src)
     add_test(NAME tst_placement COMMAND tst_placement)
+
+    add_executable(tst_slices tests/tst_slices.cpp src/Slices.cpp)
+    target_include_directories(tst_slices PRIVATE src)
+    add_test(NAME tst_slices COMMAND tst_slices)
 endif()
