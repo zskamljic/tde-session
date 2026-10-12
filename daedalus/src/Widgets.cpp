@@ -100,14 +100,25 @@ Row::Row(const QString& title, const QString& subtitle, QWidget* control, QWidge
         control->setParent(this);
         layout->addWidget(control, 0, Qt::AlignVCenter);
     }
-    if (qobject_cast<Switch*>(control))
+    if (rowSwitch())
         setCursor(Qt::PointingHandCursor);
+}
+
+Switch* Row::rowSwitch() const
+{
+    // The control, or one switch among the controls.
+    if (auto* button = qobject_cast<Switch*>(m_control))
+        return button;
+    if (!m_control)
+        return nullptr;
+    const auto switches = m_control->findChildren<Switch*>();
+    return switches.size() == 1 ? switches.front() : nullptr;
 }
 
 void Row::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (auto* button = qobject_cast<Switch*>(m_control); button && button->isEnabled()
-        && event->button() == Qt::LeftButton && rect().contains(event->position().toPoint()))
+    if (auto* button = rowSwitch(); button && button->isEnabled() && event->button() == Qt::LeftButton
+        && rect().contains(event->position().toPoint()))
         button->click();
 }
 

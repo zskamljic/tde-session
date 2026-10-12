@@ -3,12 +3,17 @@
 #include "Pages.hpp"
 
 #include <tde/ConfigWatcher.hpp>
+#include <tde/DesktopConfig.hpp>
 
 #include <QTimer>
 #include <QWidget>
 
 class QListWidget;
 class QStackedWidget;
+
+namespace tde {
+class HeaderBar;
+}
 
 namespace daedalus {
 
@@ -33,14 +38,20 @@ private:
     void save();
     // Makes the pages, again when the settings were changed elsewhere, as in an editor.
     void buildPages();
-    void reload();
+    void reload(const QString& path);
+    // The window buttons at the end of the header bars the desktop config says.
+    void placeWindowButtons();
 
     Settings m_settings;
     QTimer m_saving;
     QListWidget* m_pages = nullptr;
     QStackedWidget* m_stack = nullptr;
     QStringList m_names; // of the pages, in order
-    tde::ConfigWatcher m_watcher;
+    tde::HeaderBar* m_sidebarHeader = nullptr;
+    tde::HeaderBar* m_contentHeader = nullptr;
+    QWidget* m_windowButtons = nullptr;
+    tde::DesktopConfig::WindowButtons m_placedButtons;
+    tde::ConfigWatcher m_watcher; // of the session's config and the desktop's
 };
 
 } // namespace daedalus

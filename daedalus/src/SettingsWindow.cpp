@@ -40,7 +40,7 @@ QLabel* headerTitle(const QString& text, QWidget* parent)
 
 SettingsWindow::SettingsWindow(QWidget* parent)
     : QWidget(parent)
-    , m_watcher({shell::sessionConfigPath()})
+    , m_watcher({shell::sessionConfigPath(), tde::desktopConfigPath()})
 {
     m_settings.config = shell::loadSessionConfig();
     // Written once the changes settle, as a value being typed or stepped through is one change.
@@ -58,14 +58,12 @@ SettingsWindow::SettingsWindow(QWidget* parent)
 
     // The pages on the left and the one shown on the right, each under a header bar with its
     // title; the window buttons go to the end the desktop config wants them.
-    const auto& buttons = tde::desktop().windowButtons;
     auto* sidebar = new QWidget(this);
     sidebar->setObjectName(u"SidebarColumn"_s);
     sidebar->setAttribute(Qt::WA_StyledBackground);
     sidebar->setFixedWidth(240);
     auto* sidebarHeader = new tde::HeaderBar(sidebar);
-    if (buttons.side == tde::ButtonSide::Left)
-        sidebarHeader->contentLayout()->addWidget(new tde::WindowButtons(buttons.order, sidebarHeader));
+    m_sidebarHeader = sidebarHeader;
     sidebarHeader->contentLayout()->addStretch(1);
     sidebarHeader->contentLayout()->addWidget(headerTitle(u"Settings"_s, sidebarHeader));
     sidebarHeader->contentLayout()->addStretch(1);
@@ -83,12 +81,11 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     content->setObjectName(u"ContentColumn"_s);
     content->setAttribute(Qt::WA_StyledBackground);
     auto* contentHeader = new tde::HeaderBar(content);
+    m_contentHeader = contentHeader;
     QLabel* title = headerTitle({}, contentHeader);
     contentHeader->contentLayout()->addStretch(1);
     contentHeader->contentLayout()->addWidget(title);
     contentHeader->contentLayout()->addStretch(1);
-    if (buttons.side == tde::ButtonSide::Right)
-        contentHeader->contentLayout()->addWidget(new tde::WindowButtons(buttons.order, contentHeader));
     m_stack = new QStackedWidget(content);
     auto* contentLayout = new QVBoxLayout(content);
     contentLayout->setContentsMargins(0, 0, 0, 0);
@@ -102,6 +99,8 @@ SettingsWindow::SettingsWindow(QWidget* parent)
     layout->addWidget(sidebar);
     layout->addWidget(content, 1);
 
+    m_placedButtons = tde::desktop().windowButtons;
+    placeWindowButtons();
     buildPages();
     connect(&m_watcher, &tde::ConfigWatcher::changed, this, &SettingsWindow::reload);
 
@@ -146,8 +145,38 @@ void SettingsWindow::buildPages()
     m_stack->setCurrentIndex(row);
 }
 
-void SettingsWindow::reload()
+void SettingsWindow::placeWindowButtons()
 {
+    if (m_windowButtons) {
+        m_windowButtons->hide();
+        m_windowButtons->deleteLater();
+    }
+    // At the outer end of the header bar on that side.
+    if (m_placedButtons.side == tde::ButtonSide::Left) {
+        m_windowButtons = new tde::WindowButtons(m_placedButtons.order, m_sidebarHeader);
+        m_sidebarHeader->contentLayout()->insertWidget(0, m_windowButtons);
+    } else {
+        m_windowButtons = new tde::WindowButtons(m_placedButtons.order, m_contentHeader);
+        m_contentHeader->contentLayout()->addWidget(m_windowButtons);
+    }
+    if (!m_placedButtons.order.empty())
+        m_windowButtons->show();
+}
+
+void SettingsWindow::reload(const QString& path)
+{
+    if (path == tde::desktopConfigPath()) {
+        const tde::DesktopConfig desktop = tde::loadDesktopConfig();
+        if (desktop.windowButtons != m_placedButtons) {
+            m_placedButtons = desktop.windowButtons;
+            placeWindowButtons();
+        }
+        for (int i = 0; i < m_stack->count(); ++i) {
+            if (auto* page = dynamic_cast<Page*>(m_stack->widget(i)))
+                page->desktopChanged(desktop);
+        }
+        return;
+    }
     // What this window saved itself comes back the same; the pages stay as they are.
     if (m_saving.isActive())
         return;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <tde/DesktopConfig.hpp>
+
 #include <QAbstractButton>
 #include <QScrollArea>
 #include <QWidget>
@@ -43,6 +45,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
+    Switch* rowSwitch() const;
+
     QWidget* m_control;
 };
 
@@ -72,6 +76,10 @@ private:
 class Page : public QScrollArea {
 public:
     explicit Page(QWidget* parent = nullptr);
+
+    // The desktop's config changed, by this program or another: pages showing parts of it
+    // show them as they are now.
+    virtual void desktopChanged(const tde::DesktopConfig&) { }
 
     Group* addGroup(const QString& title = {});
     void addWidget(QWidget* widget, Qt::Alignment alignment = {});
