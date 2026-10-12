@@ -44,20 +44,13 @@ QWidget* row(QWidget* parent, QHBoxLayout*& layout)
     return widget;
 }
 
-// A level from 0 to Steps, with a round knob on a thin track, filled in up to it.
+// A level from 0 to Steps, with a round knob on a thin track, filled in up to it, as the
+// theme draws sliders.
 QSlider* slider(QWidget* parent)
 {
-    const auto& colors = tde::theme::colors();
     auto* slider = new QSlider(Qt::Horizontal, parent);
     slider->setRange(0, Steps);
     slider->setMinimumHeight(24);
-    slider->setStyleSheet(
-        u"QSlider::groove:horizontal { height: 4px; border-radius: 2px; background: %1; }"
-        " QSlider::sub-page:horizontal { height: 4px; border-radius: 2px; background: %2; }"
-        " QSlider::handle:horizontal { width: 18px; height: 18px; margin: -7px 0;"
-        " border-radius: 9px; background: %3; }"
-        " QSlider::handle:horizontal:hover { background: %4; }"_s.arg(colors.pressed.name(QColor::HexArgb),
-            colors.accent.name(), QColor(0xf0f0f0).name(), QColor(Qt::white).name()));
     return slider;
 }
 
