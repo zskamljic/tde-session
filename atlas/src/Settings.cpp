@@ -121,6 +121,10 @@ Settings loadSettings(const std::string& path)
         table(lua, "mouse", [&] { readPointer(lua, settings.mouse); });
         table(lua, "touchpad", [&] { readPointer(lua, settings.touchpad); });
     });
+    table(lua, "windows", [&] {
+        if (const auto hotCorner = boolean(lua, "hot_corner"))
+            settings.hotCorner = *hotCorner;
+    });
     table(lua, "animations", [&] {
         if (const auto windows = integer(lua, "windows", 0, 2000))
             settings.windowAnimation = *windows;

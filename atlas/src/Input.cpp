@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <format>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <regex>
 #include <set>
@@ -630,6 +631,35 @@ NodeOwner* Server::ownerAt(double x, double y, wlr_surface** surface, double* sx
     return nullptr;
 }
 
+void Server::checkHotCorner()
+{
+    constexpr double Reach = 1; // how near the corner counts as in it
+    constexpr double Away = 8; // how far away it has to go before it can go off again
+    // The top left corner of an output with no other one to its left or above, where the
+    // pointer stops: one between two outputs would be crossed rather than pushed into.
+    double distance = std::numeric_limits<double>::infinity();
+    for (const auto& output : outputs) {
+        wlr_box box {};
+        wlr_output_layout_get_box(outputLayout, output->output, &box);
+        if (wlr_box_empty(&box) || wlr_output_layout_contains_point(outputLayout, nullptr, box.x - 1, box.y)
+            || wlr_output_layout_contains_point(outputLayout, nullptr, box.x, box.y - 1))
+            continue;
+        distance = std::min(distance, std::max(cursor->x - box.x, cursor->y - box.y));
+    }
+    if (distance > Away)
+        m_hotCornerArmed = true;
+    if (distance > Reach || !m_hotCornerArmed)
+        return;
+    m_hotCornerArmed = false;
+    // Not while something is dragged or held, nor over a window covering the screen, as a game,
+    // nor while the overview or another layer surface holds the keyboard.
+    const View* focused = focusedView();
+    if (!m_settings.hotCorner || seat->drag || seat->pointer_state.button_count > 0 || m_layerFocus
+        || (focused && focused->fullscreen))
+        return;
+    toggleDesktop();
+}
+
 void Server::cursorMotion(uint32_t timeMsec)
 {
     wlr_idle_notifier_v1_notify_activity(idleNotifier, seat);
@@ -659,6 +689,7 @@ void Server::cursorMotion(uint32_t timeMsec)
         }
         return;
     }
+    checkHotCorner();
     // A title held down and dragged: the window follows from now on.
     if (m_titlePress && std::hypot(cursor->x - m_titlePressX, cursor->y - m_titlePressY) > 4) {
         View* view = std::exchange(m_titlePress, nullptr);

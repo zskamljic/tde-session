@@ -700,6 +700,8 @@ void Server::focus(View* view)
 {
     if (!view || !view->mapped)
         return;
+    // A window used while the desktop shows ends it: the hot corner hides them all again.
+    m_desktopShown.clear();
     if (view->minimized)
         view->setMinimized(false);
 
@@ -748,6 +750,26 @@ void Server::focusTopmost()
         wlr_seat_keyboard_clear_focus(seat);
 }
 
+void Server::toggleDesktop()
+{
+    if (!m_desktopShown.empty()) {
+        // From the bottom up, so they stack as they did; the one used last gets the keyboard.
+        const std::vector<View*> hidden = std::exchange(m_desktopShown, {});
+        for (auto it = hidden.rbegin(); it != hidden.rend(); ++it)
+            focus(*it);
+        return;
+    }
+    std::vector<View*> shown;
+    for (View* view : m_order) {
+        if (!view->minimized)
+            shown.push_back(view);
+    }
+    for (View* view : shown)
+        view->setMinimized(true);
+    // Once they are all down, as minimizing one focuses the next.
+    m_desktopShown = std::move(shown);
+}
+
 void Server::viewMapped(View& view)
 {
     m_order.insert(m_order.begin(), &view);
@@ -763,6 +785,7 @@ void Server::viewUnmapped(View& view)
     forgetPointerTargets(view);
     const bool wasFocused = !m_order.empty() && m_order.front() == &view;
     std::erase(m_order, &view);
+    std::erase(m_desktopShown, &view);
     if (wasFocused || seat->keyboard_state.focused_surface == view.surface())
         focusTopmost();
 }
@@ -783,6 +806,7 @@ void Server::viewDestroyed(View& view)
     // Unmapped before, as wlroots does it; but nothing may point to it once it is gone.
     forgetPointerTargets(view);
     std::erase(m_order, &view);
+    std::erase(m_desktopShown, &view);
     if (m_grabbed == &view) {
         m_grabbed = nullptr;
         m_cursorMode = CursorMode::Passthrough;

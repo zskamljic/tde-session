@@ -33,6 +33,12 @@ struct SessionConfig {
         bool operator==(const Switcher&) const = default;
     } switcher;
 
+    struct Windows {
+        bool hotCorner = true; // the pointer pushed into the top left corner shows the desktop
+
+        bool operator==(const Windows&) const = default;
+    } windows;
+
     // How long animations take, in milliseconds; 0 leaves them out.
     struct Animations {
         int overview = 250; // opening and closing the overview

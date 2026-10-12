@@ -49,6 +49,18 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     Group* switching = addGroup(u"Switching Windows"_s);
     switching->addRow(u"Alt+Tab shows"_s, u"What the switcher shows of every window"_s, style);
 
+    // As Windows 7 had its button at the end of the taskbar, here at the start of the bar.
+    auto* hotCorner = new Switch(this);
+    hotCorner->setChecked(config.windows.hotCorner);
+    connect(hotCorner, &Switch::toggled, this, [&settings](bool on) {
+        settings.config.windows.hotCorner = on;
+        settings.save();
+    });
+    Group* desktop = addGroup(u"Desktop"_s);
+    desktop->addRow(u"Hot corner"_s,
+        u"Pushing the pointer into the top left corner shows the desktop, and again brings the windows back"_s,
+        hotCorner);
+
     Group* animations = addGroup(u"Animations"_s);
     const auto duration = [&](const QString& title, const QString& subtitle, int& value) {
         QSpinBox* box = milliseconds(value, this);

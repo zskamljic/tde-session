@@ -67,6 +67,9 @@ public:
     void focus(View* view);
     // Focuses the window used most recently that is not minimized, if any.
     void focusTopmost();
+    // Minimizes every window to show the desktop, as Windows 7 did; again, before another
+    // window was used, brings back those it minimized.
+    void toggleDesktop();
     View* focusedView() const;
     // The window of another program that a new one is shown for: the one its program last
     // imported through xdg-foreign and still holds on to, as a portal's file picker does with
@@ -191,6 +194,8 @@ private:
     void decorationReleased(View& view);
     void setDecorationHover(View* view, Decoration::Part part);
     void forgetPointerTargets(const View& view);
+    // The pointer pushed into the top left corner of the screens shows the desktop.
+    void checkHotCorner();
     void inhibitorDestroyed(wlr_idle_inhibitor_v1* inhibitor);
 
 public: // called by Keyboard
@@ -257,6 +262,10 @@ private:
 
     // Super pressed and released on its own opens the overview.
     bool m_superAlone = false;
+
+    // The hot corner goes off once on the way in, and again once the pointer has left it.
+    bool m_hotCornerArmed = true;
+    std::vector<View*> m_desktopShown; // the windows minimized to show the desktop
 
     wlr_scene_tree* m_dragIcon = nullptr;
 

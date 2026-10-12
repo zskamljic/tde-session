@@ -89,6 +89,10 @@ SessionConfig loadSessionConfig(const QString& path)
             if (const auto style = reader.choice<Style>("style", styles))
                 config.switcher.style = *style;
         });
+        reader.table("windows", [&] {
+            if (const auto hotCorner = reader.boolean("hot_corner"))
+                config.windows.hotCorner = *hotCorner;
+        });
         reader.table("animations", [&] {
             auto& animations = config.animations;
             if (const auto overview = reader.integer("overview", 0, MaxDuration))
@@ -197,6 +201,11 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"    switcher = {"_s,
         u"        -- What Alt+Tab shows of every window: \"previews\" or \"icons\"."_s,
         u"        style = %1,"_s.arg(tde::luaString(tde::choiceName<Style>(styles, config.switcher.style))),
+        u"    },"_s,
+        u"    windows = {"_s,
+        u"        -- Whether pushing the pointer into the top left corner shows the desktop, and again"_s,
+        u"        -- brings the windows back."_s,
+        u"        hot_corner = %1,"_s.arg(boolText(config.windows.hotCorner)),
         u"    },"_s,
         u"    animations = {"_s,
         u"        -- How long they take, in milliseconds, up to %1; 0 leaves them out."_s.arg(MaxDuration),

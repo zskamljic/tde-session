@@ -26,6 +26,7 @@ private slots:
         config.background.color = QColor(0x12, 0x34, 0x56);
         config.switcher.style = shell::SessionConfig::Switcher::Style::Icons;
         config.clock.seconds = true;
+        config.windows.hotCorner = false;
         config.power = {.blank = 0, .suspend = 45, .suspendOnBattery = 10};
         config.animations = {.overview = 0, .flip = 600, .flipStep = 90, .windows = 120};
         config.input.mouse = {.speed = -40, .scrollSpeed = 50, .naturalScroll = true};

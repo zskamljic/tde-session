@@ -22,6 +22,7 @@ struct Settings {
     PointerSettings mouse;
     PointerSettings touchpad {.naturalScroll = true};
     int windowAnimation = 200; // ms windows take to move into a tile
+    bool hotCorner = true; // the pointer pushed into the top left corner shows the desktop
 
     bool operator==(const Settings&) const = default;
 };
