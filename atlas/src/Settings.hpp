@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace atlas {
 
@@ -25,8 +26,24 @@ struct Settings {
     bool operator==(const Settings&) const = default;
 };
 
+enum class WindowButton { Minimize, Maximize, Close };
+
+// What the compositor takes from the desktop's config, ~/.config/tde/config.lua, which all of
+// TDE's programs follow: the title bars it draws look like theirs, and the pointer is the same.
+struct DesktopSettings {
+    bool buttonsLeft = false; // the window buttons at the left end of title bars
+    std::vector<WindowButton> buttons {WindowButton::Minimize, WindowButton::Maximize, WindowButton::Close};
+    std::string cursorTheme; // empty for the one XCURSOR_THEME names, or the default
+    int cursorSize = 0; // 0 for the one XCURSOR_SIZE says, or 24
+
+    bool operator==(const DesktopSettings&) const = default;
+};
+
 std::string settingsPath();
 // What is missing or wrong keeps its default; problems go to the log.
 Settings loadSettings(const std::string& path);
+
+std::string desktopSettingsPath();
+DesktopSettings loadDesktopSettings(const std::string& path);
 
 } // namespace atlas

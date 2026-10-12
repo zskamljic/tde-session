@@ -879,11 +879,8 @@ void Server::setUpXwayland()
 
     m_xwaylandReady.connect(m_xwayland->events.ready, [this] {
         wlr_xwayland_set_seat(m_xwayland, seat);
-        if (wlr_xcursor* cursorImage = wlr_xcursor_manager_get_xcursor(xcursor, "default", 1)) {
-            wlr_xcursor_image* image = cursorImage->images[0];
-            wlr_xwayland_set_cursor(
-                m_xwayland, wlr_xcursor_image_get_buffer(image), int32_t(image->hotspot_x), int32_t(image->hotspot_y));
-        }
+        m_xwaylandRunning = true;
+        updateXwaylandCursor();
     });
     m_newXwaylandSurface.connect<wlr_xwayland_surface>(
         m_xwayland->events.new_surface, [this](wlr_xwayland_surface* surface) {
@@ -892,6 +889,18 @@ void Server::setUpXwayland()
             else
                 m_views.push_back(std::make_unique<XwaylandView>(*this, surface));
         });
+}
+
+void Server::updateXwaylandCursor()
+{
+    // X11 programs that set no pointer of their own show this one.
+    if (!m_xwayland || !m_xwaylandRunning || !xcursor)
+        return;
+    if (wlr_xcursor* cursorImage = wlr_xcursor_manager_get_xcursor(xcursor, "default", 1)) {
+        wlr_xcursor_image* image = cursorImage->images[0];
+        wlr_xwayland_set_cursor(
+            m_xwayland, wlr_xcursor_image_get_buffer(image), int32_t(image->hotspot_x), int32_t(image->hotspot_y));
+    }
 }
 
 void Server::unmanagedDestroyed(Unmanaged& surface)

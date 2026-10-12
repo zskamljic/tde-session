@@ -124,6 +124,7 @@ public:
     wlr_xdg_foreign_v2* foreignV2 = nullptr;
     wlr_idle_notifier_v1* idleNotifier = nullptr;
     int windowAnimationTime = 200; // ms windows take to move into a tile; 0 moves them at once
+    DesktopSettings desktop; // from the desktop's config, as TDE's programs have it
 
     // From bottom to top.
     struct {
@@ -173,6 +174,9 @@ private:
     // Follows the session's settings as Settings saves them.
     void watchSettings();
     void applySettings();
+    // The pointer as the desktop's config has it, or the environment says.
+    void loadCursorTheme();
+    void updateXwaylandCursor();
     void configurePointer(const Pointer& pointer) const;
     void updateCapabilities();
     void cursorMotion(uint32_t timeMsec);
@@ -208,6 +212,7 @@ private:
     EventSource m_settingsWatchSource;
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
     wlr_xwayland* m_xwayland = nullptr;
+    bool m_xwaylandRunning = false; // its window manager is up, to take a pointer
 
     std::vector<std::unique_ptr<View>> m_views;
     std::vector<View*> m_order; // mapped windows, most recently used first

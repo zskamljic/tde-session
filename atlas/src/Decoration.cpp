@@ -137,6 +137,8 @@ Decoration::State Decoration::current() const
         .maximized = m_view.tile == Tile::Maximized,
         .hovered = m_hovered,
         .pressed = m_pressed,
+        .buttonsLeft = m_view.server.desktop.buttonsLeft,
+        .buttons = m_view.server.desktop.buttons,
     };
 }
 
@@ -154,22 +156,31 @@ void Decoration::update()
 
 wlr_box Decoration::buttonBox(Part part, int width) const
 {
-    // Minimize, maximize and close from left to right, at the right end.
-    int index = 0;
+    // In the order the desktop config gives, at the end of the bar it says, as TDE's own
+    // programs have them.
+    const DesktopSettings& desktop = m_view.server.desktop;
+    WindowButton button {};
     switch (part) {
-    case Part::Close:
-        index = 0;
+    case Part::Minimize:
+        button = WindowButton::Minimize;
         break;
     case Part::Maximize:
-        index = 1;
+        button = WindowButton::Maximize;
         break;
-    case Part::Minimize:
-        index = 2;
+    case Part::Close:
+        button = WindowButton::Close;
         break;
     default:
         return {};
     }
-    const int x = width - SideMargin - ButtonSize - index * (ButtonSize + ButtonGap);
+    const auto found = std::ranges::find(desktop.buttons, button);
+    if (found == desktop.buttons.end())
+        return {};
+    const int index = int(found - desktop.buttons.begin());
+    const int count = int(desktop.buttons.size());
+    const int x = desktop.buttonsLeft
+        ? SideMargin + index * (ButtonSize + ButtonGap)
+        : width - SideMargin - (count - index) * ButtonSize - (count - index - 1) * ButtonGap;
     return {x, (TitleHeight - ButtonSize) / 2, ButtonSize, ButtonSize};
 }
 
@@ -184,7 +195,8 @@ void Decoration::paint(cairo_t* cr, const State& state) const
     cairo_fill(cr);
 
     // The title, centred over the whole width but clear of the buttons.
-    const int buttons = SideMargin + 3 * ButtonSize + 2 * ButtonGap + SideMargin;
+    const int count = int(state.buttons.size());
+    const int buttons = SideMargin + count * ButtonSize + std::max(0, count - 1) * ButtonGap + SideMargin;
     const int titleWidth = state.width - 2 * buttons;
     if (titleWidth > 0 && !state.title.empty()) {
         const std::unique_ptr<PangoLayout, decltype(&g_object_unref)> owned(
@@ -210,6 +222,8 @@ void Decoration::paint(cairo_t* cr, const State& state) const
 
     for (const Part part : {Part::Minimize, Part::Maximize, Part::Close}) {
         const wlr_box box = buttonBox(part, state.width);
+        if (wlr_box_empty(&box))
+            continue;
         const bool hovered = state.hovered == part;
         const bool pressed = state.pressed == part && hovered;
         Color foreground = state.activated ? Text : DimText;
@@ -331,7 +345,7 @@ Decoration::Part Decoration::partAt(double x, double y, uint32_t* edges) const
         return Part::None;
     for (const Part part : {Part::Minimize, Part::Maximize, Part::Close}) {
         const wlr_box box = buttonBox(part, frame.width);
-        if (fx >= box.x && fx < box.x + box.width && fy >= box.y && fy < box.y + box.height)
+        if (!wlr_box_empty(&box) && fx >= box.x && fx < box.x + box.width && fy >= box.y && fy < box.y + box.height)
             return part;
     }
     return Part::Title;

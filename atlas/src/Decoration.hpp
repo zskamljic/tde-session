@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Settings.hpp"
 #include "wlr.hpp"
 
 #include <cstdint>
@@ -47,6 +48,8 @@ private:
         bool maximized = false;
         Part hovered = Part::None;
         Part pressed = Part::None;
+        bool buttonsLeft = false;
+        std::vector<WindowButton> buttons; // which, in order
         bool operator==(const State&) const = default;
     };
 

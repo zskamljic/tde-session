@@ -149,14 +149,7 @@ void Server::setUpInput()
 {
     cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(cursor, outputLayout);
-    // The size the session asks for, or the usual one when it asks for none it makes sense of.
-    const std::string sizeText = environment("XCURSOR_SIZE");
-    unsigned cursorSize = 0;
-    if (std::from_chars(sizeText.data(), sizeText.data() + sizeText.size(), cursorSize).ec != std::errc {}
-        || cursorSize == 0 || cursorSize > 256)
-        cursorSize = 24;
-    xcursor = wlr_xcursor_manager_create(std::getenv("XCURSOR_THEME"), cursorSize);
-    wlr_cursor_set_xcursor(cursor, xcursor, "default");
+    loadCursorTheme();
 
     m_cursorMotion.connect<wlr_pointer_motion_event>(cursor->events.motion, [this](wlr_pointer_motion_event* event) {
         wlr_cursor_move(cursor, &event->pointer->base, event->delta_x, event->delta_y);
@@ -323,17 +316,33 @@ void Server::watchSettings()
 
 void Server::applySettings()
 {
-    // The file's folder, or the nearest one there is, to see it made; editors save by
+    // The files' folders, or the nearest ones there are, to see them made; editors save by
     // replacing the file, so the folder is watched rather than the file.
     if (m_settingsWatch) {
         drain(m_settingsWatch.get());
-        std::string folder = settingsPath();
-        while (!folder.empty()) {
-            folder.erase(folder.rfind('/'));
-            if (inotify_add_watch(m_settingsWatch.get(), folder.empty() ? "/" : folder.c_str(), WatchedChanges) >= 0)
-                break;
+        for (std::string folder : {settingsPath(), desktopSettingsPath()}) {
+            while (!folder.empty()) {
+                folder.erase(folder.rfind('/'));
+                if (inotify_add_watch(m_settingsWatch.get(), folder.empty() ? "/" : folder.c_str(), WatchedChanges)
+                    >= 0)
+                    break;
+            }
         }
     }
+
+    // The title bars drawn here and the pointer, as TDE's programs have them.
+    if (DesktopSettings changed = loadDesktopSettings(desktopSettingsPath()); changed != desktop) {
+        const bool cursorChanged
+            = changed.cursorTheme != desktop.cursorTheme || changed.cursorSize != desktop.cursorSize;
+        desktop = std::move(changed);
+        for (const auto& view : m_views) {
+            if (view->decoration())
+                view->decoration()->update();
+        }
+        if (cursorChanged)
+            loadCursorTheme();
+    }
+
     Settings settings = loadSettings(settingsPath());
     if (settings == m_settings)
         return;
@@ -341,6 +350,47 @@ void Server::applySettings()
     windowAnimationTime = m_settings.windowAnimation;
     for (const auto& pointer : m_pointers)
         configurePointer(*pointer);
+}
+
+void Server::loadCursorTheme()
+{
+    // The theme and size the desktop's config names, else those the session was started with,
+    // else the usual ones. Programs started from now on are told them too.
+    static const std::string sessionTheme = environment("XCURSOR_THEME");
+    static const std::string sessionSize = environment("XCURSOR_SIZE");
+    const std::string theme = desktop.cursorTheme.empty() ? sessionTheme : desktop.cursorTheme;
+    unsigned size = unsigned(desktop.cursorSize);
+    if (size == 0
+        && (std::from_chars(sessionSize.data(), sessionSize.data() + sessionSize.size(), size).ec != std::errc {}
+            || size == 0 || size > 256))
+        size = 24;
+    wlr_xcursor_manager* loaded = wlr_xcursor_manager_create(theme.empty() ? nullptr : theme.c_str(), size);
+    if (!loaded)
+        return;
+    // The cursor lets go of the old one before it goes.
+    wlr_cursor_set_xcursor(cursor, loaded, "default");
+    wlr_xcursor_manager* old = std::exchange(xcursor, loaded);
+    updateXwaylandCursor();
+    // The first, at start, is what the session was started with already.
+    if (!old)
+        return;
+    wlr_xcursor_manager_destroy(old);
+
+    if (theme.empty())
+        unsetenv("XCURSOR_THEME");
+    else
+        setenv("XCURSOR_THEME", theme.c_str(), true);
+    setenv("XCURSOR_SIZE", std::to_string(size).c_str(), true);
+    spawn(theme.empty() ? "systemctl --user unset-environment XCURSOR_THEME; "
+                          "dbus-update-activation-environment --systemd XCURSOR_SIZE"
+                        : "dbus-update-activation-environment --systemd XCURSOR_THEME XCURSOR_SIZE");
+    // Whatever is under the pointer sets its own again once the pointer enters it anew.
+    if (idleNotifier && m_cursorMode == CursorMode::Passthrough && !m_locked) {
+        wlr_seat_pointer_clear_focus(seat);
+        timespec now {};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        cursorMotion(uint32_t(now.tv_sec * 1000 + now.tv_nsec / 1'000'000));
+    }
 }
 
 void Server::keyboardDestroyed(Keyboard& keyboard)
