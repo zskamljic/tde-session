@@ -1,7 +1,7 @@
 find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Widgets DBus Network)
 find_package(LayerShellQt 6 REQUIRED)
 find_package(PolkitQt6-1 REQUIRED)
-find_package(Tde 0.2 REQUIRED)
+find_package(Tde 0.3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CANBERRA REQUIRED IMPORTED_TARGET libcanberra)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)

@@ -18,7 +18,7 @@ pkgbase = tde-session
 	depends = libpulse
 	depends = libsecret
 	depends = libstdc++
-	depends = libtde>=0.2.0
+	depends = libtde>=0.3.0
 	depends = libxkbcommon
 	depends = lua
 	depends = openssh

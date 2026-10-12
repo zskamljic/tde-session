@@ -1,6 +1,6 @@
 # tde-askpass, which asks for passwords for ssh and sudo, as SSH_ASKPASS and SUDO_ASKPASS.
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets DBus)
-find_package(Tde 0.2 REQUIRED)
+find_package(Tde 0.3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1)
 

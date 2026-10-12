@@ -2,7 +2,7 @@
 # open on the compositor, its displays, Bluetooth and Wi-Fi, the session's settings, and owning
 # Wayland objects.
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui DBus)
-find_package(Tde 0.2 REQUIRED)
+find_package(Tde 0.3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
