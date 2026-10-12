@@ -67,6 +67,39 @@ private slots:
         QCOMPARE(config.appearance.theme, u"arc-dark"_s);
     }
 
+    void addsTheTableWhenMissing()
+    {
+        // As older programs wrote it: no lock table at all.
+        QTemporaryDir dir;
+        const QString path = write(dir,
+            "-- TDE desktop configuration, shared by all TDE applications.\n"
+            "-- See /usr/share/doc/ariadne/examples/tde/config.lua (or data/tde/config.lua in the Ariadne sources) "
+            "for every setting.\n\n"
+            "return {\n    terminal = \"ghostty\",\n\n    window_buttons = {\n        position = \"left\",\n"
+            "        order = { \"close\", \"minimize\", \"maximize\" },\n    },\n\n    appearance = {\n"
+            "        theme = \"arc-dark\",\n        corner_radius = 5,\n        icon_theme = \"Paper\",\n    },\n}\n");
+        QVERIFY(daedalus::setLockAfter(path, 0));
+        QCOMPARE(lockAfter(path), 0);
+        QVERIFY(shell::setDesktopSetting(path, u"lock"_s, u"before_sleep"_s, u"false"_s));
+        QCOMPARE(lockAfter(path), 0);
+        QVERIFY(daedalus::setLockAfter(path, 10));
+        QCOMPARE(lockAfter(path), 10);
+    }
+
+    void addsACommaWhereTheLastEntryHasNone()
+    {
+        QTemporaryDir dir;
+        const QString path = write(dir, "return {\n    appearance = { theme = \"arc\" } -- mine\n}\n");
+        QVERIFY(daedalus::setLockAfter(path, 0));
+        QCOMPARE(lockAfter(path), 0);
+        QCOMPARE(
+            read(path), u"return {\n    appearance = { theme = \"arc\" }, -- mine\n    lock = { after = 0 },\n}\n"_s);
+
+        const QString text = write(dir, "return {\n    terminal = \"foot\"\n}\n");
+        QVERIFY(shell::setDesktopString(text, u"appearance"_s, u"theme"_s, u"arc"_s));
+        QCOMPARE(read(text), u"return {\n    terminal = \"foot\",\n    appearance = { theme = \"arc\" },\n}\n"_s);
+    }
+
     void setsTopLevelValues()
     {
         QTemporaryDir dir;

@@ -7,6 +7,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 
+#include <algorithm>
 #include <vector>
 
 using namespace Qt::StringLiterals;
@@ -30,22 +31,25 @@ qsizetype longBracketEnd(const QString& text, qsizetype start)
     return end < 0 ? text.size() : end + closing.size();
 }
 
-// How deep in braces every character of the code is; -1 for those in comments and strings.
+constexpr int InString = -1;
+constexpr int InComment = -2;
+
+// How deep in braces every character of the code is; negative for those in strings and comments.
 std::vector<int> depths(const QString& text)
 {
-    std::vector<int> depth(size_t(text.size()), -1);
+    std::vector<int> depth(size_t(text.size()), InString);
     int level = 0;
     qsizetype i = 0;
     while (i < text.size()) {
         const QChar c = text[i];
         if (c == u'-' && i + 1 < text.size() && text[i + 1] == u'-') {
-            const qsizetype end = longBracketEnd(text, i + 2);
-            if (end >= 0) {
-                i = end;
-            } else {
+            qsizetype end = longBracketEnd(text, i + 2);
+            if (end < 0) {
                 const qsizetype line = text.indexOf(u'\n', i);
-                i = line < 0 ? text.size() : line;
+                end = line < 0 ? text.size() : line;
             }
+            std::fill(depth.begin() + i, depth.begin() + end, InComment);
+            i = end;
             continue;
         }
         if (c == u'"' || c == u'\'') {
@@ -126,6 +130,21 @@ QString replaced(QString text, const std::vector<int>& depth, const QRegularExpr
     return text.replace(start, end - start, value);
 }
 
+// Inserts `entry` before the brace at `close`, with a comma after what comes before it when
+// that needs one, as the last entry of a table may go without.
+QString insertedBefore(QString text, const std::vector<int>& depth, qsizetype close, const QString& entry)
+{
+    qsizetype last = close - 1;
+    while (last >= 0 && (depth[size_t(last)] == InComment || text[last].isSpace()))
+        --last;
+    const bool separated
+        = last < 0 || (depth[size_t(last)] >= 0 && (text[last] == u'{' || text[last] == u',' || text[last] == u';'));
+    text.insert(close, entry);
+    if (!separated)
+        text.insert(last + 1, u',');
+    return text;
+}
+
 QString edited(QString text, const QString& table, const QString& key, const QString& value)
 {
     const std::vector<int> depth = depths(text);
@@ -136,7 +155,7 @@ QString edited(QString text, const QString& table, const QString& key, const QSt
     if (table.isEmpty()) {
         const QRegularExpressionMatch found = matchAt(text, depth, setting, 1, 0, end);
         if (!found.hasMatch())
-            return text.insert(end, u"    %1 = %2,\n"_s.arg(key, value));
+            return insertedBefore(text, depth, end, u"    %1 = %2,\n"_s.arg(key, value));
         return replaced(text, depth, found, 1, end, value);
     }
 
@@ -144,7 +163,7 @@ QString edited(QString text, const QString& table, const QString& key, const QSt
     const QRegularExpressionMatch found
         = matchAt(text, depth, uR"(\b%1\s*=\s*\{)"_s.arg(QRegularExpression::escape(table)), 1, 0, text.size());
     if (!found.hasMatch())
-        return text.insert(end, u"    %1 = { %2 = %3 },\n"_s.arg(table, key, value));
+        return insertedBefore(text, depth, end, u"    %1 = { %2 = %3 },\n"_s.arg(table, key, value));
     const qsizetype open = found.capturedEnd() - 1;
     const qsizetype close = closingBrace(text, depth, open);
     if (close < 0)
