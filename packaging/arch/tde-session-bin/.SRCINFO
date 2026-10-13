@@ -39,6 +39,7 @@ pkgbase = tde-session-bin
 	optdepends = pipewire-pulse: sound, with its volume in the bar
 	optdepends = gnome-keyring: remembering the passphrases of SSH keys
 	optdepends = fprintd: unlocking the screen with a finger
+	optdepends = brightnessctl: the keyboard light keys, where the keyboard does not change it itself
 	provides = tde-session=0.3.0
 	conflicts = tde-session
 	noextract = tde-session-0.3.0-x86_64.tar.zst
