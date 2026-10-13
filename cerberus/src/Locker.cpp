@@ -463,11 +463,8 @@ void Locker::fingerprintChanged()
 void Locker::tickClock()
 {
     // A reader that went away, as over sleeping, may be back.
-    if (++m_ticks % 10 == 0 && m_fingerprint && m_fingerprint->state() == Fingerprint::State::Unavailable) {
+    if (++m_ticks % 10 == 0)
         m_fingerprint->restart();
-        if (m_fingerprint->state() != Fingerprint::State::Unavailable)
-            fingerprintChanged();
-    }
     std::string time = timeText(m_seconds);
     std::string date = formatted("%A, %-d %B");
     if (time != m_face.time || date != m_face.date) {
@@ -499,8 +496,6 @@ int Locker::run()
     m_face.user = fullName(user);
     m_auth = std::make_unique<Authenticator>(user->pw_name);
     m_fingerprint = std::make_unique<Fingerprint>(user->pw_name);
-    if (m_fingerprint->state() == Fingerprint::State::Waiting)
-        m_face.finger = Face::Finger::Ready;
 
     m_display = wl_display_connect(nullptr);
     if (!m_display) {
@@ -548,7 +543,7 @@ int Locker::run()
             {m_clockTimer.get(), POLLIN, 0},
             {m_fingerprint->fd(), m_fingerprint->events(), 0},
         };
-        if (poll(fds, std::size(fds), -1) < 0) {
+        if (poll(fds, std::size(fds), m_fingerprint->timeout()) < 0) {
             wl_display_cancel_read(m_display);
             continue;
         }
@@ -573,7 +568,8 @@ int Locker::run()
             if (const auto accepted = m_auth->result())
                 authenticated(*accepted);
         }
-        if (fds[4].revents && m_fingerprint->process() && !m_unlocked)
+        // Also for calls to fprintd that took too long, answered with an error.
+        if (m_fingerprint->process() && !m_unlocked)
             fingerprintChanged();
         // Whoever started it may wait for the session to be locked, as before sleeping.
         if (m_locked && !announced) {
