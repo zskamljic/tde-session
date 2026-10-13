@@ -122,8 +122,17 @@ Settings loadSettings(const std::string& path)
         table(lua, "touchpad", [&] { readPointer(lua, settings.touchpad); });
     });
     table(lua, "windows", [&] {
-        if (const auto hotCorner = boolean(lua, "hot_corner"))
-            settings.hotCorner = *hotCorner;
+        if (const auto corner = string(lua, "corner")) {
+            if (*corner == "overview")
+                settings.hotCorner = HotCorner::Overview;
+            else if (*corner == "desktop")
+                settings.hotCorner = HotCorner::Desktop;
+            else if (*corner == "off")
+                settings.hotCorner = HotCorner::Off;
+        } else if (boolean(lua, "hot_corner") == false) {
+            // Before it did more, it showed the desktop or nothing.
+            settings.hotCorner = HotCorner::Off;
+        }
     });
     table(lua, "animations", [&] {
         if (const auto windows = integer(lua, "windows", 0, 2000))

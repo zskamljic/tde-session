@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <format>
@@ -651,13 +652,39 @@ void Server::checkHotCorner()
     if (distance > Reach || !m_hotCornerArmed)
         return;
     m_hotCornerArmed = false;
-    // Not while something is dragged or held, nor over a window covering the screen, as a game,
-    // nor while the overview or another layer surface holds the keyboard.
+    // Not while something is dragged or held, nor over a window covering the screen, as a game.
     const View* focused = focusedView();
-    if (!m_settings.hotCorner || seat->drag || seat->pointer_state.button_count > 0 || m_layerFocus
-        || (focused && focused->fullscreen))
+    if (seat->drag || seat->pointer_state.button_count > 0 || (focused && focused->fullscreen))
         return;
-    toggleDesktop();
+    // The overview closes again, as with Super; the desktop waits while it, or another layer
+    // surface, holds the keyboard.
+    if (m_settings.hotCorner == HotCorner::Off || (m_settings.hotCorner == HotCorner::Desktop && m_layerFocus))
+        return;
+    m_hotCornerPushed = std::chrono::steady_clock::now();
+    runHotCorner();
+}
+
+void Server::hotCornerClicked()
+{
+    // Pushed into the corner, the pointer is on the button there, which is often clicked
+    // right after: that is part of the same push.
+    if (std::chrono::steady_clock::now() - m_hotCornerPushed < std::chrono::seconds(1))
+        return;
+    runHotCorner();
+}
+
+void Server::runHotCorner()
+{
+    switch (m_settings.hotCorner) {
+    case HotCorner::Overview:
+        spawn("tde-argus --toggle");
+        break;
+    case HotCorner::Desktop:
+        toggleDesktop();
+        break;
+    case HotCorner::Off:
+        break;
+    }
 }
 
 void Server::cursorMotion(uint32_t timeMsec)

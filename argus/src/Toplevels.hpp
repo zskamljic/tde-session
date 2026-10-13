@@ -32,7 +32,6 @@ SHELL_PROXY(ext_foreign_toplevel_list_v1, ext_foreign_toplevel_list_v1_destroy);
 SHELL_PROXY(ext_foreign_toplevel_handle_v1, ext_foreign_toplevel_handle_v1_destroy);
 SHELL_PROXY(
     ext_foreign_toplevel_image_capture_source_manager_v1, ext_foreign_toplevel_image_capture_source_manager_v1_destroy);
-SHELL_PROXY(tde_window_info_manager_v1, tde_window_info_manager_v1_destroy);
 SHELL_PROXY(tde_window_info_v1, tde_window_info_v1_destroy);
 
 namespace argus {

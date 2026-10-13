@@ -86,9 +86,10 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 
 Dragging a window to the top edge maximizes it, to a side edge fills that half of the screen,
 which the window grows into; Super and a drag moves a window from anywhere in it. Pushing the
-pointer into the top left corner shows the desktop, as the button at the end of Windows 7's
-taskbar did, and doing it again before using another window brings the windows back. New windows
-open in the middle of the screen.
+pointer into the top left corner, or clicking the narrow button there at the start of the bar,
+opens the overview as Super does; it can show the desktop instead, as the button at the end of
+Windows 7's taskbar did, and doing it again before using another window brings the windows back.
+New windows open in the middle of the screen.
 In Argus, the windows go on showing what they do; a click on one switches to it, a middle click
 or the × on it closes it, and with several displays, dragging it to another display's part of
 the overview moves it there.
@@ -128,7 +129,7 @@ how long the animations take, the keyboard layouts, the keys that switch them an
 key, how fast the mouse and the touchpad move and scroll, and which way, and tapping to click,
 whether and when the screen locks by itself, and before sleeping, and the fingers that unlock it,
 which applications open web pages, mail, music and the rest, the terminal, which programs start
-at login, the hot corner, and whether the clocks show seconds. Its
+at login, what the hot corner does, and whether the clocks show seconds. Its
 Power page shows the battery's charge, health and the power it gives. `tde-daedalus --page
 bluetooth` opens it on a page, or shows the one open there. The session's own settings are in
 `~/.config/tde/session/config.lua`, which Daedalus writes; the theme, the icons, the pointer,

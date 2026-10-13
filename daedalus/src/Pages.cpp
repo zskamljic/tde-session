@@ -50,16 +50,20 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     switching->addRow(u"Alt+Tab shows"_s, u"What the switcher shows of every window"_s, style);
 
     // As Windows 7 had its button at the end of the taskbar, here at the start of the bar.
-    auto* hotCorner = new Switch(this);
-    hotCorner->setChecked(config.windows.hotCorner);
-    connect(hotCorner, &Switch::toggled, this, [&settings](bool on) {
-        settings.config.windows.hotCorner = on;
+    using Corner = shell::SessionConfig::Windows::Corner;
+    auto* corner = new QComboBox(this);
+    corner->addItem(u"Opens the overview"_s, int(Corner::Overview));
+    corner->addItem(u"Shows the desktop"_s, int(Corner::Desktop));
+    corner->addItem(u"Does nothing"_s, int(Corner::Off));
+    corner->setCurrentIndex(corner->findData(int(config.windows.corner)));
+    connect(corner, &QComboBox::activated, this, [&settings, corner] {
+        settings.config.windows.corner = Corner(corner->currentData().toInt());
         settings.save();
     });
     Group* desktop = addGroup(u"Desktop"_s);
     desktop->addRow(u"Hot corner"_s,
-        u"Pushing the pointer into the top left corner shows the desktop, and again brings the windows back"_s,
-        hotCorner);
+        u"Pushing the pointer into the top left corner, or clicking the button there; doing it again undoes it"_s,
+        corner);
 
     Group* animations = addGroup(u"Animations"_s);
     const auto duration = [&](const QString& title, const QString& subtitle, int& value) {

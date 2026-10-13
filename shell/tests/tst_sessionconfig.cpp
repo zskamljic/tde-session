@@ -26,7 +26,7 @@ private slots:
         config.background.color = QColor(0x12, 0x34, 0x56);
         config.switcher.style = shell::SessionConfig::Switcher::Style::Icons;
         config.clock.seconds = true;
-        config.windows.hotCorner = false;
+        config.windows.corner = shell::SessionConfig::Windows::Corner::Desktop;
         config.power = {.blank = 0, .suspend = 45, .suspendOnBattery = 10};
         config.animations = {.overview = 0, .flip = 600, .flipStep = 90, .windows = 120};
         config.input.mouse = {.speed = -40, .scrollSpeed = 50, .naturalScroll = true};
@@ -54,6 +54,17 @@ private slots:
         file.write("return { background = { mode = \"sideways\", color = \"blue-ish\" }, switcher = 3 }\n");
         file.close();
         QCOMPARE(shell::loadSessionConfig(path), shell::SessionConfig());
+    }
+
+    void hotCornerTurnedOffBeforeStaysOff()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"config.lua"_s);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("return { windows = { hot_corner = false } }\n");
+        file.close();
+        QCOMPARE(shell::loadSessionConfig(path).windows.corner, shell::SessionConfig::Windows::Corner::Off);
     }
 
     void layoutsAreFoundByTheirDisplays()

@@ -51,15 +51,18 @@ const struct tde_window_info_manager_v1_interface managerImplementation {
     .destroy = [](wl_client*, wl_resource* resource) { wl_resource_destroy(resource); },
     .get_info = getInfo,
     .move_to_output = moveToOutput,
+    .hot_corner
+    = [](wl_client*,
+          wl_resource* manager) { static_cast<Server*>(wl_resource_get_user_data(manager))->hotCornerClicked(); },
 };
 
 } // namespace
 
-// Where windows are, for the shell to animate them from there, and moving them to another
-// output, as the overview does.
+// Where windows are, for the shell to animate them from there, moving them to another output,
+// as the overview does, and the bar's button in the hot corner.
 void Server::setUpWindowInfo()
 {
-    wl_global_create(display, &tde_window_info_manager_v1_interface, 2, this,
+    wl_global_create(display, &tde_window_info_manager_v1_interface, 3, this,
         [](wl_client* client, void* data, uint32_t version, uint32_t id) {
             wl_resource* manager = wl_resource_create(client, &tde_window_info_manager_v1_interface, int(version), id);
             if (!manager) {

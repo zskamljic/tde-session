@@ -16,13 +16,16 @@ struct PointerSettings {
     bool operator==(const PointerSettings&) const = default;
 };
 
+// What pushing the pointer into the top left corner, or clicking the bar's button there, does.
+enum class HotCorner { Overview, Desktop, Off };
+
 // What the compositor takes from the session's settings, ~/.config/tde/session/config.lua,
 // which Settings (Daedalus) writes.
 struct Settings {
     PointerSettings mouse;
     PointerSettings touchpad {.naturalScroll = true};
     int windowAnimation = 200; // ms windows take to move into a tile
-    bool hotCorner = true; // the pointer pushed into the top left corner shows the desktop
+    HotCorner hotCorner = HotCorner::Overview; // the overview, as Super opens it
 
     bool operator==(const Settings&) const = default;
 };

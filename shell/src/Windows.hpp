@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tde-window-info-v1-client-protocol.h"
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 
@@ -17,6 +18,7 @@ SHELL_PROXY(zwlr_foreign_toplevel_manager_v1, zwlr_foreign_toplevel_manager_v1_d
 SHELL_PROXY(zwlr_foreign_toplevel_handle_v1, zwlr_foreign_toplevel_handle_v1_destroy);
 SHELL_PROXY(xdg_activation_v1, xdg_activation_v1_destroy);
 SHELL_PROXY(xdg_activation_token_v1, xdg_activation_token_v1_destroy);
+SHELL_PROXY(tde_window_info_manager_v1, tde_window_info_manager_v1_destroy);
 
 namespace shell {
 
@@ -65,6 +67,9 @@ public:
     // the click the user just made. `done` gets it, or nothing when the compositor gives none.
     void requestActivationToken(std::function<void(const QString&)> done);
 
+    // Does what the top left corner is set to do, as when the button there is clicked.
+    void hotCorner();
+
 signals:
     void changed();
 
@@ -83,6 +88,7 @@ private:
     Proxy<wl_registry> m_registry;
     Proxy<zwlr_foreign_toplevel_manager_v1> m_manager;
     Proxy<xdg_activation_v1> m_activation;
+    Proxy<tde_window_info_manager_v1> m_info; // Atlas's own, for the hot corner
     std::vector<std::unique_ptr<Window>> m_windows;
 
     struct TokenRequest {

@@ -14,12 +14,14 @@ endif()
 
 set(CMAKE_AUTOMOC ON)
 
-# C bindings for the protocols of the window list and the displays, generated from their
-# descriptions.
+# C bindings for the protocols of the window lists, the displays and TDE's own, generated from
+# their descriptions.
 set(protocols
     ${WLR_PROTOCOLS}/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
     ${WLR_PROTOCOLS}/unstable/wlr-output-management-unstable-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/xdg-activation/xdg-activation-v1.xml
+    ${WAYLAND_PROTOCOLS}/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml
+    ${PROJECT_SOURCE_DIR}/protocols/tde-window-info-v1.xml
 )
 set(protocol_sources)
 foreach(xml ${protocols})

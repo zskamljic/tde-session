@@ -1,5 +1,6 @@
 #include "Bar.hpp"
 
+#include "CornerButton.hpp"
 #include "Groups.hpp"
 #include "Locking.hpp"
 #include "NotificationViews.hpp"
@@ -114,6 +115,9 @@ Bar::Bar(QWidget* parent)
         layer->setScope(u"tde-hermes"_s);
     }
 
+    // It does what pushing the pointer into the corner does, which Atlas knows.
+    m_corner = new CornerButton(this);
+    connect(m_corner, &CornerButton::clicked, &m_windows, &Windows::hotCorner);
     m_taskbar = new Taskbar(m_windows, this);
 
     m_clock = new QToolButton(this);
@@ -144,6 +148,10 @@ Bar::Bar(QWidget* parent)
         m_locking->setClockSeconds(m_seconds);
         m_displays.setSettings(config.displays);
         m_powerSaving->setTimes(config.power.blank, config.power.suspend, config.power.suspendOnBattery);
+        using Corner = shell::SessionConfig::Windows::Corner;
+        m_corner->setVisible(config.windows.corner != Corner::Off);
+        m_corner->setToolTip(config.windows.corner == Corner::Desktop ? u"Show Desktop"_s : u"Overview"_s);
+        layOut();
     };
     m_configWatcher
         = std::make_unique<tde::ConfigWatcher>(QStringList {tde::desktopConfigPath(), shell::sessionConfigPath()});
@@ -533,9 +541,12 @@ void Bar::placeOn(QScreen* screen)
 void Bar::layOut()
 {
     // Shown on another screen while it is being made, before it has its parts.
-    if (!m_system || !m_tray || !m_clock || !m_taskbar)
+    if (!m_system || !m_tray || !m_clock || !m_taskbar || !m_corner)
         return;
-    const QRect area = rect().adjusted(Spacing, 0, -Spacing, 0);
+    // The corner's button right in it, where the pointer stops.
+    m_corner->setGeometry(0, 0, m_corner->sizeHint().width(), height());
+    const int start = m_corner->isHidden() ? 0 : m_corner->width();
+    const QRect area = rect().adjusted(start + Spacing, 0, -Spacing, 0);
 
     const QSize systemSize(m_system->sizeHint().width(), height());
     m_system->setGeometry(QRect(QPoint(area.right() - systemSize.width() + 1, 0), systemSize));

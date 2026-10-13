@@ -8,13 +8,12 @@ pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
 
 set(CMAKE_AUTOMOC ON)
 
-# C bindings for the protocols the overview speaks, generated from their descriptions.
+# C bindings for the protocols the overview speaks, generated from their descriptions; the
+# shell's library has those of the window list and TDE's own.
 set(protocols
     ${WAYLAND_PROTOCOLS}/staging/ext-data-control/ext-data-control-v1.xml
-    ${WAYLAND_PROTOCOLS}/staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-image-capture-source/ext-image-capture-source-v1.xml
     ${WAYLAND_PROTOCOLS}/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml
-    ${PROJECT_SOURCE_DIR}/protocols/tde-window-info-v1.xml
 )
 set(protocol_sources)
 foreach(xml ${protocols})

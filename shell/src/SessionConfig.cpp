@@ -15,6 +15,7 @@ namespace {
 
 using Mode = SessionConfig::Background::Mode;
 using Style = SessionConfig::Switcher::Style;
+using Corner = SessionConfig::Windows::Corner;
 
 constexpr int MaxDuration = 2000; // ms
 constexpr int MaxPixels = 100'000;
@@ -30,6 +31,12 @@ constexpr std::pair<QStringView, Mode> modes[] = {
 constexpr std::pair<QStringView, Style> styles[] = {
     {u"previews", Style::Previews},
     {u"icons", Style::Icons},
+};
+
+constexpr std::pair<QStringView, Corner> corners[] = {
+    {u"overview", Corner::Overview},
+    {u"desktop", Corner::Desktop},
+    {u"off", Corner::Off},
 };
 
 QString boolText(bool value)
@@ -90,8 +97,11 @@ SessionConfig loadSessionConfig(const QString& path)
                 config.switcher.style = *style;
         });
         reader.table("windows", [&] {
-            if (const auto hotCorner = reader.boolean("hot_corner"))
-                config.windows.hotCorner = *hotCorner;
+            if (const auto corner = reader.choice<Corner>("corner", corners))
+                config.windows.corner = *corner;
+            // Before it did more, it showed the desktop or nothing.
+            else if (const auto hotCorner = reader.boolean("hot_corner"); hotCorner && !*hotCorner)
+                config.windows.corner = Corner::Off;
         });
         reader.table("animations", [&] {
             auto& animations = config.animations;
@@ -203,9 +213,10 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"        style = %1,"_s.arg(tde::luaString(tde::choiceName<Style>(styles, config.switcher.style))),
         u"    },"_s,
         u"    windows = {"_s,
-        u"        -- Whether pushing the pointer into the top left corner shows the desktop, and again"_s,
-        u"        -- brings the windows back."_s,
-        u"        hot_corner = %1,"_s.arg(boolText(config.windows.hotCorner)),
+        u"        -- What pushing the pointer into the top left corner, or clicking the button there,"_s,
+        u"        -- does: \"overview\" opens it, as Super does, \"desktop\" shows the desktop, and again"_s,
+        u"        -- brings the windows back, \"off\" leaves the corner alone."_s,
+        u"        corner = %1,"_s.arg(tde::luaString(tde::choiceName<Corner>(corners, config.windows.corner))),
         u"    },"_s,
         u"    animations = {"_s,
         u"        -- How long they take, in milliseconds, up to %1; 0 leaves them out."_s.arg(MaxDuration),

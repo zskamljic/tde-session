@@ -6,6 +6,7 @@
 #include "Settings.hpp"
 #include "wlr.hpp"
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,6 +71,8 @@ public:
     // Minimizes every window to show the desktop, as Windows 7 did; again, before another
     // window was used, brings back those it minimized.
     void toggleDesktop();
+    // The button the bar shows in the top left corner was clicked.
+    void hotCornerClicked();
     // Programs keep the screen from locking and turning off only while their window shows.
     void updateIdleInhibition();
     View* focusedView() const;
@@ -196,8 +199,10 @@ private:
     void decorationReleased(View& view);
     void setDecorationHover(View* view, Decoration::Part part);
     void forgetPointerTargets(const View& view);
-    // The pointer pushed into the top left corner of the screens shows the desktop.
+    // The pointer pushed into the top left corner of the screens opens the overview or shows
+    // the desktop, as the settings say.
     void checkHotCorner();
+    void runHotCorner();
     void inhibitorDestroyed(wlr_idle_inhibitor_v1* inhibitor);
 
 public: // called by Keyboard
@@ -267,6 +272,7 @@ private:
 
     // The hot corner goes off once on the way in, and again once the pointer has left it.
     bool m_hotCornerArmed = true;
+    std::chrono::steady_clock::time_point m_hotCornerPushed; // when it last went off
     std::vector<View*> m_desktopShown; // the windows minimized to show the desktop
 
     wlr_scene_tree* m_dragIcon = nullptr;

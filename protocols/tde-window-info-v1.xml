@@ -6,7 +6,7 @@
     switchers do. The windows are those of ext-foreign-toplevel-list.
   </description>
 
-  <interface name="tde_window_info_manager_v1" version="2">
+  <interface name="tde_window_info_manager_v1" version="3">
     <request name="destroy" type="destructor"/>
 
     <request name="get_info">
@@ -28,9 +28,18 @@
       <arg name="toplevel" type="object" interface="ext_foreign_toplevel_handle_v1"/>
       <arg name="output" type="object" interface="wl_output"/>
     </request>
+
+    <request name="hot_corner" since="3">
+      <description summary="do what the hot corner does">
+        Does what pushing the pointer into the top left corner is set to do,
+        as when the button the shell shows there is clicked: opening the
+        overview, or showing the desktop. A click right after the pointer
+        was pushed there is part of the same push, and does nothing more.
+      </description>
+    </request>
   </interface>
 
-  <interface name="tde_window_info_v1" version="2">
+  <interface name="tde_window_info_v1" version="3">
     <enum name="flags" bitfield="true">
       <entry name="minimized" value="1"/>
     </enum>

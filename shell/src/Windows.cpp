@@ -47,6 +47,12 @@ void Windows::global(void* data, wl_registry* registry, uint32_t name, const cha
             static_cast<xdg_activation_v1*>(wl_registry_bind(registry, name, &xdg_activation_v1_interface, 1)));
         return;
     }
+    if (std::strcmp(interface, tde_window_info_manager_v1_interface.name) == 0) {
+        if (version >= TDE_WINDOW_INFO_MANAGER_V1_HOT_CORNER_SINCE_VERSION)
+            self->m_info.reset(static_cast<tde_window_info_manager_v1*>(wl_registry_bind(registry, name,
+                &tde_window_info_manager_v1_interface, TDE_WINDOW_INFO_MANAGER_V1_HOT_CORNER_SINCE_VERSION)));
+        return;
+    }
     if (std::strcmp(interface, zwlr_foreign_toplevel_manager_v1_interface.name) != 0)
         return;
     static const zwlr_foreign_toplevel_manager_v1_listener listener {
@@ -170,6 +176,14 @@ void Windows::close(quint64 id)
 {
     if (Window* window = byId(id)) {
         zwlr_foreign_toplevel_handle_v1_close(window->handle.get());
+        flush();
+    }
+}
+
+void Windows::hotCorner()
+{
+    if (m_info) {
+        tde_window_info_manager_v1_hot_corner(m_info.get());
         flush();
     }
 }

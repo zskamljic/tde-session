@@ -34,7 +34,10 @@ struct SessionConfig {
     } switcher;
 
     struct Windows {
-        bool hotCorner = true; // the pointer pushed into the top left corner shows the desktop
+        // What pushing the pointer into the top left corner, or clicking the button there, does.
+        enum class Corner { Overview, Desktop, Off };
+
+        Corner corner = Corner::Overview; // the overview, as Super opens it
 
         bool operator==(const Windows&) const = default;
     } windows;

@@ -32,13 +32,15 @@ using shell::Window;
 using shell::Windows;
 
 class Banners;
+class CornerButton;
 class Locking;
 class PowerSaving;
 class PolkitAgent;
 class Taskbar;
 class Tray;
 
-// The bar along the top of the screen: the applications on the left, the clock in the
+// The bar along the top of the screen: the button of the hot corner and the applications on
+// the left, the clock in the
 // middle, with the calendar, the media player and the notifications behind it, and on the
 // right the tray icons and the status of sound, network and battery, behind which are the
 // quick settings. Notifications also show as banners below it.
@@ -81,6 +83,7 @@ private:
     std::unique_ptr<PowerSaving> m_powerSaving;
     std::unique_ptr<PolkitAgent> m_polkit;
     std::unique_ptr<tde::ConfigWatcher> m_configWatcher; // of the desktop's and the session's config
+    CornerButton* m_corner = nullptr; // in the hot corner, unless that is turned off
     Taskbar* m_taskbar = nullptr;
     QToolButton* m_clock = nullptr;
     QMenu* m_calendarMenu = nullptr; // behind the clock
