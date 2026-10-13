@@ -94,6 +94,19 @@ void logOut()
     callLogind(u"/org/freedesktop/login1/session/auto"_s, u"org.freedesktop.login1.Session"_s, u"Terminate"_s);
 }
 
+// The window buttons as GNOME's settings name them: those before the colon go at the left.
+QString gnomeButtonLayout(const tde::DesktopConfig::WindowButtons& buttons)
+{
+    QStringList names;
+    for (const tde::WindowButton button : buttons.order) {
+        names << (button == tde::WindowButton::Minimize ? u"minimize"_s
+                : button == tde::WindowButton::Maximize ? u"maximize"_s
+                                                        : u"close"_s);
+    }
+    const QString joined = names.join(u',');
+    return buttons.side == tde::ButtonSide::Left ? joined + u':' : u':' + joined;
+}
+
 } // namespace
 
 Bar::Bar(QWidget* parent)
@@ -164,6 +177,7 @@ Bar::Bar(QWidget* parent)
         const auto appearance = tde::desktop().appearance;
         tde::setDesktop(tde::loadDesktopConfig());
         checkDesktopConfig();
+        followButtonLayout();
         m_locking->setIdleMinutes(tde::desktop().lock.after);
         m_locking->setLockBeforeSleep(tde::desktop().lock.beforeSleep);
         if (tde::desktop().appearance != appearance)
@@ -175,6 +189,7 @@ Bar::Bar(QWidget* parent)
             applyTheme();
     });
     applySession();
+    followButtonLayout();
 
     if (m_notifications.start()) {
         m_banners = std::make_unique<Banners>(m_notifications);
@@ -237,6 +252,15 @@ void Bar::checkDesktopConfig()
         return;
     m_notifications.Notify(u"Settings"_s, 0, u"dialog-warning-symbolic"_s, u"The desktop settings cannot be read"_s,
         u"%1\nThe defaults are used until it is fixed."_s.arg(error.toHtmlEscaped()), {}, {}, -1);
+}
+
+void Bar::followButtonLayout()
+{
+    const QString layout = gnomeButtonLayout(tde::desktop().windowButtons);
+    if (layout == std::exchange(m_buttonLayout, layout))
+        return;
+    QProcess::startDetached(
+        u"gsettings"_s, {u"set"_s, u"org.gnome.desktop.wm.preferences"_s, u"button-layout"_s, u"'%1'"_s.arg(layout)});
 }
 
 void Bar::pickAction(uint id, const QString& action)

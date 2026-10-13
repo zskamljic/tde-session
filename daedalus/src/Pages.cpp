@@ -1,5 +1,8 @@
 #include "Pages.hpp"
 
+#include <DesktopSettings.hpp>
+
+#include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
 #include <QComboBox>
@@ -60,6 +63,19 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
         settings.config.windows.corner = Corner(corner->currentData().toInt());
         settings.save();
     });
+    // The side of the title bars' buttons, which TDE's programs, GTK's and Atlas follow.
+    m_buttonSide = new QComboBox(this);
+    m_buttonSide->addItem(u"Right"_s, u"right"_s);
+    m_buttonSide->addItem(u"Left"_s, u"left"_s);
+    desktopChanged(tde::loadDesktopConfig());
+    connect(m_buttonSide, &QComboBox::activated, this, [this] {
+        if (!shell::setDesktopString(
+                tde::desktopConfigPath(), u"window_buttons"_s, u"position"_s, m_buttonSide->currentData().toString()))
+            qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
+    });
+    Group* titleBars = addGroup(u"Title Bars"_s);
+    titleBars->addRow(u"Buttons"_s, u"The end of the title bar that has the window buttons"_s, m_buttonSide);
+
     Group* desktop = addGroup(u"Desktop"_s);
     desktop->addRow(u"Hot corner"_s,
         u"Pushing the pointer into the top left corner, or clicking the button there; doing it again undoes it"_s,
@@ -85,6 +101,11 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     shortcuts->addRow(u"Flip through windows in 3D"_s, {}, keys(u"Super+Tab"_s, this));
     shortcuts->addRow(u"Show all windows"_s, {}, keys(u"Super"_s, this));
     shortcuts->addNote(u"Shift goes backwards; letting go of Alt or Super switches to the window picked."_s);
+}
+
+void WindowsPage::desktopChanged(const tde::DesktopConfig& config)
+{
+    m_buttonSide->setCurrentIndex(config.windowButtons.side == tde::ButtonSide::Left ? 1 : 0);
 }
 
 DateTimePage::DateTimePage(Settings& settings, QWidget* parent)

@@ -74,6 +74,8 @@ private:
     void updateStatusIcon();
     // Tells when the desktop config cannot be read, and its defaults are used instead.
     void checkDesktopConfig();
+    // GTK's programs, which draw their own title bars, put the buttons where TDE's do.
+    void followButtonLayout();
     void pickAction(uint id, const QString& action);
     void raiseWindowOf(const QString& desktopEntry, const QString& appName);
 
@@ -106,6 +108,7 @@ private:
     QTimer m_tick;
     bool m_seconds = false; // shown in the clock
     QString m_configError; // told already
+    QString m_buttonLayout; // given to GNOME's settings already
 };
 
 } // namespace hermes

@@ -6,6 +6,8 @@
 
 #include <functional>
 
+class QComboBox;
+
 namespace daedalus {
 
 // What the pages change: the session's settings, saved again after every change.
@@ -14,10 +16,16 @@ struct Settings {
     std::function<void()> save;
 };
 
-// Alt+Tab, the animations of the overview and Flip 3D, and the keys for switching windows.
+// Alt+Tab, the side of the window buttons, the hot corner, the animations of the overview and
+// Flip 3D, and the keys for switching windows.
 class WindowsPage : public Page {
 public:
     explicit WindowsPage(Settings& settings, QWidget* parent = nullptr);
+
+    void desktopChanged(const tde::DesktopConfig& config) override;
+
+private:
+    QComboBox* m_buttonSide = nullptr; // of title bars, in the desktop config
 };
 
 // The clock in the bar and on the lock screen.

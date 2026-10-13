@@ -129,7 +129,8 @@ how long the animations take, the keyboard layouts, the keys that switch them an
 key, how fast the mouse and the touchpad move and scroll, and which way, and tapping to click,
 whether and when the screen locks by itself, and before sleeping, and the fingers that unlock it,
 which applications open web pages, mail, music and the rest, the terminal, which programs start
-at login, what the hot corner does, and whether the clocks show seconds. Its
+at login, which end of title bars has the window buttons (GTK programs are told too), what the
+hot corner does, and whether the clocks show seconds. Its
 Power page shows the battery's charge, health and the power it gives. `tde-daedalus --page
 bluetooth` opens it on a page, or shows the one open there. The session's own settings are in
 `~/.config/tde/session/config.lua`, which Daedalus writes; the theme, the icons, the pointer,
