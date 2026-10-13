@@ -286,6 +286,8 @@ void paintPlaceholder(QPainter& painter, const QPainterPath& shape, const QIcon&
 {
     const QRectF area = shape.boundingRect();
     painter.fillPath(shape, tde::theme::colors().window);
+    if (icon.isNull())
+        return;
     const double size = std::min({96.0, area.width() / 2, area.height() / 2});
     QRectF place(0, 0, size, size);
     place.moveCenter(area.center());

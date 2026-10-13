@@ -73,8 +73,9 @@ struct Toplevel {
 // not shown or not known.
 QRect placeOf(const Toplevel& window, const QWidget& widget);
 
-// What stands for a window not pictured yet: its outline filled, with its application's icon.
-void paintPlaceholder(QPainter& painter, const QPainterPath& shape, const QIcon& icon);
+// What stands for a window not pictured yet: its outline filled, with its application's icon
+// when one is given.
+void paintPlaceholder(QPainter& painter, const QPainterPath& shape, const QIcon& icon = {});
 
 // A window as ext-foreign-toplevel-list announces it.
 struct ListEntry {

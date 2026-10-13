@@ -447,7 +447,7 @@ void Overview::paint(QPainter& painter)
         QPainterPath shape;
         shape.addRoundedRect(preview, radius, radius);
         if (window.preview.isNull()) {
-            paintPlaceholder(painter, shape, m_toplevels.iconOf(window));
+            paintPlaceholder(painter, shape);
         } else {
             painter.save();
             painter.setClipPath(shape);
@@ -486,7 +486,7 @@ void Overview::paint(QPainter& painter)
         shape.addRoundedRect(place, Radius, Radius);
         painter.setOpacity(0.85);
         if (held->preview.isNull()) {
-            paintPlaceholder(painter, shape, m_toplevels.iconOf(*held));
+            paintPlaceholder(painter, shape);
         } else {
             painter.save();
             painter.setClipPath(shape);
