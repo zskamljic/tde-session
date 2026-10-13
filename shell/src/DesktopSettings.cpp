@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QTemporaryFile>
 
 #include <algorithm>
 #include <vector>
@@ -73,20 +74,22 @@ std::vector<int> depths(const QString& text)
     return depth;
 }
 
-// The first match of `pattern` from `from` to `to` that starts in code `level` braces deep.
+// The last match of `pattern` from `from` to `to` that starts in code `level` braces deep: of
+// a setting given twice, Lua keeps the last.
 QRegularExpressionMatch matchAt(
     const QString& text, const std::vector<int>& depth, const QString& pattern, int level, qsizetype from, qsizetype to)
 {
     const QRegularExpression expression(pattern);
+    QRegularExpressionMatch found;
     auto matches = expression.globalMatch(text, from);
     while (matches.hasNext()) {
         const QRegularExpressionMatch match = matches.next();
         if (match.capturedStart() >= to)
             break;
         if (depth[size_t(match.capturedStart())] == level)
-            return match;
+            found = match;
     }
-    return {};
+    return found;
 }
 
 // Where the brace closing the one at `open` is.
@@ -174,11 +177,79 @@ QString edited(QString text, const QString& table, const QString& key, const QSt
     return replaced(text, depth, inside, 2, close, value);
 }
 
+// `text` with a comma before every entry of a table that follows another without one.
+QString withCommas(QString text)
+{
+    const std::vector<int> depth = depths(text);
+    static const QRegularExpression entry(uR"([A-Za-z_]\w*\s*=(?!=))"_s);
+    std::vector<qsizetype> missing; // after these
+    auto matches = entry.globalMatch(text);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        const qsizetype start = match.capturedStart();
+        if (depth[size_t(start)] < 1)
+            continue;
+        qsizetype last = start - 1;
+        while (last >= 0 && (depth[size_t(last)] == InComment || text[last].isSpace()))
+            --last;
+        // A field of a table, or an assignment in code, as `a.b = c`, which the file loading
+        // afterwards tells apart.
+        if (last >= 0 && depth[size_t(last)] >= 0
+            && (text[last] == u'{' || text[last] == u',' || text[last] == u';' || text[last] == u'.'))
+            continue;
+        if (last >= 0)
+            missing.push_back(last + 1);
+    }
+    for (auto it = missing.rbegin(); it != missing.rend(); ++it)
+        text.insert(*it, u',');
+    return text;
+}
+
+// Why `text` cannot be read as a desktop config; empty when it can.
+QString loadError(const QString& text)
+{
+    QTemporaryFile file;
+    if (!file.open())
+        return {};
+    file.write(text.toUtf8());
+    file.close();
+    const auto loaded = tde::readLuaConfig(file.fileName(), [](tde::LuaTableReader&) { });
+    return loaded ? QString() : loaded.error();
+}
+
 } // namespace
+
+bool repairDesktopConfig(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return false;
+    const QString text = QString::fromUtf8(file.readAll());
+    file.close();
+    if (loadError(text).isEmpty())
+        return false;
+    const QString repaired = withCommas(text);
+    if (repaired == text || !loadError(repaired).isEmpty())
+        return false;
+    QSaveFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    out.write(repaired.toUtf8());
+    return out.commit();
+}
+
+QString desktopConfigError(const QString& path)
+{
+    if (!QFile::exists(path))
+        return {};
+    const auto loaded = tde::readLuaConfig(path, [](tde::LuaTableReader&) { });
+    return loaded ? QString() : loaded.error();
+}
 
 bool setDesktopSetting(const QString& path, const QString& table, const QString& key, const QString& value)
 {
     tde::createDesktopConfig(path);
+    repairDesktopConfig(path);
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
         return false;

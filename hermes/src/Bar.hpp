@@ -72,6 +72,8 @@ private:
     // Makes the panels again, in the theme's colours, once none is open.
     void rebuildPanels();
     void updateStatusIcon();
+    // Tells when the desktop config cannot be read, and its defaults are used instead.
+    void checkDesktopConfig();
     void pickAction(uint id, const QString& action);
     void raiseWindowOf(const QString& desktopEntry, const QString& appName);
 
@@ -103,6 +105,7 @@ private:
     DisplayLayouts m_displays;
     QTimer m_tick;
     bool m_seconds = false; // shown in the clock
+    QString m_configError; // told already
 };
 
 } // namespace hermes

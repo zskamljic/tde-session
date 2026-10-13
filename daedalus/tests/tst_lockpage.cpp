@@ -100,6 +100,39 @@ private slots:
         QCOMPARE(read(text), u"return {\n    terminal = \"foot\",\n    appearance = { theme = \"arc\" },\n}\n"_s);
     }
 
+    void repairsWhatOlderVersionsBroke()
+    {
+        // Before 0.3.0, a setting added after a last entry without a comma left the file
+        // unreadable, and every edit after went into it unseen.
+        QTemporaryDir dir;
+        const QString path = write(dir,
+            "return {\n    window_buttons = { position = \"left\" },\n    appearance = {\n"
+            "        theme = \"arc\" -- light\n    }\n    lock = { after = 0 },\n    terminal = \"foot\"\n"
+            "    lock = { before_sleep = false, after = 3 },\n}\n");
+        QVERIFY(!shell::desktopConfigError(path).isEmpty());
+        QVERIFY(shell::repairDesktopConfig(path));
+        QVERIFY(shell::desktopConfigError(path).isEmpty());
+        tde::DesktopConfig config;
+        QVERIFY(tde::readDesktopConfig(path, config));
+        QCOMPARE(config.windowButtons.side, tde::ButtonSide::Left);
+        QCOMPARE(config.lock.after, 3);
+        QVERIFY(!config.lock.beforeSleep);
+        QCOMPARE(read(path),
+            u"return {\n    window_buttons = { position = \"left\" },\n    appearance = {\n"
+            "        theme = \"arc\" -- light\n    },\n    lock = { after = 0 },\n    terminal = \"foot\",\n"
+            "    lock = { before_sleep = false, after = 3 },\n}\n"_s);
+        // Readable already: left as it is.
+        QVERIFY(!shell::repairDesktopConfig(path));
+        // The lock table given twice: the last one is what counts, and what changes.
+        QVERIFY(daedalus::setLockAfter(path, 15));
+        QCOMPARE(lockAfter(path), 15);
+
+        // Broken otherwise: left for its owner to fix.
+        const QString other = write(dir, "return { appearance = { theme = } }\n");
+        QVERIFY(!shell::repairDesktopConfig(other));
+        QCOMPARE(read(other), u"return { appearance = { theme = } }\n"_s);
+    }
+
     void setsTopLevelValues()
     {
         QTemporaryDir dir;

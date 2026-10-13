@@ -163,6 +163,7 @@ Bar::Bar(QWidget* parent)
         }
         const auto appearance = tde::desktop().appearance;
         tde::setDesktop(tde::loadDesktopConfig());
+        checkDesktopConfig();
         m_locking->setIdleMinutes(tde::desktop().lock.after);
         m_locking->setLockBeforeSleep(tde::desktop().lock.beforeSleep);
         if (tde::desktop().appearance != appearance)
@@ -186,6 +187,7 @@ Bar::Bar(QWidget* parent)
             m_sounds.play(*notification);
     });
     connect(&m_notifications, &NotificationServer::changed, this, &Bar::updateClock);
+    checkDesktopConfig();
 
     m_system = new QToolButton(this);
     m_system->setAutoRaise(true);
@@ -227,6 +229,15 @@ bool Bar::event(QEvent* event)
 }
 
 Bar::~Bar() = default;
+
+void Bar::checkDesktopConfig()
+{
+    const QString error = shell::desktopConfigError(tde::desktopConfigPath());
+    if (error == std::exchange(m_configError, error) || error.isEmpty())
+        return;
+    m_notifications.Notify(u"Settings"_s, 0, u"dialog-warning-symbolic"_s, u"The desktop settings cannot be read"_s,
+        u"%1\nThe defaults are used until it is fixed."_s.arg(error.toHtmlEscaped()), {}, {}, -1);
+}
 
 void Bar::pickAction(uint id, const QString& action)
 {

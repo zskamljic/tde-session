@@ -1,5 +1,7 @@
 #include "SettingsWindow.hpp"
 
+#include <DesktopSettings.hpp>
+
 #include <tde/ConfigWatcher.hpp>
 #include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
@@ -44,6 +46,9 @@ int main(int argc, char* argv[])
     }
 
     tde::createDesktopConfig(tde::desktopConfigPath());
+    // One that an older version left unreadable is mended, so its settings count again.
+    if (shell::repairDesktopConfig(tde::desktopConfigPath()))
+        qInfo("tde-daedalus: mended %s, which could not be read", qPrintable(tde::desktopConfigPath()));
     tde::setDesktop(tde::loadDesktopConfig());
     // The look of the parts settings pages are made of, after GNOME's.
     tde::theme::setApplicationStyleSheet(uR"(

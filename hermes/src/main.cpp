@@ -1,6 +1,7 @@
 #include "Bar.hpp"
 #include "Osd.hpp"
 
+#include <DesktopSettings.hpp>
 #include <Platform.hpp>
 
 #include <tde/DesktopConfig.hpp>
@@ -33,6 +34,9 @@ int main(int argc, char* argv[])
     }
 
     tde::createDesktopConfig(tde::desktopConfigPath());
+    // One that an older version left unreadable is mended, so its settings count again.
+    if (shell::repairDesktopConfig(tde::desktopConfigPath()))
+        qInfo("tde-hermes: mended %s, which could not be read", qPrintable(tde::desktopConfigPath()));
     tde::setDesktop(tde::loadDesktopConfig());
     tde::theme::apply(app, tde::desktop().appearance);
 
