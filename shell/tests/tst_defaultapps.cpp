@@ -1,4 +1,4 @@
-#include <DefaultAppsPage.hpp>
+#include <DefaultApps.hpp>
 
 #include <QTest>
 
@@ -15,8 +15,8 @@ private slots:
                              "\n"
                              "[Default Applications]\n"
                              "text/html = firefox.desktop;chromium.desktop;\n"_s;
-        QCOMPARE(daedalus::defaultIn(list, u"text/html"_s), u"firefox.desktop"_s);
-        QVERIFY(daedalus::defaultIn(list, u"inode/directory"_s).isEmpty());
+        QCOMPARE(shell::defaultIn(list, u"text/html"_s), u"firefox.desktop"_s);
+        QVERIFY(shell::defaultIn(list, u"inode/directory"_s).isEmpty());
     }
 
     void replacesAndAddsKeepingTheRest()
@@ -26,7 +26,7 @@ private slots:
                              "\n"
                              "[Added Associations]\n"
                              "image/png=gimp.desktop;\n"_s;
-        QCOMPARE(daedalus::withDefault(list, {u"text/html"_s, u"x-scheme-handler/http"_s}, u"chromium.desktop"_s),
+        QCOMPARE(shell::withDefault(list, {u"text/html"_s, u"x-scheme-handler/http"_s}, u"chromium.desktop"_s),
             u"[Default Applications]\n"
             "text/html=chromium.desktop;\n"
             "x-scheme-handler/http=chromium.desktop;\n"
@@ -37,9 +37,9 @@ private slots:
 
     void startsTheSectionWhenThereIsNone()
     {
-        QCOMPARE(daedalus::withDefault({}, {u"inode/directory"_s}, u"ariadne.desktop"_s),
+        QCOMPARE(shell::withDefault({}, {u"inode/directory"_s}, u"ariadne.desktop"_s),
             u"[Default Applications]\ninode/directory=ariadne.desktop;\n"_s);
-        QCOMPARE(daedalus::withDefault(
+        QCOMPARE(shell::withDefault(
                      u"[Added Associations]\na/b=c.desktop;\n"_s, {u"inode/directory"_s}, u"ariadne.desktop"_s),
             u"[Added Associations]\na/b=c.desktop;\n\n[Default Applications]\ninode/directory=ariadne.desktop;\n"_s);
     }

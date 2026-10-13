@@ -312,4 +312,50 @@ void Audio::setMuted(bool muted)
     release(pa_context_set_sink_mute_by_name(m_loop->context, sink.constData(), muted, nullptr, nullptr));
 }
 
+void Audio::toggleMicrophone(std::function<void(bool muted)> done)
+{
+    if (!m_available)
+        return;
+    // Carried through libpulse's answers, on its thread.
+    struct Toggle {
+        Audio* self;
+        std::function<void(bool)> done;
+    };
+    auto* toggle = new Toggle {this, std::move(done)};
+    Locked lock(m_loop->mainloop);
+    pa_operation* asked = pa_context_get_server_info(
+        m_loop->context,
+        [](pa_context* context, const pa_server_info* info, void* data) {
+            std::unique_ptr<Toggle> toggle(static_cast<Toggle*>(data));
+            if (!info || !info->default_source_name)
+                return;
+            pa_operation* found = pa_context_get_source_info_by_name(
+                context, info->default_source_name,
+                [](pa_context* context, const pa_source_info* source, int last, void* data) {
+                    auto* toggle = static_cast<Toggle*>(data);
+                    // Told of the source, then that there are no more, or of an error: done then.
+                    if (last != 0) {
+                        delete toggle;
+                        return;
+                    }
+                    if (!source)
+                        return;
+                    const bool muted = !source->mute;
+                    release(pa_context_set_source_mute_by_index(context, source->index, muted, nullptr, nullptr));
+                    QMetaObject::invokeMethod(
+                        toggle->self, [done = toggle->done, muted] { done(muted); }, Qt::QueuedConnection);
+                },
+                toggle.get());
+            if (found) {
+                toggle.release();
+                pa_operation_unref(found);
+            }
+        },
+        toggle);
+    if (asked)
+        pa_operation_unref(asked);
+    else
+        delete toggle;
+}
+
 } // namespace hermes

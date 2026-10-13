@@ -211,6 +211,12 @@ public: // called by Keyboard
 
 private:
     bool runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode);
+    // The volume, brightness and media keys, which work on the lock screen too.
+    bool runMediaKey(xkb_keysym_t sym);
+    // Those of them that change a level go on while held, as typing repeats.
+    void startMediaRepeat(const Keyboard& keyboard, uint32_t keycode, xkb_keysym_t sym);
+    void stopMediaRepeat(uint32_t keycode);
+    void repeatMediaKey();
 
     std::string m_socket;
     wlr_xdg_shell* m_xdgShell = nullptr;
@@ -266,6 +272,12 @@ private:
 
     // The modifier holding a window switcher of the overview open, until it is let go.
     uint32_t m_pickingWith = 0;
+
+    // A volume or brightness key held down, and how often it repeats.
+    uint32_t m_mediaRepeatKey = 0;
+    xkb_keysym_t m_mediaRepeatSym = 0;
+    int m_mediaRepeatInterval = 0; // ms
+    EventSource m_mediaRepeat;
 
     // Super pressed and released on its own opens the overview.
     bool m_superAlone = false;

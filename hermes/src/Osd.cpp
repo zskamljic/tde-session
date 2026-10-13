@@ -5,6 +5,8 @@
 #include "QuickSettings.hpp"
 #include "SystemStatus.hpp"
 
+#include <Applications.hpp>
+#include <DefaultApps.hpp>
 #include <Icons.hpp>
 #include <tde/Theme.hpp>
 
@@ -32,6 +34,22 @@ double stepped(double level, double by)
 {
     return std::clamp(std::round(level / Step + by / Step) * Step, 0.0, 1.0);
 }
+
+// What the application keys open: the default for a kind of file, else the first application
+// of a menu category.
+struct Opened {
+    QStringView name;
+    QStringView mimeType; // none for those without
+    QStringView category;
+};
+
+constexpr Opened openable[] = {
+    {u"web", u"x-scheme-handler/https", u"WebBrowser"},
+    {u"mail", u"x-scheme-handler/mailto", u"Email"},
+    {u"music", u"audio/mpeg", u"Music"},
+    {u"files", u"inode/directory", u"FileManager"},
+    {u"calculator", {}, u"Calculator"},
+};
 
 } // namespace
 
@@ -122,6 +140,14 @@ void MediaKeys::ToggleMute()
     m_osd->present(volumeIconName(m_audio.volume(), muted), muted ? 0 : m_audio.volume());
 }
 
+void MediaKeys::ToggleMicMute()
+{
+    m_audio.toggleMicrophone([this](bool muted) {
+        m_osd->present(muted ? u"microphone-sensitivity-muted-symbolic"_s : u"microphone-sensitivity-high-symbolic"_s,
+            muted ? 0 : 1);
+    });
+}
+
 void MediaKeys::RaiseBrightness()
 {
     changeBrightness(Step);
@@ -175,6 +201,28 @@ void MediaKeys::Previous()
 void MediaKeys::Stop()
 {
     m_media.stop();
+}
+
+void MediaKeys::Seek(qlonglong microseconds)
+{
+    m_media.seek(microseconds);
+}
+
+void MediaKeys::Open(const QString& what)
+{
+    const auto kind = std::ranges::find(openable, what, &Opened::name);
+    if (kind == std::end(openable))
+        return;
+    const auto apps = shell::loadApplications(qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(u':'));
+    const QString id = kind->mimeType.isEmpty() ? QString() : shell::defaultApplication(kind->mimeType.toString());
+    auto app = std::ranges::find(apps, id, &shell::Application::id);
+    if (id.isEmpty() || app == apps.end()) {
+        app = std::ranges::find_if(apps, [&](const shell::Application& candidate) {
+            return candidate.inMenus && candidate.categories.contains(kind->category);
+        });
+    }
+    if (app == apps.end() || !shell::launch(*app))
+        qWarning("tde-hermes: no application to open for the %s key", qPrintable(what));
 }
 
 } // namespace hermes

@@ -47,11 +47,6 @@ if(TDE_SESSION_BUILD_TESTS)
     target_link_libraries(tst_keyboard PRIVATE Qt6::Widgets Qt6::DBus Qt6::Test Tde::Tde tde-shell)
     add_test(NAME tst_keyboard COMMAND tst_keyboard)
 
-    add_executable(tst_defaultapps tests/tst_defaultapps.cpp src/DefaultAppsPage.cpp src/Widgets.cpp)
-    target_include_directories(tst_defaultapps PRIVATE src)
-    target_link_libraries(tst_defaultapps PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)
-    add_test(NAME tst_defaultapps COMMAND tst_defaultapps)
-
     add_executable(tst_startup tests/tst_startup.cpp src/StartupPage.cpp src/Widgets.cpp)
     target_include_directories(tst_startup PRIVATE src)
     target_link_libraries(tst_startup PRIVATE Qt6::Widgets Qt6::Test Tde::Tde tde-shell)

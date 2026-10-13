@@ -4,6 +4,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <functional>
 #include <memory>
 
 struct pa_context;
@@ -30,6 +31,9 @@ public:
 
     void setVolume(double volume);
     void setMuted(bool muted);
+    // Mutes the default input, or lets it be heard again; `done` is told which, on the bar's
+    // thread, once it is done.
+    void toggleMicrophone(std::function<void(bool muted)> done);
 
 signals:
     void changed();

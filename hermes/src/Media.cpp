@@ -117,18 +117,24 @@ void Media::propertiesChanged()
     fetchArt();
 }
 
-void Media::call(const QString& method)
+void Media::call(const QString& method, const QVariantList& arguments)
 {
     const Player* player = current();
     if (!player)
         return;
-    QDBusConnection::sessionBus().call(
-        QDBusMessage::createMethodCall(player->service, Path, PlayerInterface, method), QDBus::NoBlock);
+    QDBusMessage message = QDBusMessage::createMethodCall(player->service, Path, PlayerInterface, method);
+    message.setArguments(arguments);
+    QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
 }
 
 void Media::playPause()
 {
     call(u"PlayPause"_s);
+}
+
+void Media::seek(qint64 microseconds)
+{
+    call(u"Seek"_s, {QVariant::fromValue(microseconds)});
 }
 
 void Media::next()

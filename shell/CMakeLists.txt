@@ -38,6 +38,7 @@ add_library(tde-shell STATIC
     src/Bluetooth.cpp
     src/BusProperties.cpp
     src/Catalog.cpp
+    src/DefaultApps.cpp
     src/DesktopSettings.cpp
     src/Displays.cpp
     src/Icons.cpp

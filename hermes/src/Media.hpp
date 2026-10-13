@@ -43,6 +43,8 @@ public:
     void next();
     void previous();
     void stop();
+    // Moves on, or back, in what plays.
+    void seek(qint64 microseconds);
 
 signals:
     void changed();
@@ -54,7 +56,7 @@ private slots:
 private:
     void add(const QString& service, const QString& owner);
     void refresh(Player& player);
-    void call(const QString& method);
+    void call(const QString& method, const QVariantList& arguments = {});
     void fetchArt();
 
     std::vector<Player> m_players; // the one played last first

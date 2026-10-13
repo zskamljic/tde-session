@@ -79,8 +79,11 @@ Pick **TDE** on the login screen of GDM, LightDM or any display manager that lis
 | Super+E | Files |
 | Print | Screenshot of a selection, a screen or a window, picked on the frozen screen |
 | Shift+Print / Alt+Print | Screenshot of the screens / of the window in use, at once |
-| Volume and brightness keys | Change them, showing the level |
-| Media keys | Play, pause and skip in the program that played last |
+| Volume and brightness keys | Change them while held, showing the level, on the lock screen too |
+| Microphone mute key | Mutes the microphone, or lets it be heard again |
+| Media keys | Play, pause, skip and seek in the program that played last, on the lock screen too |
+| Browser, mail, music, files and calculator keys | Open the default application for them |
+| Search, tools and sleep keys | Find applications, open Settings, sleep |
 | Ctrl+Alt+Delete | Log out |
 | Ctrl+Alt+F1…F12 | Switch to another virtual terminal |
 

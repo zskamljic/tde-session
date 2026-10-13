@@ -36,8 +36,9 @@ private:
     QTimer m_hide;
 };
 
-// The volume, brightness and media keys, which the compositor hands to the bar over the session bus,
-// so the change shows on the screen. Its scriptable slots are the D-Bus methods.
+// The volume, brightness, media and application keys, which the compositor hands to the bar
+// over the session bus, so the change shows on the screen. Its scriptable slots are the D-Bus
+// methods.
 class MediaKeys : public QObject {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "io.github.zskamljic.Hermes")
@@ -52,6 +53,7 @@ public slots:
     Q_SCRIPTABLE void RaiseVolume();
     Q_SCRIPTABLE void LowerVolume();
     Q_SCRIPTABLE void ToggleMute();
+    Q_SCRIPTABLE void ToggleMicMute();
     Q_SCRIPTABLE void RaiseBrightness();
     Q_SCRIPTABLE void LowerBrightness();
     // For the player in charge.
@@ -59,6 +61,10 @@ public slots:
     Q_SCRIPTABLE void Next();
     Q_SCRIPTABLE void Previous();
     Q_SCRIPTABLE void Stop();
+    Q_SCRIPTABLE void Seek(qlonglong microseconds);
+    // Starts the application the keys of some keyboards stand for: "web", "mail", "music",
+    // "files" or "calculator", the defaults where there are such.
+    Q_SCRIPTABLE void Open(const QString& what);
 
 private:
     void changeVolume(double by);

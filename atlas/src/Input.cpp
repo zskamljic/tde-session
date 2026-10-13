@@ -428,7 +428,11 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
         keyboard.keyboard->keymap, xkbKeycode, xkb_state_key_get_layout(state, xkbKeycode), 0, &syms);
     const uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard.keyboard) & BindingModifiers;
 
-    // Locked, the keys are the lock screen's; only switching to another terminal stays.
+    if (!pressed)
+        stopMediaRepeat(keycode);
+
+    // Locked, the keys are the lock screen's; switching to another terminal stays, and the
+    // volume, brightness and media keys.
     if (m_locked) {
         m_superAlone = false;
         for (int i = 0; i < count && pressed; ++i) {
@@ -436,6 +440,11 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
                 && syms[i] <= XKB_KEY_F12) {
                 if (session)
                     wlr_session_change_vt(session, syms[i] - XKB_KEY_F1 + 1);
+                s_consumedKeys.insert(keycode);
+                return true;
+            }
+            if (runMediaKey(syms[i])) {
+                startMediaRepeat(keyboard, keycode, syms[i]);
                 s_consumedKeys.insert(keycode);
                 return true;
             }
@@ -455,11 +464,54 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
     m_superAlone = count > 0 && isSuper(syms[0]) && (modifiers & ~WLR_MODIFIER_LOGO) == 0;
     for (int i = 0; i < count; ++i) {
         if (runBinding(modifiers, syms[i], keycode)) {
+            startMediaRepeat(keyboard, keycode, syms[i]);
             s_consumedKeys.insert(keycode);
             return true;
         }
     }
     return false;
+}
+
+void Server::startMediaRepeat(const Keyboard& keyboard, uint32_t keycode, xkb_keysym_t sym)
+{
+    switch (sym) {
+    case XKB_KEY_XF86AudioLowerVolume:
+    case XKB_KEY_XF86AudioRaiseVolume:
+    case XKB_KEY_XF86MonBrightnessUp:
+    case XKB_KEY_XF86MonBrightnessDown:
+    case XKB_KEY_XF86KbdBrightnessUp:
+    case XKB_KEY_XF86KbdBrightnessDown:
+        break;
+    default:
+        return;
+    }
+    const auto& repeat = keyboard.keyboard->repeat_info;
+    if (repeat.rate <= 0)
+        return;
+    m_mediaRepeatKey = keycode;
+    m_mediaRepeatSym = sym;
+    // No faster than ten steps a second, which takes the volume across in two.
+    m_mediaRepeatInterval = std::max(1000 / repeat.rate, 100);
+    if (!m_mediaRepeat)
+        m_mediaRepeat = addTimer<&Server::repeatMediaKey>(eventLoop, this);
+    wl_event_source_timer_update(m_mediaRepeat.get(), std::max(repeat.delay, 1));
+}
+
+void Server::stopMediaRepeat(uint32_t keycode)
+{
+    if (keycode != m_mediaRepeatKey)
+        return;
+    m_mediaRepeatKey = 0;
+    if (m_mediaRepeat)
+        wl_event_source_timer_update(m_mediaRepeat.get(), 0);
+}
+
+void Server::repeatMediaKey()
+{
+    if (!m_mediaRepeatKey)
+        return;
+    runMediaKey(m_mediaRepeatSym);
+    wl_event_source_timer_update(m_mediaRepeat.get(), m_mediaRepeatInterval);
 }
 
 void Server::modifiersChanged(wlr_keyboard& keyboard)
@@ -576,6 +628,44 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
         return true;
     }
 
+    if (runMediaKey(sym))
+        return true;
+    // The applications some keyboards have keys for, as the bar knows them.
+    switch (sym) {
+    case XKB_KEY_XF86WWW:
+    case XKB_KEY_XF86HomePage:
+        hermes("Open s web", "true");
+        return true;
+    case XKB_KEY_XF86Mail:
+        hermes("Open s mail", "true");
+        return true;
+    case XKB_KEY_XF86AudioMedia:
+    case XKB_KEY_XF86Music:
+        hermes("Open s music", "true");
+        return true;
+    case XKB_KEY_XF86Explorer:
+    case XKB_KEY_XF86MyComputer:
+        hermes("Open s files", "exec ariadne");
+        return true;
+    case XKB_KEY_XF86Calculator:
+        hermes("Open s calculator", "true");
+        return true;
+    case XKB_KEY_XF86Search:
+        spawn("tde-argus --applications");
+        return true;
+    case XKB_KEY_XF86Tools:
+        spawn("tde-daedalus");
+        return true;
+    case XKB_KEY_XF86Sleep:
+        spawn("systemctl suspend");
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool Server::runMediaKey(xkb_keysym_t sym)
+{
     switch (sym) {
     // The bar changes them and shows it; without it, they still change.
     case XKB_KEY_XF86AudioLowerVolume:
@@ -587,16 +677,33 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
     case XKB_KEY_XF86AudioMute:
         hermes("ToggleMute", "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
         return true;
+    case XKB_KEY_XF86AudioMicMute:
+        hermes("ToggleMicMute", "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle");
+        return true;
     case XKB_KEY_XF86MonBrightnessUp:
         hermes("RaiseBrightness", "brightnessctl set +5%");
         return true;
     case XKB_KEY_XF86MonBrightnessDown:
         hermes("LowerBrightness", "brightnessctl set 5%-");
         return true;
+    // Most keyboards change their light themselves; for the others, in thirds.
+    case XKB_KEY_XF86KbdBrightnessUp:
+        spawn("brightnessctl --device='*::kbd_backlight' set 33%+");
+        return true;
+    case XKB_KEY_XF86KbdBrightnessDown:
+        spawn("brightnessctl --device='*::kbd_backlight' set 33%-");
+        return true;
     // For the player that played last, which the bar knows.
+    // Many keyboards' one key for both is either.
     case XKB_KEY_XF86AudioPlay:
     case XKB_KEY_XF86AudioPause:
         hermes("PlayPause", "playerctl play-pause");
+        return true;
+    case XKB_KEY_XF86AudioForward:
+        hermes("Seek x 10000000", "playerctl position 10+");
+        return true;
+    case XKB_KEY_XF86AudioRewind:
+        hermes("Seek x -10000000", "playerctl position 10-");
         return true;
     case XKB_KEY_XF86AudioNext:
         hermes("Next", "playerctl next");
