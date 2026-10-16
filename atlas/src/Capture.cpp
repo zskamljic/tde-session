@@ -125,14 +125,21 @@ void WindowCapture::start()
         return;
 
     Server& server = m_view.server;
-    // With alpha, and the modifier left to the allocator.
-    wlr_drm_format_set formats {};
-    wlr_drm_format_set_add(&formats, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_INVALID);
-    Swapchain swapchain(
-        wlr_swapchain_create(server.allocator, width, height, wlr_drm_format_set_get(&formats, DRM_FORMAT_ARGB8888)));
-    wlr_drm_format_set_finish(&formats);
-    if (!swapchain)
+    // With alpha, in a layout the renderer reads: left to the driver, some (NVIDIA's) give
+    // buffers it can neither draw into nor read, and the copies are then told no format.
+    const wlr_drm_format* format = wlr_drm_format_set_get(
+        wlr_renderer_get_texture_formats(server.renderer, server.allocator->buffer_caps), DRM_FORMAT_ARGB8888);
+    wlr_drm_format_set implicit {};
+    if (!format) {
+        wlr_drm_format_set_add(&implicit, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_INVALID);
+        format = wlr_drm_format_set_get(&implicit, DRM_FORMAT_ARGB8888);
+    }
+    Swapchain swapchain(wlr_swapchain_create(server.allocator, width, height, format));
+    wlr_drm_format_set_finish(&implicit);
+    if (!swapchain) {
+        wlr_log(WLR_ERROR, "cannot make buffers to picture a window in");
         return;
+    }
     m_swapchain = std::move(swapchain);
     // Tells the copies the size and formats it takes.
     wlr_ext_image_capture_source_v1_set_constraints_from_swapchain(&m_source.base, m_swapchain.get(), server.renderer);
