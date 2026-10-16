@@ -268,6 +268,10 @@ void View::endMorph()
 
 void View::setActivated(bool activated)
 {
+    // Focus is given again on every click and activation request; the window only hears of a
+    // change, as programs such as Chromium redraw and lay out again on each configure.
+    if (activated == this->activated)
+        return;
     this->activated = activated;
     updateFrame();
     sendActivated(activated);
