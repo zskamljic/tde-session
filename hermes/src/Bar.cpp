@@ -13,6 +13,7 @@
 
 #include <Applications.hpp>
 #include <DesktopSettings.hpp>
+#include <GtkSettings.hpp>
 #include <Icons.hpp>
 #include <Layer.hpp>
 #include <SessionConfig.hpp>
@@ -39,6 +40,7 @@
 #include <QPainter>
 #include <QProcess>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QStyleHints>
 #include <QTextCharFormat>
 #include <QToolButton>
@@ -261,6 +263,10 @@ void Bar::followButtonLayout()
         return;
     QProcess::startDetached(
         u"gsettings"_s, {u"set"_s, u"org.gnome.desktop.wm.preferences"_s, u"button-layout"_s, u"'%1'"_s.arg(layout)});
+    // Those under X11, such as Chromium's browsers drawing their own frame, read GTK's
+    // settings.ini instead, there being no XSETTINGS manager to ask.
+    shell::setGtkSettings(
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation), u"gtk-decoration-layout"_s, layout);
 }
 
 void Bar::pickAction(uint id, const QString& action)

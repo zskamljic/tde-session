@@ -41,6 +41,7 @@ add_library(tde-shell STATIC
     src/DefaultApps.cpp
     src/DesktopSettings.cpp
     src/Displays.cpp
+    src/GtkSettings.cpp
     src/Icons.cpp
     src/LoginSession.cpp
     src/PowerProfiles.cpp
