@@ -52,7 +52,7 @@ conflicts=("$_pkgname")
 # Built by the release workflow of the sources' repository, from the tag.
 source=("$_pkgname-$pkgver-x86_64.tar.zst::$url/releases/download/v$pkgver/$_pkgname-$pkgver-x86_64.tar.zst")
 noextract=("$_pkgname-$pkgver-x86_64.tar.zst")
-sha256sums=('SKIP')
+sha256sums=('107a1a33fab11d844f40d0c656f8cef11d58cf454f552fe3a1e99cdb6f1741a5')
 
 package() {
   bsdtar -xf "$_pkgname-$pkgver-x86_64.tar.zst" -C "$pkgdir"
