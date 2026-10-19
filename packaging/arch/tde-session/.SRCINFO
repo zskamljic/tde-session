@@ -46,6 +46,6 @@ pkgbase = tde-session
 	optdepends = fprintd: unlocking the screen with a finger
 	optdepends = brightnessctl: the keyboard light keys, where the keyboard does not change it itself
 	source = tde-session-0.3.4.tar.gz::https://github.com/zskamljic/tde-session/archive/refs/tags/v0.3.4.tar.gz
-	sha256sums = SKIP
+	sha256sums = c136e121f944f5bb8a574423455b59591d47cbe51faa430ac5183eb80e5e4511
 
 pkgname = tde-session

@@ -53,7 +53,7 @@ optdepends=(
   'brightnessctl: the keyboard light keys, where the keyboard does not change it itself'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('c136e121f944f5bb8a574423455b59591d47cbe51faa430ac5183eb80e5e4511')
 
 build() {
   cmake -B build -S "$pkgname-$pkgver" -G Ninja \
