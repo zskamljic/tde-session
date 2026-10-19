@@ -212,6 +212,10 @@ Bar::Bar(QWidget* parent)
     m_system->setPopupMode(QToolButton::InstantPopup);
     m_system->setStyleSheet(buttonStyle(u"padding: 0 10px;"_s));
     m_system->setMenu(createQuickSettings());
+    // The bar can show itself while it is still being made, when the displays say which screen
+    // it is on, and Qt leaves a widget made after that hidden for good: nothing would draw it,
+    // and it would not take the pointer either. Say so here, or the top right stays empty.
+    m_system->show();
     connect(&m_audio, &Audio::changed, this, &Bar::updateStatusIcon);
     connect(&m_network, &Network::changed, this, &Bar::updateStatusIcon);
     connect(&m_bluetooth, &shell::Bluetooth::changed, this, &Bar::updateStatusIcon);
