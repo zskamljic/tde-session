@@ -31,7 +31,8 @@ Server::~Server()
              &m_newVirtualKeyboard, &m_newVirtualPointer, &m_cursorMotion, &m_cursorMotionAbsolute, &m_cursorButton,
              &m_cursorAxis, &m_cursorFrame, &m_requestCursor, &m_requestCursorShape, &m_requestSelection,
              &m_requestPrimarySelection, &m_requestStartDrag, &m_startDrag, &m_dragIconDestroy, &m_requestActivate,
-             &m_newInhibitor, &m_newCaptureSource, &m_outputPowerMode, &m_newXwaylandSurface, &m_xwaylandReady})
+             &m_newInhibitor, &m_newCaptureSource, &m_outputPowerMode, &m_newXwaylandSurface, &m_xwaylandReady,
+             &m_newConstraint, &m_constraintDestroy, &m_pointerFocusChange, &m_keyboardFocusChange})
         listener->disconnect();
     // The loop's sources go before the loop does.
     for (EventSource* source :

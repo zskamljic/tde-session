@@ -154,13 +154,18 @@ void Server::setUpInput()
     loadCursorTheme();
 
     m_cursorMotion.connect<wlr_pointer_motion_event>(cursor->events.motion, [this](wlr_pointer_motion_event* event) {
-        wlr_cursor_move(cursor, &event->pointer->base, event->delta_x, event->delta_y);
-        cursorMotion(event->time_msec);
+        pointerMotion(&event->pointer->base, event->time_msec, event->delta_x, event->delta_y, event->unaccel_dx,
+            event->unaccel_dy);
     });
+    // Tablets and the pointer of a virtual machine say where it is; programs see how far that is.
     m_cursorMotionAbsolute.connect<wlr_pointer_motion_absolute_event>(
         cursor->events.motion_absolute, [this](wlr_pointer_motion_absolute_event* event) {
-            wlr_cursor_warp_absolute(cursor, &event->pointer->base, event->x, event->y);
-            cursorMotion(event->time_msec);
+            double x = 0;
+            double y = 0;
+            wlr_cursor_absolute_to_layout_coords(cursor, &event->pointer->base, event->x, event->y, &x, &y);
+            const double dx = x - cursor->x;
+            const double dy = y - cursor->y;
+            pointerMotion(&event->pointer->base, event->time_msec, dx, dy, dx, dy);
         });
     m_cursorButton.connect<wlr_pointer_button_event>(
         cursor->events.button, [this](wlr_pointer_button_event* event) { cursorButton(event); });
@@ -176,6 +181,11 @@ void Server::setUpInput()
     m_cursorFrame.connect(cursor->events.frame, [this] { wlr_seat_pointer_notify_frame(seat); });
 
     seat = wlr_seat_create(display, "seat0");
+    m_relativePointers = wlr_relative_pointer_manager_v1_create(display);
+    m_pointerConstraints = wlr_pointer_constraints_v1_create(display);
+    m_newConstraint.connect(m_pointerConstraints->events.new_constraint, [this] { updateConstraint(); });
+    m_pointerFocusChange.connect(seat->pointer_state.events.focus_change, [this] { updateConstraint(); });
+    m_keyboardFocusChange.connect(seat->keyboard_state.events.focus_change, [this] { updateConstraint(); });
     m_newInput.connect<wlr_input_device>(
         backend->events.new_input, [this](wlr_input_device* device) { newInput(device); });
     watchKeyboardLayout();
@@ -792,6 +802,65 @@ void Server::runHotCorner()
     case HotCorner::Off:
         break;
     }
+}
+
+void Server::pointerMotion(
+    wlr_input_device* device, uint32_t timeMsec, double dx, double dy, double unaccelDx, double unaccelDy)
+{
+    wlr_relative_pointer_manager_v1_send_relative_motion(
+        m_relativePointers, seat, uint64_t(timeMsec) * 1000, dx, dy, unaccelDx, unaccelDy);
+    if (m_constraint && m_cursorMode == CursorMode::Passthrough
+        && seat->pointer_state.focused_surface == m_constraint->surface) {
+        // Locked, the pointer stays where it is; the program only learns how it would have moved.
+        if (m_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+            wlr_idle_notifier_v1_notify_activity(idleNotifier, seat);
+            return;
+        }
+        // Confined, it goes as far as the edge of the part it is kept in.
+        const double sx = seat->pointer_state.sx;
+        const double sy = seat->pointer_state.sy;
+        double x = 0;
+        double y = 0;
+        if (wlr_region_confine(&m_constraint->region, sx, sy, sx + dx, sy + dy, &x, &y)) {
+            dx = x - sx;
+            dy = y - sy;
+        }
+    }
+    wlr_cursor_move(cursor, device, dx, dy);
+    cursorMotion(timeMsec);
+}
+
+void Server::updateConstraint()
+{
+    wlr_surface* surface = seat->pointer_state.focused_surface;
+    setConstraint(surface && surface == seat->keyboard_state.focused_surface
+            ? wlr_pointer_constraints_v1_constraint_for_surface(m_pointerConstraints, surface, seat)
+            : nullptr);
+}
+
+void Server::setConstraint(wlr_pointer_constraint_v1* constraint)
+{
+    if (constraint == m_constraint)
+        return;
+    // Letting go of a constraint that lasts once ends it, which is not to be heard of here.
+    m_constraintDestroy.disconnect();
+    if (wlr_pointer_constraint_v1* old = std::exchange(m_constraint, constraint))
+        wlr_pointer_constraint_v1_send_deactivated(old);
+    if (!constraint)
+        return;
+    wlr_pointer_constraint_v1_send_activated(constraint);
+    m_constraintDestroy.connect(constraint->events.destroy, [this] {
+        // The program let go: the pointer shows up where it says it would be by now.
+        wlr_pointer_constraint_v1* ended = std::exchange(m_constraint, nullptr);
+        m_constraintDestroy.disconnect();
+        if (ended->type != WLR_POINTER_CONSTRAINT_V1_LOCKED || !ended->current.cursor_hint.enabled
+            || seat->pointer_state.focused_surface != ended->surface)
+            return;
+        const double x = cursor->x - seat->pointer_state.sx + ended->current.cursor_hint.x;
+        const double y = cursor->y - seat->pointer_state.sy + ended->current.cursor_hint.y;
+        wlr_cursor_warp(cursor, nullptr, x, y);
+        wlr_seat_pointer_warp(seat, ended->current.cursor_hint.x, ended->current.cursor_hint.y);
+    });
 }
 
 void Server::cursorMotion(uint32_t timeMsec)

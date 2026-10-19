@@ -20,6 +20,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <wayland-protocols/cursor-shape-v1-enum.h>
+#include <wayland-protocols/pointer-constraints-unstable-v1-enum.h>
 #include <wayland-protocols/xdg-shell-enum.h>
 
 extern "C" {
@@ -60,9 +61,11 @@ extern "C" {
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_output_swapchain_manager.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
@@ -83,6 +86,7 @@ extern "C" {
 #include <wlr/util/box.h>
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
+#include <wlr/util/region.h>
 #include <wlr/xwayland.h>
 #undef class
 #undef namespace

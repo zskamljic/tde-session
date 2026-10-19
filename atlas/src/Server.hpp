@@ -187,7 +187,15 @@ private:
     void updateXwaylandCursor();
     void configurePointer(const Pointer& pointer) const;
     void updateCapabilities();
+    // The pointer moved by this much, or less where a program holds it in place or in a part
+    // of its window, as games do to look around.
+    void pointerMotion(
+        wlr_input_device* device, uint32_t timeMsec, double dx, double dy, double unaccelDx, double unaccelDy);
     void cursorMotion(uint32_t timeMsec);
+    // The constraint of the surface that has both the pointer and the keyboard holds; any
+    // other lets go.
+    void updateConstraint();
+    void setConstraint(wlr_pointer_constraint_v1* constraint);
     void cursorButton(wlr_pointer_button_event* event);
     NodeOwner* ownerAt(double x, double y, wlr_surface** surface, double* sx, double* sy) const;
     void updateMove();
@@ -288,6 +296,15 @@ private:
     std::vector<View*> m_desktopShown; // the windows minimized to show the desktop
 
     wlr_scene_tree* m_dragIcon = nullptr;
+
+    // Programs that lock the pointer or keep it in their window, and read how it moves.
+    wlr_relative_pointer_manager_v1* m_relativePointers = nullptr;
+    wlr_pointer_constraints_v1* m_pointerConstraints = nullptr;
+    wlr_pointer_constraint_v1* m_constraint = nullptr; // the one that holds now
+    Listener m_newConstraint;
+    Listener m_constraintDestroy;
+    Listener m_pointerFocusChange;
+    Listener m_keyboardFocusChange;
 
     Listener m_newOutput;
     Listener m_layoutChange;
