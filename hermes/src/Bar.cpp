@@ -527,10 +527,6 @@ void Bar::updateStatusIcon()
     painter.end();
     m_system->setIconSize(size);
     m_system->setIcon(QIcon(pixmap));
-    // The icon is often made while the bar is still hidden, and a repaint asked for then is
-    // lost; the button keeps whatever it first drew, which is nothing, until something else
-    // comes along to paint it. Ask again now that it may be showing.
-    m_system->update();
     layOut();
 }
 
