@@ -35,7 +35,14 @@ Fingerprint::Fingerprint(const std::string& user)
     if (sd_bus_open_system(&bus) < 0)
         return;
     m_bus.reset(bus);
+    find();
+}
+
+void Fingerprint::find()
+{
     // The reader fprintd uses by default, if there is one; fprintd starts when asked.
+    m_signal.reset();
+    m_device.clear();
     call("GetDefaultDevice", &Fingerprint::found, nullptr, "/net/reactivated/Fprint/Manager",
         "net.reactivated.Fprint.Manager");
 }
@@ -92,6 +99,7 @@ void Fingerprint::listed(sd_bus_message* reply)
         m_device.clear();
         return;
     }
+    m_wanted = true;
     sd_bus_slot* slot = nullptr;
     sd_bus_match_signal_async(
         m_bus.get(), &slot, Service, m_device.c_str(), DeviceInterface, "VerifyStatus", status, nullptr, this);
@@ -132,23 +140,24 @@ void Fingerprint::stopped(sd_bus_message*)
 
 void Fingerprint::released(sd_bus_message*)
 {
+    // A reader plugged in anew, as after sleeping, may be another object of fprintd's.
     m_claimed = false;
-    claim();
+    find();
 }
 
 void Fingerprint::restart()
 {
-    if (m_state != State::Unavailable || m_device.empty() || !m_signal || m_then)
+    if (m_state != State::Unavailable || !m_wanted || m_then)
         return;
     if (m_claimed)
         call("VerifyStop", &Fingerprint::stopped);
     else
-        claim();
+        find();
 }
 
 int Fingerprint::fd() const
 {
-    return m_bus && (m_then || m_signal) ? sd_bus_get_fd(m_bus.get()) : -1;
+    return m_bus && (m_then || m_signal || m_wanted) ? sd_bus_get_fd(m_bus.get()) : -1;
 }
 
 short Fingerprint::events() const

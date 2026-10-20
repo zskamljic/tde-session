@@ -36,7 +36,7 @@ public:
     // Handles what the bus brought and calls fprintd took too long to answer; returns
     // whether the state changed.
     bool process();
-    // Tries again after the reader went away, as it may over sleeping.
+    // Tries again after the reader went away, as it may over sleeping, looking for it anew.
     void restart();
 
 private:
@@ -49,6 +49,8 @@ private:
     void call(const char* method, Then then, const char* argument = nullptr, const char* path = nullptr,
         const char* interface = nullptr);
 
+    // Looks for the reader and the user's fingers on it, and claims it if they are there.
+    void find();
     void found(sd_bus_message* reply);
     void listed(sd_bus_message* reply);
     void claim();
@@ -65,6 +67,7 @@ private:
     State m_state = State::Unavailable;
     Then m_then = nullptr; // for the call fprintd is yet to answer, the only one at a time
     bool m_claimed = false;
+    bool m_wanted = false; // the user's fingers were found once: the reader is looked for again when gone
     bool m_again = false; // a verification ended without a match: another starts
 };
 
