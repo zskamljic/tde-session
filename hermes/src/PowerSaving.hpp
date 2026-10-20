@@ -17,7 +17,8 @@ using shell::Proxy;
 
 // Saves power when the computer is not used: the screens turn off after a while without input,
 // and on again with the next, and later the computer sleeps, sooner on battery. Programs that ask
-// the screen to stay on, such as video players, hold both off.
+// the screen to stay on, such as video players, hold both off. Behind the lock screen, which
+// nobody watches, the screens turn off after a minute without input whatever programs ask.
 class PowerSaving : public QObject {
     Q_OBJECT
 
@@ -30,22 +31,28 @@ public:
 
 private slots:
     void powerSourceChanged();
+    void sessionChanged(const QString& interface, const QVariantMap& changed, const QStringList& invalidated);
 
 private:
     void bind();
     void watch();
     void setScreensOn(bool on);
+    void setLocked(bool locked);
     void suspend();
 
     Proxy<ext_idle_notifier_v1> m_notifier;
     Proxy<zwlr_output_power_manager_v1> m_outputPower;
     Proxy<ext_idle_notification_v1> m_blankAfter;
     Proxy<ext_idle_notification_v1> m_suspendAfter;
+    Proxy<ext_idle_notification_v1> m_lockedBlankAfter;
     std::vector<Proxy<zwlr_output_power_v1>> m_screens; // while they are off
     int m_blank = 0;
     int m_suspend = 0;
     int m_suspendOnBattery = 0;
     bool m_onBattery = false;
+    uint32_t m_notifierVersion = 0;
+    QString m_session; // logind's object of the session, which says whether it is locked
+    bool m_locked = false;
 };
 
 } // namespace hermes
