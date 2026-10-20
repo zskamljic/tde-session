@@ -1054,6 +1054,9 @@ void Server::cursorButton(wlr_pointer_button_event* event)
             s_swallowRelease = true;
             return;
         }
+    } else if (owner && owner->kind == NodeOwner::Kind::Unmanaged) {
+        // Back to a game after switching away.
+        static_cast<Unmanaged*>(owner)->focus();
     } else if (owner && owner->kind == NodeOwner::Kind::Layer) {
         auto* layer = static_cast<LayerSurface*>(owner);
         if (layer->surface->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND)

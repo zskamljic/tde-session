@@ -270,8 +270,11 @@ void View::setActivated(bool activated)
 {
     // Focus is given again on every click and activation request; the window only hears of a
     // change, as programs such as Chromium redraw and lay out again on each configure.
-    if (activated == this->activated)
+    if (activated == this->activated) {
+        if (activated)
+            sendReactivated();
         return;
+    }
     this->activated = activated;
     updateFrame();
     sendActivated(activated);
@@ -778,6 +781,13 @@ void XwaylandView::sendActivated(bool activated)
         wlr_xwayland_surface_restack(xsurface, nullptr, XCB_STACK_MODE_ABOVE);
 }
 
+void XwaylandView::sendReactivated()
+{
+    // X11 has one focus, which a window of a game or a menu that took it may still hold;
+    // asking again costs nothing when it is already here.
+    wlr_xwayland_surface_activate(xsurface, true);
+}
+
 void XwaylandView::sendTiled(Tile tile)
 {
     wlr_xwayland_surface_set_maximized(xsurface, tile == Tile::Maximized, tile != Tile::None);
@@ -826,8 +836,18 @@ void Unmanaged::map()
     wlr_scene_subsurface_tree_create(m_tree, xsurface->surface);
     wlr_scene_node_set_position(&m_tree->node, xsurface->x, xsurface->y);
     // Menus take the keyboard, unless the overview or the like holds it.
-    if (wlr_xwayland_surface_override_redirect_wants_focus(xsurface) && !m_server.keyboardHeldByLayer())
-        m_server.focusSurface(xsurface->surface);
+    if (!m_server.keyboardHeldByLayer())
+        focus();
+}
+
+void Unmanaged::focus()
+{
+    if (!wlr_xwayland_surface_override_redirect_wants_focus(xsurface))
+        return;
+    m_server.focusSurface(xsurface->surface);
+    // X11 has to hear of it too: Wine's fullscreen games are windows of this kind, and only one
+    // it believes is in front keeps the pointer in itself and reads how the mouse moves.
+    wlr_xwayland_surface_activate(xsurface, true);
 }
 
 void Unmanaged::unmap()

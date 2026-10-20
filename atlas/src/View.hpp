@@ -87,6 +87,8 @@ protected:
     virtual void moved() { }
     virtual void requestSize(int width, int height) = 0;
     virtual void sendActivated(bool activated) = 0;
+    // Activated once more, for windows that may have lost it without being told.
+    virtual void sendReactivated() { }
     virtual void sendTiled(Tile tile) = 0;
     virtual void sendFullscreen(bool fullscreen) = 0;
     virtual void sendMinimized(bool) { }
@@ -201,6 +203,7 @@ protected:
     void moved() override;
     void requestSize(int width, int height) override;
     void sendActivated(bool activated) override;
+    void sendReactivated() override;
     void sendTiled(Tile tile) override;
     void sendFullscreen(bool fullscreen) override;
     void sendMinimized(bool minimized) override;
@@ -227,10 +230,14 @@ private:
     Listener m_commit;
 };
 
-// A menu, tooltip or the like of an X11 program, which places itself and is no window of its own.
+// A menu, tooltip or the like of an X11 program, which places itself and is no window of its own;
+// also the fullscreen windows of games under Wine.
 class Unmanaged : public NodeOwner {
 public:
     Unmanaged(Server& server, wlr_xwayland_surface* surface);
+
+    // Gives it the keyboard, if it is one that takes it.
+    void focus();
 
     wlr_xwayland_surface* xsurface;
 
