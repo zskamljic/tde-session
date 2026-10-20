@@ -64,11 +64,12 @@ void roundedRect(cairo_t* cr, double x, double y, double width, double height, d
 
 } // namespace
 
-void draw(cairo_t* cr, int width, int height, const Face& face)
+void draw(cairo_t* cr, int width, int height, const Face& face, bool main)
 {
     setColor(cr, Background);
     cairo_paint(cr);
-
+    if (!main)
+        return;
     const double centreX = width / 2.0;
 
     // Just the clock, and how to go on.

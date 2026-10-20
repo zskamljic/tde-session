@@ -109,6 +109,9 @@ private:
     void lockOutput(Output& output);
     void draw(Output& output);
     void drawAll();
+    // The output the password shows on; the others show the background alone.
+    Output* mainOutput() const;
+    void setMainOutput(wl_surface* surface);
     void released(Buffer& buffer);
 
     void setUpSeat(uint32_t capabilities);
@@ -136,6 +139,7 @@ private:
     Owned<ext_session_lock_manager_v1, ext_session_lock_manager_v1_destroy> m_manager;
     ext_session_lock_v1* m_lock = nullptr; // destroyed by unlocking, or with "finished"
     std::vector<std::unique_ptr<Output>> m_outputs;
+    Output* m_main = nullptr; // where the pointer last came, if it is still there
     std::vector<std::unique_ptr<Buffer>> m_buffers;
 
     std::unique_ptr<xkb_context, XkbDeleter> m_xkb {xkb_context_new(XKB_CONTEXT_NO_FLAGS)};
@@ -190,7 +194,14 @@ void Locker::globalRemove(void* data, wl_registry*, uint32_t name)
 {
     // An output unplugged takes its lock surface along.
     auto* self = static_cast<Locker*>(data);
+    const Output* main = self->mainOutput();
+    const bool wasMain = main && main->name == name;
+    if (wasMain)
+        self->m_main = nullptr;
     std::erase_if(self->m_outputs, [name](const auto& output) { return output->name == name; });
+    // The password moves to an output still there.
+    if (wasMain)
+        self->drawAll();
 }
 
 void Locker::addOutput(wl_output* wlOutput, uint32_t name)
@@ -266,7 +277,7 @@ void Locker::draw(Output& output)
             static_cast<unsigned char*>(buffer->data), CAIRO_FORMAT_ARGB32, width, height, stride));
         const Owned<cairo_t, cairo_destroy> cr(cairo_create(surface.get()));
         cairo_scale(cr.get(), output.scale, output.scale);
-        cerberus::draw(cr.get(), output.width, output.height, m_face);
+        cerberus::draw(cr.get(), output.width, output.height, m_face, &output == mainOutput());
     }
 
     static const wl_buffer_listener listener {
@@ -289,6 +300,32 @@ void Locker::drawAll()
     for (const auto& output : m_outputs) {
         if (output->lockSurface)
             draw(*output);
+    }
+}
+
+Output* Locker::mainOutput() const
+{
+    if (m_main)
+        return m_main;
+    // Until the pointer says otherwise, the first output there is.
+    for (const auto& output : m_outputs) {
+        if (output->lockSurface)
+            return output.get();
+    }
+    return nullptr;
+}
+
+void Locker::setMainOutput(wl_surface* surface)
+{
+    for (const auto& output : m_outputs) {
+        if (output->surface.get() != surface || output.get() == mainOutput())
+            continue;
+        Output* previous = mainOutput();
+        m_main = output.get();
+        if (previous)
+            draw(*previous);
+        draw(*output);
+        return;
     }
 }
 
@@ -353,13 +390,16 @@ void Locker::setUpSeat(uint32_t capabilities)
         wl_keyboard_add_listener(m_keyboard.get(), &listener, this);
     }
     if ((capabilities & WL_SEAT_CAPABILITY_POINTER) && !m_pointer) {
-        // No pointer over the lock screen: there is nothing to point at. The seat is bound at
-        // version 5, so the events of later versions, which newer headers add, never come.
+        // No pointer over the lock screen: there is nothing to point at, but the password goes
+        // to the screen it comes to. The seat is bound at version 5, so the events of later
+        // versions, which newer headers add, never come.
         static const wl_pointer_listener listener = [] {
             wl_pointer_listener events {};
-            events.enter = [](void*, wl_pointer* pointer, uint32_t serial, wl_surface*, wl_fixed_t, wl_fixed_t) {
-                wl_pointer_set_cursor(pointer, serial, nullptr, 0, 0);
-            };
+            events.enter
+                = [](void* data, wl_pointer* pointer, uint32_t serial, wl_surface* surface, wl_fixed_t, wl_fixed_t) {
+                      wl_pointer_set_cursor(pointer, serial, nullptr, 0, 0);
+                      static_cast<Locker*>(data)->setMainOutput(surface);
+                  };
             events.leave = [](void*, wl_pointer*, uint32_t, wl_surface*) { };
             events.motion = [](void*, wl_pointer*, uint32_t, wl_fixed_t, wl_fixed_t) { };
             // A click lifts the curtain.

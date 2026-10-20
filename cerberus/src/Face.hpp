@@ -26,7 +26,8 @@ struct Face {
     bool caret = true; // shown at this blink
 };
 
-// Draws `face` on an output of `width` by `height`, in its logical size.
-void draw(cairo_t* cr, int width, int height, const Face& face);
+// Draws `face` on an output of `width` by `height`, in its logical size: all of it on the `main`
+// output, the background alone on the others.
+void draw(cairo_t* cr, int width, int height, const Face& face, bool main);
 
 } // namespace cerberus
