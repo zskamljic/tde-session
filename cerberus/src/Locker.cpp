@@ -3,6 +3,7 @@
 #include "Auth.hpp"
 #include "Face.hpp"
 #include "Fingerprint.hpp"
+#include "LoginHint.hpp"
 #include "Owned.hpp"
 #include "Password.hpp"
 
@@ -672,11 +673,13 @@ int Locker::run()
             std::puts("locked");
             std::fflush(stdout);
             announced = true;
+            setLockedHint(true);
         }
     }
 
     if (m_unlocked) {
         wl_display_roundtrip(m_display);
+        setLockedHint(false);
         // Everything of the connection goes before it does.
         m_outputs.clear();
         m_buffers.clear();

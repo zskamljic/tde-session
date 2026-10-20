@@ -20,6 +20,7 @@ add_executable(tde-cerberus
     src/Face.cpp
     src/Fingerprint.cpp
     src/Locker.cpp
+    src/LoginHint.cpp
     src/Password.cpp
     ${header}
     ${code}
