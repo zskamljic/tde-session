@@ -26,6 +26,7 @@ struct Settings {
     PointerSettings touchpad {.naturalScroll = true};
     int windowAnimation = 200; // ms windows take to move into a tile
     HotCorner hotCorner = HotCorner::Overview; // the overview, as Super opens it
+    std::string primaryDisplay; // as Settings knows displays, by make, model and serial; empty for the first
 
     bool operator==(const Settings&) const = default;
 };

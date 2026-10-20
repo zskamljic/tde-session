@@ -42,6 +42,7 @@ Server::~Server()
     m_popups.clear();
     m_views.clear();
     m_unmanaged.clear();
+    m_primaryOutput.disconnect();
     if (m_xwayland)
         wlr_xwayland_destroy(m_xwayland);
     layerSurfaces.clear();
@@ -308,6 +309,7 @@ void Server::outputLayoutChanged()
         head->state.y = box.y;
     }
     wlr_output_manager_v1_set_configuration(m_outputManager, config);
+    updatePrimaryOutput();
 
     moveWindowsWithOutputs();
     for (const auto& output : outputs)
@@ -924,6 +926,8 @@ void Server::setUpXwayland()
         wlr_xwayland_set_seat(m_xwayland, seat);
         m_xwaylandRunning = true;
         updateXwaylandCursor();
+        m_primaryOutput.connect(eventLoop, m_xwayland->display_name);
+        updatePrimaryOutput();
     });
     m_newXwaylandSurface.connect<wlr_xwayland_surface>(
         m_xwayland->events.new_surface, [this](wlr_xwayland_surface* surface) {
@@ -944,6 +948,36 @@ void Server::updateXwaylandCursor()
         wlr_xwayland_set_cursor(
             m_xwayland, wlr_xcursor_image_get_buffer(image), int32_t(image->hotspot_x), int32_t(image->hotspot_y));
     }
+}
+
+void Server::updatePrimaryOutput()
+{
+    // Settings knows a display by its make, model and serial number, or where it is plugged in
+    // when there is none to tell two of a kind apart; when it names none that is on, the first
+    // one is, as for the bar.
+    const auto identity = [](const wlr_output* output) {
+        std::string base = std::string(output->make ? output->make : "") + ' ' + (output->model ? output->model : "");
+        base.erase(0, base.find_first_not_of(' '));
+        base.erase(base.find_last_not_of(' ') + 1);
+        if (base.empty())
+            return std::string(output->name);
+        return output->serial && *output->serial ? base + ' ' + output->serial : base + " (" + output->name + ')';
+    };
+    const wlr_output* primary = nullptr;
+    for (const auto& output : outputs) {
+        wlr_box box;
+        wlr_output_layout_get_box(outputLayout, output->output, &box);
+        if (wlr_box_empty(&box))
+            continue;
+        if (!primary)
+            primary = output->output;
+        if (identity(output->output) == m_settings.primaryDisplay) {
+            primary = output->output;
+            break;
+        }
+    }
+    if (primary)
+        m_primaryOutput.set(primary->name);
 }
 
 void Server::unmanagedDestroyed(Unmanaged& surface)

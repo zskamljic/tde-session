@@ -138,6 +138,10 @@ Settings loadSettings(const std::string& path)
         if (const auto windows = integer(lua, "windows", 0, 2000))
             settings.windowAnimation = *windows;
     });
+    table(lua, "displays", [&] {
+        if (const auto primary = string(lua, "primary"))
+            settings.primaryDisplay = *primary;
+    });
     return settings;
 }
 

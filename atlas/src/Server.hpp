@@ -3,6 +3,7 @@
 #include "Decoration.hpp"
 #include "Listener.hpp"
 #include "Owned.hpp"
+#include "PrimaryOutput.hpp"
 #include "Settings.hpp"
 #include "wlr.hpp"
 
@@ -172,6 +173,8 @@ private:
     wlr_box onScreen(const wlr_box& box) const;
     void keepWindowsOnScreen();
     void moveWindowsWithOutputs();
+    // X11 programs hear which output the settings make the primary one.
+    void updatePrimaryOutput();
 
     // Input.cpp
     void newInput(wlr_input_device* device);
@@ -239,6 +242,7 @@ private:
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
     wlr_xwayland* m_xwayland = nullptr;
     bool m_xwaylandRunning = false; // its window manager is up, to take a pointer
+    PrimaryOutput m_primaryOutput;
 
     std::vector<std::unique_ptr<View>> m_views;
     std::vector<View*> m_order; // mapped windows, most recently used first

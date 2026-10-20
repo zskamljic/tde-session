@@ -155,7 +155,7 @@ case a display shows nothing with them. Arrangements are kept for every set of d
 plugged in together, and come back whenever that set is plugged in again; windows move along
 with their display, and those on one that goes move to another. The bar, the notifications
 and the window switchers are on the primary display; every display has its background and
-its part of the overview.
+its part of the overview. X11 programs know it as the primary display too.
 
 Files are opened and saved through xdg-desktop-portal, which `tde-portals.conf` has pick them
 in [Ariadne](https://github.com/zskamljic/tde-ariadne) when it is installed. Programs that ask

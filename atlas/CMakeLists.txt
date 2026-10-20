@@ -5,6 +5,7 @@ pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
 pkg_check_modules(PIXMAN REQUIRED IMPORTED_TARGET pixman-1)
 pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
 pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
+pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb xcb-randr xcb-xfixes)
 pkg_search_module(LUA REQUIRED IMPORTED_TARGET lua lua5.5 lua-5.5 lua5.4 lua-5.4 lua54)
 pkg_get_variable(WLR_PROTOCOLS wlr-protocols pkgdatadir)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
@@ -41,6 +42,7 @@ add_executable(tde-atlas
     src/Morph.cpp
     src/Parts.cpp
     src/Placement.cpp
+    src/PrimaryOutput.cpp
     src/Server.cpp
     src/Settings.cpp
     src/Slices.cpp
@@ -58,7 +60,7 @@ target_compile_definitions(tde-atlas PRIVATE
 # The wlroots headers are C; their C-isms are worked around in wlr.hpp.
 target_compile_options(tde-atlas PRIVATE -Wno-pedantic -Wno-missing-field-initializers)
 target_link_libraries(tde-atlas PRIVATE PkgConfig::WLROOTS PkgConfig::WAYLAND_SERVER PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO
-    PkgConfig::PIXMAN PkgConfig::LIBINPUT PkgConfig::LUA)
+    PkgConfig::PIXMAN PkgConfig::LIBINPUT PkgConfig::LUA PkgConfig::XCB)
 install(TARGETS tde-atlas)
 
 if(TDE_SESSION_BUILD_TESTS)

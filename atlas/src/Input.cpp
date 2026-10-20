@@ -360,6 +360,7 @@ void Server::applySettings()
         return;
     m_settings = settings;
     windowAnimationTime = m_settings.windowAnimation;
+    updatePrimaryOutput();
     for (const auto& pointer : m_pointers)
         configurePointer(*pointer);
 }
