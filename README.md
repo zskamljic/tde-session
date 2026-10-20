@@ -22,12 +22,13 @@ minimizes it; with several windows, clicks go through them. A middle click opens
 window, and a right click lists the windows.
 
 The status icons on the right, with the battery's charge and whether it charges, open the
-quick settings: the volume, the brightness of a laptop's screen, buttons for the dark style, do
-not disturb, the power mode and a screenshot, the network, with a switch for Wi-Fi and the
-networks in range to connect to, Bluetooth, with a switch and the devices paired to connect or
-let go, and the battery, and buttons to open the settings, lock the screen, suspend, log out,
-restart or shut down. A network never used asks for its password; one that does not take it
-asks again. The arrows by the network and Bluetooth open their settings. The volume and
+quick settings, much as GNOME's: at the top the battery and buttons to open the settings, lock
+the screen, and a power menu to suspend, restart, shut down or log out; the volume and the
+brightness of a laptop's screen; and buttons for Wi-Fi, Bluetooth, the dark style, do not
+disturb, the power mode and a screenshot. Wi-Fi and Bluetooth switch on and off with a click,
+and the arrow beside each opens a menu below it, with the networks in range to connect to or
+the devices paired to connect or let go, and their settings. A network never used asks for its
+password; one that does not take it asks again. The volume and
 brightness keys show their level near the bottom of the screen for a moment. Bluetooth
 headphones left in their headset mode after a call go back to music quality once nothing
 records from their microphone.

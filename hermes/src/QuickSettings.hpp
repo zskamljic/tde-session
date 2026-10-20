@@ -8,6 +8,7 @@
 
 #include <vector>
 
+class QGridLayout;
 class QLabel;
 class QSlider;
 class QToolButton;
@@ -21,11 +22,12 @@ class Brightness;
 class Network;
 class NotificationServer;
 
-// The panel behind the status icons of the bar: volume, brightness, quick toggles for the dark
-// style, do not disturb, the power mode and a screenshot, network with the Wi-Fi networks in
-// range, Bluetooth with the devices paired, and battery, and the buttons to open the settings,
-// lock, suspend, restart, shut down and log out. What the machine does not have, such as a
-// battery, is left out.
+// The panel behind the status icons of the bar: the battery and buttons to open the settings,
+// lock the screen and, behind a menu, suspend, restart, shut down and log out; volume and
+// brightness; and quick toggles for Wi-Fi and Bluetooth, each with a menu of the networks in
+// range or the devices paired, the dark style, do not disturb, the power mode and a
+// screenshot. One menu at a time opens below its button. What the machine does not have, such
+// as a battery, is left out.
 class QuickSettings : public QWidget {
     Q_OBJECT
 
@@ -34,7 +36,8 @@ public:
         shell::Bluetooth& bluetooth, Battery& battery, NotificationServer& notifications,
         shell::PowerProfiles& profiles, QWidget* parent = nullptr);
 
-    // Brings what may have changed unnoticed, such as the brightness, up to date.
+    // Brings what may have changed unnoticed, such as the brightness, up to date, and closes
+    // the menu left open.
     void refresh();
 
 signals:
@@ -56,11 +59,35 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    // A toggle with a menu: the wide part switches it, the arrow beside it opens the menu.
+    struct MenuToggle {
+        QWidget* widget = nullptr;
+        QToolButton* main = nullptr;
+        QToolButton* arrow = nullptr;
+        QLabel* icon = nullptr;
+        QLabel* title = nullptr;
+        QLabel* subtitle = nullptr;
+        QWidget* menu = nullptr;
+        QLabel* problem = nullptr; // what last went wrong, for a while
+        QLabel* empty = nullptr; // said when the list has nothing
+        QVBoxLayout* list = nullptr;
+    };
+
     void sync();
-    QToolButton* actionButton(const QString& icon, const QString& name, void (QuickSettings::*signal)());
-    QToolButton* settingsButton(const QString& page, const QString& name);
+    QToolButton* actionButton(
+        QWidget* parent, const QString& icon, const QString& name, void (QuickSettings::*signal)());
+    // A round button in the top row, for an icon.
+    QToolButton* topButton(const QString& icon, const QString& name);
     // A wide button with an icon and a name, highlighted while on.
     QToolButton* toggle(const QString& name);
+    void menuToggle(MenuToggle& toggle, const QString& name, const QString& settingsPage, const QString& settingsName);
+    void paintMenuToggle(MenuToggle& toggle, const QString& icon, const QString& subtitle, bool on);
+    // A card under the row of what opened it, with a heading and what is in it.
+    QWidget* menuCard(const QString& icon, const QString& heading, QVBoxLayout*& content);
+    // Opens `menu`, closing any other, or closes it when it is open already.
+    void toggleMenu(QWidget* menu);
+    // Puts the toggles there are two to a row, the open menu under the row of its toggle.
+    void layOutToggles();
     void syncToggles();
     void syncBluetooth();
     void syncWifi();
@@ -76,35 +103,29 @@ private:
     NotificationServer& m_notifications;
     shell::PowerProfiles& m_profiles;
 
+    QLabel* m_batteryIcon;
+    QLabel* m_batteryText;
+    QToolButton* m_power;
+    QWidget* m_powerMenu;
     QWidget* m_volumeRow;
     QToolButton* m_mute;
     QSlider* m_volume;
     QWidget* m_brightnessRow;
     QSlider* m_light;
+    QGridLayout* m_grid;
+    MenuToggle m_wifiToggle;
+    QToolButton* m_wired; // instead, on a machine without Wi-Fi
+    std::vector<shell::WifiNetwork> m_shownNetworks;
+    MenuToggle m_bluetoothToggle;
+    std::vector<shell::BluetoothDevice> m_shownDevices; // as the buttons show them
     QToolButton* m_darkStyle;
     QToolButton* m_quiet;
     QToolButton* m_powerMode;
     QToolButton* m_screenshot;
-    QWidget* m_networkRow;
-    QLabel* m_networkIcon;
-    QLabel* m_networkText;
-    QToolButton* m_wifiSwitch;
-    QWidget* m_networks; // those in range, while Wi-Fi is on
-    QVBoxLayout* m_networkList;
-    std::vector<shell::WifiNetwork> m_shownNetworks;
-    QWidget* m_bluetoothRow;
-    QLabel* m_bluetoothIcon;
-    QLabel* m_bluetoothText;
-    QToolButton* m_bluetoothSwitch;
-    QWidget* m_devices; // the paired ones, while Bluetooth is on
-    QVBoxLayout* m_deviceList;
-    std::vector<shell::BluetoothDevice> m_shownDevices; // as the buttons show them
-    // What last went wrong, shown for a while in the row it is about.
+    QWidget* m_openMenu = nullptr;
+    // What last went wrong, shown for a while in the menu it is about.
     QString m_wifiProblem;
     QString m_bluetoothProblem;
-    QWidget* m_batteryRow;
-    QLabel* m_batteryIcon;
-    QLabel* m_batteryText;
 };
 
 // A round, flat button for an icon, highlighted under the pointer and while on, as the bar's

@@ -13,6 +13,7 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPainter>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStyleHints>
@@ -20,7 +21,9 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -29,6 +32,27 @@ namespace {
 
 constexpr int IconSize = 16;
 constexpr int Steps = 100;
+constexpr int ToggleHeight = 44;
+
+// Plain text cut short with an ellipsis where it does not fit, instead of widening what holds it.
+class ElidedLabel : public QLabel {
+public:
+    ElidedLabel(const QString& text, QWidget* parent)
+        : QLabel(text, parent)
+    {
+        setTextFormat(Qt::PlainText);
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setPen(palette().color(foregroundRole()));
+        painter.drawText(rect(), Qt::AlignLeft | Qt::AlignVCenter,
+            fontMetrics().elidedText(text(), Qt::ElideRight, contentsRect().width()));
+    }
+};
 
 QIcon symbolic(const QString& name, QWidget* widget)
 {
@@ -99,7 +123,43 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     layout->setContentsMargins(14, 12, 14, 12);
     layout->setSpacing(10);
 
+    // At the top, the battery and round buttons for the settings, locking and the power menu.
     QHBoxLayout* line = nullptr;
+    QWidget* top = row(this, line);
+    m_batteryIcon = new QLabel(top);
+    m_batteryIcon->setFixedSize(IconSize, 32);
+    m_batteryIcon->setAlignment(Qt::AlignCenter);
+    m_batteryText = new QLabel(top);
+    m_batteryText->setTextFormat(Qt::PlainText);
+    line->addSpacing(8);
+    line->addWidget(m_batteryIcon);
+    line->addWidget(m_batteryText);
+    line->addStretch();
+    QToolButton* settings = topButton(u"preferences-system-symbolic"_s, u"Settings"_s);
+    connect(settings, &QToolButton::clicked, this, [this] { emit settingsRequested({}); });
+    QToolButton* lock = topButton(u"system-lock-screen-symbolic"_s, u"Lock the Screen"_s);
+    connect(lock, &QToolButton::clicked, this, &QuickSettings::lockRequested);
+    m_power = topButton(u"system-shutdown-symbolic"_s, u"Power Off or Log Out"_s);
+    m_power->setCheckable(true);
+    line->addWidget(settings);
+    line->addWidget(lock);
+    line->addWidget(m_power);
+    layout->addWidget(top);
+
+    // Those that ask first end in an ellipsis.
+    QVBoxLayout* column = nullptr;
+    m_powerMenu = menuCard(u"system-shutdown-symbolic"_s, u"Power"_s, column);
+    column->addWidget(
+        actionButton(m_powerMenu, u"media-playback-pause-symbolic"_s, u"Suspend"_s, &QuickSettings::suspendRequested));
+    column->addWidget(
+        actionButton(m_powerMenu, u"system-reboot-symbolic"_s, u"Restart…"_s, &QuickSettings::restartRequested));
+    column->addWidget(
+        actionButton(m_powerMenu, u"system-shutdown-symbolic"_s, u"Shut Down…"_s, &QuickSettings::shutDownRequested));
+    column->addWidget(
+        actionButton(m_powerMenu, u"system-log-out-symbolic"_s, u"Log Out…"_s, &QuickSettings::logOutRequested));
+    layout->addWidget(m_powerMenu);
+    connect(m_power, &QToolButton::clicked, this, [this] { toggleMenu(m_powerMenu); });
+
     m_volumeRow = row(this, line);
     m_mute = roundButton(m_volumeRow);
     m_mute->setToolTip(u"Mute"_s);
@@ -121,11 +181,23 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     line->addWidget(m_light, 1);
     layout->addWidget(m_brightnessRow);
 
-    // Two by two, those the machine has.
+    // Two by two, those the machine has, laid out by layOutToggles().
     auto* toggles = new QWidget(this);
-    auto* grid = new QGridLayout(toggles);
-    grid->setContentsMargins(0, 2, 0, 2);
-    grid->setSpacing(8);
+    m_grid = new QGridLayout(toggles);
+    m_grid->setContentsMargins(0, 2, 0, 2);
+    m_grid->setSpacing(8);
+    m_grid->setColumnStretch(0, 1);
+    m_grid->setColumnStretch(1, 1);
+
+    menuToggle(m_wifiToggle, u"Wi-Fi"_s, u"network"_s, u"Network Settings"_s);
+    connect(m_wifiToggle.main, &QToolButton::clicked, this, [this](bool on) { m_network.setWifiEnabled(on); });
+    m_wired = toggle(QString());
+    m_wired->setCheckable(false);
+    m_wired->setToolTip(u"Network Settings"_s);
+    connect(m_wired, &QToolButton::clicked, this, [this] { emit settingsRequested(u"network"_s); });
+    menuToggle(m_bluetoothToggle, u"Bluetooth"_s, u"bluetooth"_s, u"Bluetooth Settings"_s);
+    connect(m_bluetoothToggle.main, &QToolButton::clicked, this, [this](bool on) { m_bluetooth.setPowered(on); });
+
     m_darkStyle = toggle(u"Dark Style"_s);
     connect(m_darkStyle, &QToolButton::clicked, this, [this](bool on) { emit darkStyleRequested(on); });
     m_quiet = toggle(u"Do Not Disturb"_s);
@@ -143,103 +215,19 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     m_screenshot = toggle(u"Screenshot"_s);
     m_screenshot->setCheckable(false);
     connect(m_screenshot, &QToolButton::clicked, this, &QuickSettings::screenshotRequested);
-    grid->addWidget(m_darkStyle, 0, 0);
-    grid->addWidget(m_quiet, 0, 1);
-    grid->addWidget(m_powerMode, 1, 0);
-    grid->addWidget(m_screenshot, 1, 1);
-    grid->setColumnStretch(0, 1);
-    grid->setColumnStretch(1, 1);
     layout->addWidget(toggles);
-
-    m_networkRow = row(this, line);
-    m_networkIcon = new QLabel(m_networkRow);
-    m_networkIcon->setFixedSize(32, 32);
-    m_networkIcon->setAlignment(Qt::AlignCenter);
-    m_networkText = new QLabel(m_networkRow);
-    m_networkText->setTextFormat(Qt::PlainText);
-    m_wifiSwitch = roundButton(m_networkRow);
-    m_wifiSwitch->setCheckable(true);
-    m_wifiSwitch->setToolTip(u"Wi-Fi"_s);
-    m_wifiSwitch->setIcon(symbolic(u"network-wireless-symbolic"_s, this));
-    connect(m_wifiSwitch, &QToolButton::toggled, this, [this](bool on) { m_network.setWifiEnabled(on); });
-    line->addWidget(m_networkIcon);
-    line->addWidget(m_networkText, 1);
-    line->addWidget(m_wifiSwitch);
-    line->addWidget(settingsButton(u"network"_s, u"Network Settings"_s));
-    layout->addWidget(m_networkRow);
-    m_networks = new QWidget(this);
-    m_networkList = new QVBoxLayout(m_networks);
-    m_networkList->setContentsMargins(42, 0, 0, 0);
-    m_networkList->setSpacing(2);
-    layout->addWidget(m_networks);
-
-    m_bluetoothRow = row(this, line);
-    m_bluetoothIcon = new QLabel(m_bluetoothRow);
-    m_bluetoothIcon->setFixedSize(32, 32);
-    m_bluetoothIcon->setAlignment(Qt::AlignCenter);
-    m_bluetoothText = new QLabel(m_bluetoothRow);
-    m_bluetoothText->setTextFormat(Qt::PlainText);
-    m_bluetoothSwitch = roundButton(m_bluetoothRow);
-    m_bluetoothSwitch->setCheckable(true);
-    m_bluetoothSwitch->setToolTip(u"Bluetooth"_s);
-    m_bluetoothSwitch->setIcon(symbolic(u"bluetooth-active-symbolic"_s, this));
-    connect(m_bluetoothSwitch, &QToolButton::toggled, this, [this](bool on) { m_bluetooth.setPowered(on); });
-    line->addWidget(m_bluetoothIcon);
-    line->addWidget(m_bluetoothText, 1);
-    line->addWidget(m_bluetoothSwitch);
-    line->addWidget(settingsButton(u"bluetooth"_s, u"Bluetooth Settings"_s));
-    layout->addWidget(m_bluetoothRow);
-    // Under it, indented past its icon.
-    m_devices = new QWidget(this);
-    m_deviceList = new QVBoxLayout(m_devices);
-    m_deviceList->setContentsMargins(42, 0, 0, 0);
-    m_deviceList->setSpacing(2);
-    layout->addWidget(m_devices);
-
-    m_batteryRow = row(this, line);
-    m_batteryIcon = new QLabel(m_batteryRow);
-    m_batteryIcon->setFixedSize(32, 32);
-    m_batteryIcon->setAlignment(Qt::AlignCenter);
-    m_batteryText = new QLabel(m_batteryRow);
-    m_batteryText->setTextFormat(Qt::PlainText);
-    line->addWidget(m_batteryIcon);
-    line->addWidget(m_batteryText, 1);
-    layout->addWidget(m_batteryRow);
-
-    auto* separator = new QWidget(this);
-    separator->setFixedHeight(1);
-    separator->setStyleSheet(u"background: %1;"_s.arg(tde::theme::colors().border.name()));
-    layout->addWidget(separator);
-
-    // One below the other, each saying what it does; those that ask first end in an ellipsis.
-    auto* actions = new QWidget(this);
-    auto* column = new QVBoxLayout(actions);
-    column->setContentsMargins(0, 0, 0, 0);
-    column->setSpacing(2);
-    QToolButton* settings = actionButton(u"preferences-system-symbolic"_s, u"Settings"_s, nullptr);
-    connect(settings, &QToolButton::clicked, this, [this] { emit settingsRequested({}); });
-    column->addWidget(settings);
-    column->addWidget(
-        actionButton(u"system-lock-screen-symbolic"_s, u"Lock the screen"_s, &QuickSettings::lockRequested));
-    column->addWidget(actionButton(
-        u"media-playback-pause-symbolic"_s, u"Suspend, keeping everything open"_s, &QuickSettings::suspendRequested));
-    column->addWidget(
-        actionButton(u"system-reboot-symbolic"_s, u"Restart the computer…"_s, &QuickSettings::restartRequested));
-    column->addWidget(
-        actionButton(u"system-shutdown-symbolic"_s, u"Shut down the computer…"_s, &QuickSettings::shutDownRequested));
-    column->addWidget(
-        actionButton(u"system-log-out-symbolic"_s, u"Log out of this session…"_s, &QuickSettings::logOutRequested));
-    layout->addWidget(actions);
 
     connect(&m_audio, &Audio::changed, this, &QuickSettings::sync);
     connect(&m_brightness, &Brightness::changed, this, &QuickSettings::sync);
     connect(&m_network, &Network::changed, this, &QuickSettings::sync);
     connect(&m_bluetooth, &shell::Bluetooth::changed, this, &QuickSettings::sync);
     connect(&m_wifi, &shell::Wifi::changed, this, &QuickSettings::sync);
-    // What went wrong shows in place of what its row says, for a while.
-    const auto showProblem = [this](QString QuickSettings::* problem) {
-        return [this, problem](const QString& message) {
+    // What went wrong opens the menu it is about and shows there, for a while.
+    const auto showProblem = [this](QString QuickSettings::* problem, MenuToggle QuickSettings::* toggle) {
+        return [this, problem, toggle](const QString& message) {
             this->*problem = message;
+            if (m_openMenu != (this->*toggle).menu)
+                toggleMenu((this->*toggle).menu);
             sync();
             QTimer::singleShot(6000, this, [this, problem, message] {
                 if (this->*problem == message) {
@@ -249,8 +237,10 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
             });
         };
     };
-    connect(&m_bluetooth, &shell::Bluetooth::failed, this, showProblem(&QuickSettings::m_bluetoothProblem));
-    connect(&m_wifi, &shell::Wifi::failed, this, showProblem(&QuickSettings::m_wifiProblem));
+    connect(&m_bluetooth, &shell::Bluetooth::failed, this,
+        showProblem(&QuickSettings::m_bluetoothProblem, &QuickSettings::m_bluetoothToggle));
+    connect(
+        &m_wifi, &shell::Wifi::failed, this, showProblem(&QuickSettings::m_wifiProblem, &QuickSettings::m_wifiToggle));
     connect(&m_battery, &Battery::changed, this, &QuickSettings::sync);
     connect(&m_notifications, &NotificationServer::changed, this, &QuickSettings::syncToggles);
     connect(&m_profiles, &shell::PowerProfiles::changed, this, &QuickSettings::syncToggles);
@@ -266,7 +256,7 @@ QToolButton* QuickSettings::toggle(const QString& name)
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setIconSize(QSize(IconSize, IconSize));
     button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    button->setFixedHeight(40);
+    button->setFixedHeight(ToggleHeight);
     button->setStyleSheet(u"QToolButton { background: %1; border: none; border-radius: 20px; padding: 0 14px;"
                           " text-align: left; }"
                           " QToolButton:hover { background: %2; }"
@@ -275,6 +265,197 @@ QToolButton* QuickSettings::toggle(const QString& name)
                               colors.hover.name(QColor::HexArgb), colors.accent.name(), colors.accentText.name(),
                               colors.accent.lighter(115).name()));
     return button;
+}
+
+void QuickSettings::menuToggle(
+    MenuToggle& toggle, const QString& name, const QString& settingsPage, const QString& settingsName)
+{
+    const auto& colors = tde::theme::colors();
+    // The two halves of one pill, a hair apart.
+    const QString look
+        = u"QToolButton { background: %1; border: none; %6 }"
+          " QToolButton:hover { background: %2; }"
+          " QToolButton:checked { background: %3; }"
+          " QToolButton:checked:hover { background: %4; }"_s.arg(colors.pressed.name(QColor::HexArgb),
+              colors.hover.name(QColor::HexArgb), colors.accent.name(), colors.accent.lighter(115).name());
+    toggle.widget = new QWidget(this);
+    auto* halves = new QHBoxLayout(toggle.widget);
+    halves->setContentsMargins(0, 0, 0, 0);
+    halves->setSpacing(1);
+
+    toggle.main = new QToolButton(toggle.widget);
+    toggle.main->setCheckable(true);
+    toggle.main->setAccessibleName(name);
+    toggle.main->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    toggle.main->setFixedHeight(ToggleHeight);
+    toggle.main->setStyleSheet(look.arg(u"border-top-left-radius: 20px; border-bottom-left-radius: 20px;"_s));
+    auto* content = new QHBoxLayout(toggle.main);
+    content->setContentsMargins(14, 0, 6, 0);
+    content->setSpacing(10);
+    toggle.icon = new QLabel(toggle.main);
+    toggle.icon->setFixedSize(IconSize, IconSize);
+    auto* words = new QVBoxLayout;
+    words->setContentsMargins(0, 0, 0, 0);
+    words->setSpacing(0);
+    toggle.title = new ElidedLabel(name, toggle.main);
+    QFont bold = toggle.title->font();
+    bold.setBold(true);
+    toggle.title->setFont(bold);
+    toggle.subtitle = new ElidedLabel(QString(), toggle.main);
+    QFont small = toggle.subtitle->font();
+    small.setPointSizeF(small.pointSizeF() * 0.85);
+    toggle.subtitle->setFont(small);
+    words->addStretch();
+    words->addWidget(toggle.title);
+    words->addWidget(toggle.subtitle);
+    words->addStretch();
+    for (QLabel* label : {toggle.icon, toggle.title, toggle.subtitle})
+        label->setAttribute(Qt::WA_TransparentForMouseEvents);
+    content->addWidget(toggle.icon);
+    content->addLayout(words, 1);
+
+    toggle.arrow = new QToolButton(toggle.widget);
+    toggle.arrow->setCheckable(true);
+    toggle.arrow->setFixedSize(34, ToggleHeight);
+    toggle.arrow->setIconSize(QSize(IconSize, IconSize));
+    toggle.arrow->setToolTip(name + u" Menu"_s);
+    toggle.arrow->setStyleSheet(
+        look.arg(u"border-top-right-radius: 20px; border-bottom-right-radius: 20px; padding-right: 4px;"_s));
+    halves->addWidget(toggle.main, 1);
+    halves->addWidget(toggle.arrow);
+
+    QVBoxLayout* column = nullptr;
+    toggle.menu = menuCard(QString(), name, column);
+    toggle.problem = new QLabel(toggle.menu);
+    toggle.problem->setTextFormat(Qt::PlainText);
+    toggle.problem->setWordWrap(true);
+    toggle.problem->setContentsMargins(10, 0, 10, 4);
+    toggle.problem->setStyleSheet(u"color: %1;"_s.arg(colors.error.name()));
+    toggle.empty = new QLabel(toggle.menu);
+    toggle.empty->setTextFormat(Qt::PlainText);
+    toggle.empty->setContentsMargins(10, 4, 10, 4);
+    toggle.empty->setStyleSheet(u"color: %1;"_s.arg(colors.dimText.name()));
+    toggle.list = new QVBoxLayout;
+    toggle.list->setContentsMargins(0, 0, 0, 0);
+    toggle.list->setSpacing(2);
+    auto* separator = new QWidget(toggle.menu);
+    separator->setFixedHeight(1);
+    separator->setStyleSheet(u"background: %1;"_s.arg(colors.border.name()));
+    QToolButton* settings = actionButton(toggle.menu, u"preferences-system-symbolic"_s, settingsName, nullptr);
+    connect(settings, &QToolButton::clicked, this, [this, settingsPage] { emit settingsRequested(settingsPage); });
+    column->addWidget(toggle.problem);
+    column->addWidget(toggle.empty);
+    column->addLayout(toggle.list);
+    column->addSpacing(2);
+    column->addWidget(separator);
+    column->addWidget(settings);
+
+    QWidget* menu = toggle.menu;
+    connect(toggle.arrow, &QToolButton::clicked, this, [this, menu] { toggleMenu(menu); });
+}
+
+void QuickSettings::paintMenuToggle(MenuToggle& toggle, const QString& icon, const QString& subtitle, bool on)
+{
+    const auto& colors = tde::theme::colors();
+    const QColor text = on ? colors.accentText : colors.text;
+    {
+        const QSignalBlocker blocker(toggle.main);
+        toggle.main->setChecked(on);
+    }
+    toggle.arrow->setChecked(on);
+    toggle.icon->setPixmap(
+        shell::tintedIcon(icon, QSize(IconSize, IconSize), devicePixelRatioF(), text).pixmap(IconSize, IconSize));
+    toggle.title->setStyleSheet(u"color: %1;"_s.arg(text.name()));
+    toggle.subtitle->setText(subtitle);
+    toggle.subtitle->setStyleSheet(u"color: %1;"_s.arg(on ? colors.accentText.name() : colors.dimText.name()));
+    toggle.main->setToolTip(subtitle);
+    const bool open = m_openMenu == toggle.menu;
+    toggle.arrow->setIcon(shell::tintedIcon(
+        open ? u"go-down-symbolic"_s : u"go-next-symbolic"_s, QSize(IconSize, IconSize), devicePixelRatioF(), text));
+}
+
+QWidget* QuickSettings::menuCard(const QString& icon, const QString& heading, QVBoxLayout*& content)
+{
+    auto* card = new QWidget(this);
+    card->setObjectName(u"menuCard"_s);
+    card->setAttribute(Qt::WA_StyledBackground);
+    card->setStyleSheet(u"#menuCard { background: %1; border-radius: 14px; }"_s.arg(
+        tde::theme::colors().pressed.name(QColor::HexArgb)));
+    content = new QVBoxLayout(card);
+    content->setContentsMargins(6, 8, 6, 6);
+    content->setSpacing(2);
+    QHBoxLayout* line = nullptr;
+    QWidget* title = row(card, line);
+    line->setContentsMargins(10, 2, 10, 6);
+    if (!icon.isEmpty()) {
+        auto* image = new QLabel(title);
+        image->setPixmap(symbolic(icon, this).pixmap(IconSize, IconSize));
+        line->addWidget(image);
+    }
+    auto* words = new QLabel(heading, title);
+    QFont bold = words->font();
+    bold.setBold(true);
+    words->setFont(bold);
+    line->addWidget(words, 1);
+    content->addWidget(title);
+    card->hide();
+    return card;
+}
+
+void QuickSettings::toggleMenu(QWidget* menu)
+{
+    m_openMenu = m_openMenu == menu ? nullptr : menu;
+    // In place first: shown before, a menu would show where it was last.
+    layOutToggles();
+    for (QWidget* each : {m_powerMenu, m_wifiToggle.menu, m_bluetoothToggle.menu})
+        each->setVisible(each == m_openMenu);
+    m_power->setChecked(m_openMenu == m_powerMenu);
+    sync();
+}
+
+void QuickSettings::layOutToggles()
+{
+    while (m_grid->count() > 0)
+        delete m_grid->takeAt(0);
+    struct Placed {
+        QWidget* toggle;
+        bool shown;
+        QWidget* menu = nullptr;
+    };
+    const bool network = m_network.isAvailable();
+    const Placed all[] {
+        {m_wifiToggle.widget, network && m_network.hasWifi(), m_wifiToggle.menu},
+        {m_wired, network && !m_network.hasWifi()},
+        {m_bluetoothToggle.widget, m_bluetooth.isAvailable(), m_bluetoothToggle.menu},
+        {m_darkStyle, true},
+        {m_quiet, true},
+        {m_powerMode, m_profiles.isAvailable() && !m_profiles.offered().isEmpty()},
+        {m_screenshot, true},
+    };
+    int line = 0;
+    int column = 0;
+    QWidget* menu = nullptr; // under the row being filled
+    for (const Placed& each : all) {
+        each.toggle->setVisible(each.shown);
+        // The menu of one gone closes.
+        if (each.menu && !each.shown && m_openMenu == each.menu) {
+            m_openMenu = nullptr;
+            each.menu->hide();
+        }
+        if (!each.shown)
+            continue;
+        m_grid->addWidget(each.toggle, line, column);
+        if (each.menu && each.menu == m_openMenu)
+            menu = each.menu;
+        if (++column == 2) {
+            column = 0;
+            ++line;
+            if (std::exchange(menu, nullptr))
+                m_grid->addWidget(m_openMenu, line++, 0, 1, 2);
+        }
+    }
+    if (menu)
+        m_grid->addWidget(menu, line + 1, 0, 1, 2);
 }
 
 void QuickSettings::syncToggles()
@@ -294,15 +475,18 @@ void QuickSettings::syncToggles()
     setIcon(m_quiet,
         m_notifications.isQuiet() ? u"notifications-disabled-symbolic"_s
                                   : u"preferences-system-notifications-symbolic"_s);
-    m_powerMode->setVisible(m_profiles.isAvailable() && !m_profiles.offered().isEmpty());
     m_powerMode->setText(shell::powerProfileName(m_profiles.active()));
     setIcon(m_powerMode, shell::powerProfileIcon(m_profiles.active()));
     setIcon(m_screenshot, u"camera-photo-symbolic"_s);
+    m_wired->setText(m_network.description());
+    setIcon(m_wired, m_network.iconName());
+    layOutToggles();
 }
 
-QToolButton* QuickSettings::actionButton(const QString& icon, const QString& name, void (QuickSettings::*signal)())
+QToolButton* QuickSettings::actionButton(
+    QWidget* parent, const QString& icon, const QString& name, void (QuickSettings::*signal)())
 {
-    QToolButton* button = roundButton(this);
+    QToolButton* button = roundButton(parent);
     // As wide as the panel, the icon before the words with room between them.
     button->setMinimumSize(0, 36);
     button->setMaximumSize(QWIDGETSIZE_MAX, 36);
@@ -310,8 +494,8 @@ QToolButton* QuickSettings::actionButton(const QString& icon, const QString& nam
     button->setStyleSheet(button->styleSheet() + u" QToolButton { border-radius: 8px; }"_s);
     button->setAccessibleName(name);
     auto* content = new QHBoxLayout(button);
-    content->setContentsMargins(12, 0, 12, 0);
-    content->setSpacing(12);
+    content->setContentsMargins(10, 0, 10, 0);
+    content->setSpacing(10);
     auto* iconLabel = new QLabel(button);
     iconLabel->setPixmap(symbolic(icon, this).pixmap(IconSize, IconSize));
     auto* text = new QLabel(name, button);
@@ -324,12 +508,14 @@ QToolButton* QuickSettings::actionButton(const QString& icon, const QString& nam
     return button;
 }
 
-QToolButton* QuickSettings::settingsButton(const QString& page, const QString& name)
+QToolButton* QuickSettings::topButton(const QString& icon, const QString& name)
 {
     QToolButton* button = roundButton(this);
+    button->setFixedSize(36, 36);
+    button->setStyleSheet(button->styleSheet().replace(u"16px"_s, u"18px"_s));
     button->setToolTip(name);
-    button->setIcon(symbolic(u"go-next-symbolic"_s, this));
-    connect(button, &QToolButton::clicked, this, [this, page] { emit settingsRequested(page); });
+    button->setAccessibleName(name);
+    button->setIcon(symbolic(icon, this));
     return button;
 }
 
@@ -341,6 +527,8 @@ void QuickSettings::resizeEvent(QResizeEvent* event)
 
 void QuickSettings::refresh()
 {
+    if (m_openMenu)
+        toggleMenu(m_openMenu);
     m_brightness.refresh();
     m_wifi.scan();
     sync();
@@ -363,21 +551,13 @@ void QuickSettings::sync()
         m_light->setValue(int(std::lround(m_brightness.value() * Steps)));
     }
 
-    m_networkRow->setVisible(m_network.isAvailable());
-    m_networkIcon->setPixmap(symbolic(m_network.iconName(), this).pixmap(IconSize, IconSize));
-    m_networkText->setText(m_wifiProblem.isEmpty() ? m_network.description() : m_wifiProblem);
-    m_networkText->setWordWrap(!m_wifiProblem.isEmpty());
-    m_wifiSwitch->setVisible(m_network.hasWifi());
-    {
-        const QSignalBlocker blocker(m_wifiSwitch);
-        m_wifiSwitch->setChecked(m_network.isWifiEnabled());
-    }
-
     syncWifi();
     syncBluetooth();
     syncToggles();
 
-    m_batteryRow->setVisible(m_battery.isPresent());
+    const bool battery = m_battery.isPresent();
+    m_batteryIcon->setVisible(battery);
+    m_batteryText->setVisible(battery);
     m_batteryIcon->setPixmap(symbolic(m_battery.iconName(), this).pixmap(IconSize, IconSize));
     const QString time = m_battery.timeText();
     m_batteryText->setText(
@@ -388,29 +568,25 @@ void QuickSettings::sync()
 void QuickSettings::syncBluetooth()
 {
     const bool on = m_bluetooth.isPowered();
-    m_bluetoothRow->setVisible(m_bluetooth.isAvailable());
-    m_bluetoothIcon->setPixmap(symbolic(on ? u"bluetooth-active-symbolic"_s : u"bluetooth-disabled-symbolic"_s, this)
-            .pixmap(IconSize, IconSize));
     const QString connected = m_bluetooth.connectedNames();
-    m_bluetoothText->setText(!m_bluetoothProblem.isEmpty() ? m_bluetoothProblem
-            : !on                                          ? u"Bluetooth is off"_s
-            : connected.isEmpty()                          ? u"Bluetooth is on"_s
-                                                           : connected);
-    m_bluetoothText->setWordWrap(!m_bluetoothProblem.isEmpty());
-    {
-        const QSignalBlocker blocker(m_bluetoothSwitch);
-        m_bluetoothSwitch->setChecked(on);
-    }
+    paintMenuToggle(m_bluetoothToggle, on ? u"bluetooth-active-symbolic"_s : u"bluetooth-disabled-symbolic"_s,
+        !on ? u"Off"_s
+            : connected.isEmpty() ? u"On"_s
+                                  : connected,
+        on);
+    m_bluetoothToggle.problem->setText(m_bluetoothProblem);
+    m_bluetoothToggle.problem->setVisible(!m_bluetoothProblem.isEmpty());
 
     // A button for each device paired, connecting it or letting it go.
     auto devices = on ? m_bluetooth.paired() : std::vector<shell::BluetoothDevice> {};
-    m_devices->setVisible(!devices.empty());
+    m_bluetoothToggle.empty->setText(on ? u"No devices paired"_s : u"Bluetooth is off"_s);
+    m_bluetoothToggle.empty->setVisible(devices.empty());
     if (devices == m_shownDevices)
         return;
     m_shownDevices = std::move(devices);
-    shell::clearLayout(*m_deviceList);
+    shell::clearLayout(*m_bluetoothToggle.list);
     for (const shell::BluetoothDevice& device : m_shownDevices) {
-        QToolButton* button = listButton(m_devices,
+        QToolButton* button = listButton(m_bluetoothToggle.menu,
             device.icon.isEmpty() ? u"bluetooth-active-symbolic"_s : device.icon + u"-symbolic"_s, device.name,
             device.connected ? u"Connected"_s : QString());
         button->setToolTip(device.connected ? u"Disconnect"_s : u"Connect"_s);
@@ -420,15 +596,15 @@ void QuickSettings::syncBluetooth()
             else
                 m_bluetooth.connectDevice(path);
         });
-        m_deviceList->addWidget(button);
+        m_bluetoothToggle.list->addWidget(button);
     }
 }
 
 QToolButton* QuickSettings::listButton(QWidget* parent, const QString& icon, const QString& name, const QString& state)
 {
     QToolButton* button = roundButton(parent);
-    button->setMinimumSize(0, 30);
-    button->setMaximumSize(QWIDGETSIZE_MAX, 30);
+    button->setMinimumSize(0, 32);
+    button->setMaximumSize(QWIDGETSIZE_MAX, 32);
     button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     button->setStyleSheet(button->styleSheet() + u" QToolButton { border-radius: 8px; }"_s);
     auto* content = new QHBoxLayout(button);
@@ -436,11 +612,10 @@ QToolButton* QuickSettings::listButton(QWidget* parent, const QString& icon, con
     content->setSpacing(10);
     auto* iconLabel = new QLabel(button);
     iconLabel->setPixmap(symbolic(icon, this).pixmap(IconSize, IconSize));
-    auto* nameLabel = new QLabel(name, button);
-    nameLabel->setTextFormat(Qt::PlainText);
+    auto* nameLabel = new ElidedLabel(name, button);
     auto* stateLabel = new QLabel(state, button);
     stateLabel->setStyleSheet(u"color: %1;"_s.arg(tde::theme::colors().dimText.name()));
-    for (QLabel* label : {iconLabel, nameLabel, stateLabel})
+    for (QLabel* label : {iconLabel, static_cast<QLabel*>(nameLabel), stateLabel})
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
     content->addWidget(iconLabel);
     content->addWidget(nameLabel, 1);
@@ -450,22 +625,29 @@ QToolButton* QuickSettings::listButton(QWidget* parent, const QString& icon, con
 
 void QuickSettings::syncWifi()
 {
+    const bool on = m_network.isWifiEnabled();
+    paintMenuToggle(m_wifiToggle, on ? m_network.iconName() : u"network-wireless-disabled-symbolic"_s,
+        on ? m_network.description() : u"Off"_s, on);
+    m_wifiToggle.problem->setText(m_wifiProblem);
+    m_wifiToggle.problem->setVisible(!m_wifiProblem.isEmpty());
+
     // The networks in range, the strongest first, connecting to one or letting it go.
     std::vector<shell::WifiNetwork> networks;
     if (m_wifi.isAvailable() && m_wifi.isEnabled()) {
         for (const shell::WifiNetwork& network : m_wifi.networks()) {
-            if (network.strength >= 0 && networks.size() < 6)
+            if (network.strength >= 0 && networks.size() < 8)
                 networks.push_back(network);
         }
     }
-    m_networks->setVisible(!networks.empty());
+    m_wifiToggle.empty->setText(on ? u"No networks in range"_s : u"Wi-Fi is off"_s);
+    m_wifiToggle.empty->setVisible(networks.empty());
     if (networks == m_shownNetworks)
         return;
     m_shownNetworks = std::move(networks);
-    shell::clearLayout(*m_networkList);
+    shell::clearLayout(*m_wifiToggle.list);
     for (const shell::WifiNetwork& network : m_shownNetworks) {
         const QString state = network.active ? u"Connected"_s : network.needsPassword() ? u"Secured"_s : QString();
-        QToolButton* button = listButton(m_networks, shell::wifiIconName(network.strength), network.ssid, state);
+        QToolButton* button = listButton(m_wifiToggle.menu, shell::wifiIconName(network.strength), network.ssid, state);
         button->setToolTip(network.active ? u"Disconnect"_s : u"Connect"_s);
         connect(button, &QToolButton::clicked, this, [this, ssid = network.ssid, active = network.active] {
             if (active)
@@ -473,7 +655,7 @@ void QuickSettings::syncWifi()
             else
                 emit wifiNetworkChosen(ssid);
         });
-        m_networkList->addWidget(button);
+        m_wifiToggle.list->addWidget(button);
     }
 }
 
