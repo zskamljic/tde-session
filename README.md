@@ -101,7 +101,7 @@ opens the overview as Super does; it can show the desktop instead, as the button
 Windows 7's taskbar did, and doing it again before using another window brings the windows back.
 New windows open in the middle of the screen.
 In Argus, the windows go on showing what they do; a click on one switches to it, a middle click
-or the × on it closes it, and with several displays, dragging it to another display's part of
+or the × on it (in the corner where the window buttons are) closes it, and with several displays, dragging it to another display's part of
 the overview moves it there.
 Typing finds applications by name, by what they are ("terminal") and by their keywords, and
 Enter starts the first one; the button at the bottom shows all of them. Each application starts in

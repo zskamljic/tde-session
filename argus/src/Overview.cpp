@@ -6,6 +6,7 @@
 #include <Layer.hpp>
 
 #include <Icons.hpp>
+#include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
 #include <QApplication>
@@ -372,14 +373,17 @@ void Overview::relayout()
     const int titleHeight = fontMetrics().height() + 12;
     const std::vector<QRect> rects = layOut(sizes, area, Spacing, titleHeight);
 
+    // The close button sits in the corner where windows have theirs.
+    const bool left = tde::desktop().windowButtons.side == tde::ButtonSide::Left;
     m_slots.clear();
     for (size_t i = 0; i < rects.size(); ++i) {
         const QRect preview = rects[i];
+        const int closeX = (left ? preview.left() : preview.right()) - CloseSize / 2;
         m_slots.push_back(Slot {
             .id = windows[i]->id,
             .preview = preview,
             .title = QRect(preview.left() - Spacing / 2, preview.bottom() + 1, preview.width() + Spacing, titleHeight),
-            .closeButton = QRect(preview.right() - CloseSize / 2, preview.top() - CloseSize / 2, CloseSize, CloseSize),
+            .closeButton = QRect(closeX, preview.top() - CloseSize / 2, CloseSize, CloseSize),
         });
     }
     if (!std::ranges::any_of(m_slots, [this](const Slot& slot) { return slot.id == m_hovered; }))
