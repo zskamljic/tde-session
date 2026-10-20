@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace atlas {
@@ -92,6 +93,8 @@ protected:
     virtual void sendTiled(Tile tile) = 0;
     virtual void sendFullscreen(bool fullscreen) = 0;
     virtual void sendMinimized(bool) { }
+    // Where the program would have the window, if it says; full screen, it fills the output there.
+    virtual std::optional<wlr_box> askedPlace() const { return std::nullopt; }
 
     void onMapped();
     void onUnmapped();
@@ -207,10 +210,18 @@ protected:
     void sendTiled(Tile tile) override;
     void sendFullscreen(bool fullscreen) override;
     void sendMinimized(bool minimized) override;
+    std::optional<wlr_box> askedPlace() const override { return m_asked; }
 
 private:
     void associate();
     void dissociate();
+    // Where X11 is told the window is, which is where it shows but for a game's, see m_heldAt.
+    wlr_box placeInX() const;
+
+    std::optional<wlr_box> m_asked;
+    // Where a fullscreen window that asked for the whole of a display stays in X11, wherever it
+    // is shown: a game under Wine aims the pointer by the place it believes its window has.
+    std::optional<wlr_box> m_heldAt;
 
     Listener m_destroy;
     Listener m_associate;

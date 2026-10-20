@@ -336,7 +336,20 @@ void View::setFullscreen(bool wanted)
     if (wanted) {
         if (tile == Tile::None)
             restore = current;
-        if (Output* output = server.outputAt(current.x + current.width / 2.0, current.y + current.height / 2.0))
+        // A game under Wine asks for the whole of the display it believes it is on, and aims the
+        // pointer by it; any other window fills the one it is on.
+        Output* output = nullptr;
+        if (const std::optional<wlr_box> asked = askedPlace()) {
+            output = server.outputAt(asked->x + asked->width / 2.0, asked->y + asked->height / 2.0);
+            if (output) {
+                const wlr_box box = output->box();
+                if (!wlr_box_equal(&box, &*asked))
+                    output = nullptr;
+            }
+        }
+        if (!output)
+            output = server.outputAt(current.x + current.width / 2.0, current.y + current.height / 2.0);
+        if (output)
             setGeometry(output->box());
         // Above the bars while it covers the screen.
         wlr_scene_node_reparent(&tree->node, server.layers.fullscreen);
@@ -638,10 +651,11 @@ XwaylandView::XwaylandView(Server& server, wlr_xwayland_surface* surface)
     // Before it is shown, a window may put itself where it likes; afterwards it is placed.
     m_requestConfigure.connect<wlr_xwayland_surface_configure_event>(
         surface->events.request_configure, [this](wlr_xwayland_surface_configure_event* event) {
+            m_asked = wlr_box {event->x, event->y, event->width, event->height};
             if (placedRecently()) {
                 // Just shown, it keeps the place it was given, whatever size it takes.
-                const wlr_box content = contentGeometry();
-                wlr_xwayland_surface_configure(xsurface, content.x, content.y, event->width, event->height);
+                const wlr_box place = placeInX();
+                wlr_xwayland_surface_configure(xsurface, place.x, place.y, event->width, event->height);
                 sizeCommitted();
             } else if (!mapped || (!isTiled() && !fullscreen)) {
                 wlr_xwayland_surface_configure(xsurface, event->x, event->y, event->width, event->height);
@@ -650,7 +664,7 @@ XwaylandView::XwaylandView(Server& server, wlr_xwayland_surface* surface)
                     updateOutput();
                 }
             } else {
-                const wlr_box box = contentGeometry();
+                const wlr_box box = placeInX();
                 wlr_xwayland_surface_configure(xsurface, box.x, box.y, box.width, box.height);
             }
         });
@@ -703,6 +717,7 @@ void XwaylandView::associate()
         // title bar; those that draw their own say so in their Motif hints.
         setDecorated(xsurface->decorations == WLR_XWAYLAND_SURFACE_DECORATIONS_ALL);
         wlr_scene_node_set_enabled(&tree->node, true);
+        m_asked = wlr_box {xsurface->x, xsurface->y, xsurface->width, xsurface->height};
         onMapped();
         if (xsurface->fullscreen)
             setFullscreen(true);
@@ -764,14 +779,24 @@ void XwaylandView::close()
 void XwaylandView::moved()
 {
     // X11 programs place their menus from where they believe their window is.
-    const wlr_box content = contentGeometry();
-    wlr_xwayland_surface_configure(xsurface, content.x, content.y, xsurface->width, xsurface->height);
+    const wlr_box place = placeInX();
+    wlr_xwayland_surface_configure(xsurface, place.x, place.y, xsurface->width, xsurface->height);
 }
 
 void XwaylandView::requestSize(int width, int height)
 {
-    const wlr_box content = contentGeometry();
-    wlr_xwayland_surface_configure(xsurface, content.x, content.y, width, height);
+    const wlr_box place = placeInX();
+    wlr_xwayland_surface_configure(xsurface, place.x, place.y, width, height);
+}
+
+wlr_box XwaylandView::placeInX() const
+{
+    wlr_box box = contentGeometry();
+    if (fullscreen && m_heldAt) {
+        box.x = m_heldAt->x;
+        box.y = m_heldAt->y;
+    }
+    return box;
 }
 
 void XwaylandView::sendActivated(bool activated)
@@ -795,6 +820,18 @@ void XwaylandView::sendTiled(Tile tile)
 
 void XwaylandView::sendFullscreen(bool fullscreen)
 {
+    // A game under Wine takes the display it asked for to begin where that one does, and puts
+    // the pointer back in the middle of its window by that; Xwayland lets it only within the
+    // window. So moved to another display, the window stays where it was in X11, which places
+    // the pointer from where X11 believes the window is and so keeps it in the game.
+    if (!fullscreen) {
+        m_heldAt.reset();
+    } else if (!m_heldAt && m_asked) {
+        const Output* output = server.outputAt(m_asked->x + m_asked->width / 2.0, m_asked->y + m_asked->height / 2.0);
+        const wlr_box box = output ? output->box() : wlr_box {};
+        if (output && wlr_box_equal(&box, &*m_asked))
+            m_heldAt = box;
+    }
     wlr_xwayland_surface_set_fullscreen(xsurface, fullscreen);
 }
 
