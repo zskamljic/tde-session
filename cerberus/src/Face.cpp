@@ -70,42 +70,98 @@ void draw(cairo_t* cr, int width, int height, const Face& face)
     cairo_paint(cr);
 
     const double centreX = width / 2.0;
-    // The clock above the middle, the password just below it.
-    double y = height * 0.28;
-    setColor(cr, Text);
-    y += centred(cr, face.time, "Sans Light 64", centreX, y);
-    setColor(cr, DimText);
-    y += centred(cr, face.date, "Sans 15", centreX, y + 4);
 
-    y = height * 0.55;
+    // Just the clock, and how to go on.
+    if (face.curtain) {
+        double y = height * 0.30;
+        setColor(cr, Text);
+        y += centred(cr, face.time, "Sans Light 80", centreX, y);
+        setColor(cr, DimText);
+        centred(cr, face.date, "Sans 17", centreX, y + 4);
+        const char* hint = face.finger == Face::Finger::None ? "Press a key or click to unlock"
+                                                             : "Touch the fingerprint reader or press a key to unlock";
+        centred(cr, hint, "Sans 11", centreX, height * 0.85);
+        return;
+    }
+
+    setColor(cr, DimText);
+    centred(cr, face.time, "Sans Bold 13", centreX, 24);
+
+    // The user's initial in a circle, the name under it, the password under that.
+    double y = height * 0.36;
+    constexpr double Avatar = 96;
+    cairo_new_path(cr);
+    cairo_arc(cr, centreX, y + Avatar / 2, Avatar / 2, 0, 2 * M_PI);
+    setColor(cr, Field);
+    cairo_fill(cr);
+    if (!face.user.empty()) {
+        // The first character, which may be several bytes.
+        std::size_t length = 1;
+        while (length < face.user.size() && (static_cast<unsigned char>(face.user[length]) & 0xc0) == 0x80)
+            ++length;
+        setColor(cr, Text);
+        centred(cr, face.user.substr(0, length), "Sans 36", centreX, y + Avatar / 2 - 27);
+    }
+    y += Avatar + 14;
     setColor(cr, Text);
-    y += centred(cr, face.user, "Sans Bold 13", centreX, y) + 12;
+    y += centred(cr, face.user, "Sans Bold 15", centreX, y) + 16;
 
     const double fieldX = centreX - FieldWidth / 2;
+    // Taking keys: a ring of the accent around the field, as GTK draws the focus.
+    if (face.focused) {
+        roundedRect(cr, fieldX - 3, y - 3, FieldWidth + 6, FieldHeight + 6, FieldHeight / 2 + 3);
+        setColor(cr, face.status == Face::Status::Wrong ? Error : Accent, 0.45);
+        cairo_set_line_width(cr, 3);
+        cairo_stroke(cr);
+    }
     roundedRect(cr, fieldX, y, FieldWidth, FieldHeight, FieldHeight / 2);
     setColor(cr, Field);
     cairo_fill_preserve(cr);
-    cairo_set_line_width(cr, 2);
-    setColor(cr, face.status == Face::Status::Wrong ? Error : face.typed > 0 ? Accent : Border);
+    cairo_set_line_width(cr, face.focused ? 2 : 1);
+    setColor(cr, face.status == Face::Status::Wrong ? Error : face.focused ? Accent : Border);
     cairo_stroke(cr);
 
-    if (face.typed == 0) {
+    // A dot per character, as many as fit, and the caret after them while keys come here.
+    constexpr double Dot = 4;
+    constexpr double Gap = 7;
+    const std::size_t room = std::size_t((FieldWidth - 48) / (2 * Dot + Gap));
+    const std::size_t dots = std::min(face.typed, room);
+    const double total = dots > 0 ? dots * 2 * Dot + (dots - 1) * Gap : 0;
+    const double middle = y + FieldHeight / 2;
+    double caretX = centreX;
+    if (dots == 0) {
         setColor(cr, DimText);
-        centred(cr, "Enter Password", "Sans 11", centreX, y + FieldHeight / 2 - 9);
+        const char* placeholder = !face.focused     ? "Click here to type the password"
+            : face.status == Face::Status::Checking ? ""
+                                                    : "Password";
+        PangoLayout* layout = pango_cairo_create_layout(cr);
+        PangoFontDescription* description = pango_font_description_from_string("Sans 11");
+        pango_layout_set_font_description(layout, description);
+        pango_font_description_free(description);
+        pango_layout_set_text(layout, placeholder, -1);
+        int textWidth = 0;
+        int textHeight = 0;
+        pango_layout_get_pixel_size(layout, &textWidth, &textHeight);
+        // From the left, as an entry starts, the caret before the words.
+        const double textX = fieldX + 22;
+        cairo_move_to(cr, textX, middle - textHeight / 2.0);
+        pango_cairo_show_layout(cr, layout);
+        g_object_unref(layout);
+        caretX = textX - 2;
     } else {
-        // A dot per character, as many as fit.
-        constexpr double Dot = 4;
-        constexpr double Gap = 7;
-        const std::size_t room = std::size_t((FieldWidth - 40) / (2 * Dot + Gap));
-        const std::size_t dots = std::min(face.typed, room);
-        const double total = dots * 2 * Dot + (dots - 1) * Gap;
-        double x = centreX - total / 2 + Dot;
+        double x = fieldX + 22 + Dot;
         setColor(cr, Text);
         for (std::size_t i = 0; i < dots; ++i, x += 2 * Dot + Gap) {
             cairo_new_path(cr);
-            cairo_arc(cr, x, y + FieldHeight / 2, Dot, 0, 2 * M_PI);
+            cairo_arc(cr, x, middle, Dot, 0, 2 * M_PI);
             cairo_fill(cr);
         }
+        caretX = fieldX + 22 + total + 5;
+    }
+    if (face.focused && face.caret && face.status != Face::Status::Checking) {
+        setColor(cr, Text);
+        cairo_rectangle(cr, std::round(caretX), middle - 10, 1.5, 20);
+        cairo_fill(cr);
     }
     y += FieldHeight + 14;
 

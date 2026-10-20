@@ -41,6 +41,9 @@ a dot meanwhile, until they are dismissed. With do not disturb, only urgent ones
 the rest go straight behind the clock. Behind the clock are the calendar too and, while a
 program plays music or video, its controls, which the media keys work as well.
 
+The lock screen shows the clock until a key is pressed or the screen clicked; then the password
+field, ringed in the accent colour with a blinking caret while it takes keys, and the key pressed
+already typed. Escape, or half a minute without typing, brings the clock back.
 The screen locks with Super+L, from the quick settings, after five minutes without input (unless
 a program such as a video player asks it to stay on while its window shows), before the computer
 sleeps, and when `loginctl lock-session` asks. The password is checked through PAM, by

@@ -117,6 +117,11 @@ private:
     void startRepeat(uint32_t key);
     void stopRepeat();
     void tickClock();
+    // Shows the password in place of the curtain, or the curtain again.
+    void setCurtain(bool down);
+    void setFocused(bool focused);
+    // Blinks the caret while the password can be typed, from shown on when `restart`.
+    void updateCaret(bool restart);
     void authenticated(bool accepted);
     void fingerprintChanged();
 
@@ -140,6 +145,9 @@ private:
     uint32_t m_repeatKey = 0;
     FileDescriptor m_repeatTimer;
     FileDescriptor m_clockTimer;
+    FileDescriptor m_caretTimer;
+    bool m_blinking = false;
+    int m_idle = 0; // seconds without a key while the password shows, until the curtain falls
 
     std::unique_ptr<Authenticator> m_auth;
     std::unique_ptr<Fingerprint> m_fingerprint;
@@ -295,6 +303,7 @@ void Locker::setUpSeat(uint32_t capabilities)
     if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && m_keyboard) {
         m_keyboard.reset();
         stopRepeat();
+        setFocused(false);
     }
     if (!(capabilities & WL_SEAT_CAPABILITY_POINTER))
         m_pointer.reset();
@@ -306,8 +315,14 @@ void Locker::setUpSeat(uint32_t capabilities)
                     if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
                         static_cast<Locker*>(data)->keymap(keymap.get(), size);
                 },
-            .enter = [](void*, wl_keyboard*, uint32_t, wl_surface*, wl_array*) { },
-            .leave = [](void* data, wl_keyboard*, uint32_t, wl_surface*) { static_cast<Locker*>(data)->stopRepeat(); },
+            .enter = [](void* data, wl_keyboard*, uint32_t, wl_surface*,
+                         wl_array*) { static_cast<Locker*>(data)->setFocused(true); },
+            .leave =
+                [](void* data, wl_keyboard*, uint32_t, wl_surface*) {
+                    auto* self = static_cast<Locker*>(data);
+                    self->stopRepeat();
+                    self->setFocused(false);
+                },
             .key
             = [](void* data, wl_keyboard*, uint32_t, uint32_t, uint32_t key,
                   uint32_t state) { static_cast<Locker*>(data)->key(key, state == WL_KEYBOARD_KEY_STATE_PRESSED); },
@@ -346,7 +361,11 @@ void Locker::setUpSeat(uint32_t capabilities)
             };
             events.leave = [](void*, wl_pointer*, uint32_t, wl_surface*) { };
             events.motion = [](void*, wl_pointer*, uint32_t, wl_fixed_t, wl_fixed_t) { };
-            events.button = [](void*, wl_pointer*, uint32_t, uint32_t, uint32_t, uint32_t) { };
+            // A click lifts the curtain.
+            events.button = [](void* data, wl_pointer*, uint32_t, uint32_t, uint32_t, uint32_t state) {
+                if (state == WL_POINTER_BUTTON_STATE_PRESSED)
+                    static_cast<Locker*>(data)->setCurtain(false);
+            };
             events.axis = [](void*, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { };
             events.frame = [](void*, wl_pointer*) { };
             events.axis_source = [](void*, wl_pointer*, uint32_t) { };
@@ -379,8 +398,10 @@ void Locker::key(uint32_t key, bool pressed)
             stopRepeat();
         return;
     }
-    press(xkb_state_key_get_one_sym(m_state.get(), key + 8), key);
-    if (xkb_keymap_key_repeats(m_keymap.get(), key + 8))
+    const xkb_keysym_t sym = xkb_state_key_get_one_sym(m_state.get(), key + 8);
+    press(sym, key);
+    // Escape held would raise and drop the curtain over and over.
+    if (sym != XKB_KEY_Escape && xkb_keymap_key_repeats(m_keymap.get(), key + 8))
         startRepeat(key);
 }
 
@@ -391,6 +412,13 @@ void Locker::press(xkb_keysym_t sym, uint32_t key)
         return;
     if (m_face.status == Face::Status::Wrong)
         m_face.status = Face::Status::Ready;
+    m_idle = 0;
+    // The first key lifts the curtain; one that types something types it into the password too.
+    if (m_face.curtain) {
+        setCurtain(false);
+        if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter || sym == XKB_KEY_BackSpace || sym == XKB_KEY_Escape)
+            return;
+    }
 
     switch (sym) {
     case XKB_KEY_Return:
@@ -406,6 +434,12 @@ void Locker::press(xkb_keysym_t sym, uint32_t key)
         m_password.removeLast();
         break;
     case XKB_KEY_Escape:
+        // Once nothing is left, it lets the curtain down again.
+        if (m_password.empty()) {
+            stopRepeat();
+            setCurtain(true);
+            return;
+        }
         m_password.clear();
         break;
     default:
@@ -423,7 +457,43 @@ void Locker::press(xkb_keysym_t sym, uint32_t key)
         break;
     }
     m_face.typed = m_password.length();
+    updateCaret(true);
     drawAll();
+}
+
+void Locker::setCurtain(bool down)
+{
+    if (m_face.curtain == down)
+        return;
+    m_face.curtain = down;
+    m_idle = 0;
+    updateCaret(true);
+    drawAll();
+}
+
+void Locker::setFocused(bool focused)
+{
+    if (m_face.focused == focused)
+        return;
+    m_face.focused = focused;
+    updateCaret(true);
+    drawAll();
+}
+
+void Locker::updateCaret(bool restart)
+{
+    const bool wanted = !m_face.curtain && m_face.focused;
+    if (restart)
+        m_face.caret = true;
+    if (wanted == m_blinking && !restart)
+        return;
+    m_blinking = wanted;
+    itimerspec timer {};
+    if (wanted) {
+        timer.it_value.tv_nsec = 530'000'000L;
+        timer.it_interval.tv_nsec = 530'000'000L;
+    }
+    timerfd_settime(m_caretTimer.get(), 0, &timer, nullptr);
 }
 
 void Locker::startRepeat(uint32_t key)
@@ -465,6 +535,12 @@ void Locker::fingerprintChanged()
         m_face.finger = Face::Finger::Retry;
         break;
     }
+    // What the reader says is under the curtain.
+    if (m_face.finger == Face::Finger::NoMatch || m_face.finger == Face::Finger::Retry) {
+        m_face.curtain = false;
+        m_idle = 0;
+        updateCaret(true);
+    }
     drawAll();
 }
 
@@ -473,6 +549,11 @@ void Locker::tickClock()
     // A reader that went away, as over sleeping, may be back.
     if (++m_ticks % 10 == 0)
         m_fingerprint->restart();
+    // Left alone with nothing typed, the password goes behind the curtain again.
+    if (!m_face.curtain && m_password.empty() && !m_auth->busy() && ++m_idle >= 30) {
+        m_face.status = Face::Status::Ready;
+        setCurtain(true);
+    }
     std::string time = timeText(m_seconds);
     std::string date = formatted("%A, %-d %B");
     if (time != m_face.time || date != m_face.date) {
@@ -523,6 +604,7 @@ int Locker::run()
 
     m_repeatTimer = FileDescriptor(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
     m_clockTimer = FileDescriptor(timerfd_create(CLOCK_REALTIME, TFD_CLOEXEC | TFD_NONBLOCK));
+    m_caretTimer = FileDescriptor(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
     itimerspec everySecond {};
     everySecond.it_value.tv_sec = 1;
     everySecond.it_interval.tv_sec = 1;
@@ -550,6 +632,7 @@ int Locker::run()
             {m_repeatTimer.get(), POLLIN, 0},
             {m_clockTimer.get(), POLLIN, 0},
             {m_fingerprint->fd(), m_fingerprint->events(), 0},
+            {m_caretTimer.get(), POLLIN, 0},
         };
         if (poll(fds, std::size(fds), m_fingerprint->timeout()) < 0) {
             wl_display_cancel_read(m_display);
@@ -572,6 +655,11 @@ int Locker::run()
         }
         if ((fds[3].revents & POLLIN) && read(m_clockTimer.get(), &expirations, sizeof(expirations)) > 0)
             tickClock();
+        if ((fds[5].revents & POLLIN) && read(m_caretTimer.get(), &expirations, sizeof(expirations)) > 0
+            && m_blinking) {
+            m_face.caret = !m_face.caret;
+            drawAll();
+        }
         if (fds[1].revents & POLLIN) {
             if (const auto accepted = m_auth->result())
                 authenticated(*accepted);
