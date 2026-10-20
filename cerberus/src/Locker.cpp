@@ -125,8 +125,8 @@ private:
     Owned<wl_compositor, wl_compositor_destroy> m_compositor;
     Owned<wl_shm, wl_shm_destroy> m_shm;
     Owned<wl_seat, wl_seat_destroy> m_seat;
-    Owned<wl_keyboard, wl_keyboard_destroy> m_keyboard;
-    Owned<wl_pointer, wl_pointer_destroy> m_pointer;
+    Owned<wl_keyboard, wl_keyboard_release> m_keyboard;
+    Owned<wl_pointer, wl_pointer_release> m_pointer;
     Owned<ext_session_lock_manager_v1, ext_session_lock_manager_v1_destroy> m_manager;
     ext_session_lock_v1* m_lock = nullptr; // destroyed by unlocking, or with "finished"
     std::vector<std::unique_ptr<Output>> m_outputs;
@@ -290,6 +290,14 @@ void Locker::released(Buffer& buffer)
 
 void Locker::setUpSeat(uint32_t capabilities)
 {
+    // The last keyboard unplugged, as one may be over sleeping, leaves the one here dead; the
+    // next is listened to anew, or no key would come again.
+    if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && m_keyboard) {
+        m_keyboard.reset();
+        stopRepeat();
+    }
+    if (!(capabilities & WL_SEAT_CAPABILITY_POINTER))
+        m_pointer.reset();
     if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && !m_keyboard) {
         static const wl_keyboard_listener listener {
             .keymap =
