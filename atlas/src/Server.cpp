@@ -841,6 +841,11 @@ void Server::setUpProtocols()
 {
     wlr_viewporter_create(display);
     wlr_presentation_create(display, backend, 2);
+    // Programs that draw on the GPU say when their frames are done, rather than leave it to
+    // the driver; NVIDIA's does not tell, and Chromium's frames would show half drawn.
+    if (const int drmFd = wlr_renderer_get_drm_fd(renderer);
+        drmFd >= 0 && renderer->features.timeline && backend->features.timeline)
+        wlr_linux_drm_syncobj_manager_v1_create(display, 1, drmFd);
     wlr_single_pixel_buffer_manager_v1_create(display);
     wlr_fractional_scale_manager_v1_create(display, 1);
     wlr_screencopy_manager_v1_create(display);
