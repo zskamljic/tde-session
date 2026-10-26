@@ -49,8 +49,8 @@ private:
 
 namespace {
 
-// The QImage format with the same layout in memory, for the 32-bit formats the compositor
-// may copy pictures in.
+// The QImage format with the same layout in memory, for the formats the compositor may copy
+// pictures in. Some drivers (NVIDIA's) copy screens only without the alpha byte.
 std::optional<QImage::Format> imageFormat(uint32_t format)
 {
     switch (format) {
@@ -62,9 +62,19 @@ std::optional<QImage::Format> imageFormat(uint32_t format)
         return QImage::Format_RGBX8888;
     case WL_SHM_FORMAT_ABGR8888:
         return QImage::Format_RGBA8888_Premultiplied;
+    case WL_SHM_FORMAT_BGR888:
+        return QImage::Format_RGB888;
+    case WL_SHM_FORMAT_RGB888:
+        return QImage::Format_BGR888;
     default:
         return std::nullopt;
     }
+}
+
+// Bytes from one row of a picture in `format` to the next, kept to whole words.
+int bytesPerLine(int width, uint32_t format)
+{
+    return (width * QImage(1, 1, *imageFormat(format)).depth() / 8 + 3) / 4 * 4;
 }
 
 } // namespace
@@ -127,7 +137,7 @@ void ImageCopy::copy()
         finish({});
         return;
     }
-    const int stride = m_size.width() * 4;
+    const int stride = bytesPerLine(m_size.width(), *m_format);
     if (!m_buffer || m_bufferSize != m_size || m_bufferFormat != *m_format) {
         m_buffer.reset();
         m_memory = std::make_unique<SharedMemory>(size_t(stride) * size_t(m_size.height()));
@@ -159,8 +169,8 @@ void ImageCopy::copy()
 
 void ImageCopy::ready()
 {
-    const QImage view(m_memory->data(), m_bufferSize.width(), m_bufferSize.height(), m_bufferSize.width() * 4,
-        *imageFormat(m_bufferFormat));
+    const QImage view(m_memory->data(), m_bufferSize.width(), m_bufferSize.height(),
+        bytesPerLine(m_bufferSize.width(), m_bufferFormat), *imageFormat(m_bufferFormat));
     m_frame.reset();
     m_failures = 0;
     finish(view.copy());
