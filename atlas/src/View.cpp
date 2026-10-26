@@ -70,6 +70,14 @@ void View::damaged()
 
 void View::place()
 {
+    // A popup of the program's own goes where it asked, as long as that is on a screen.
+    if (const std::optional<wlr_box> asked = askedPlace();
+        asked && keepsAskedPlace() && server.outputAt(asked->x + asked->width / 2.0, asked->y + asked->height / 2.0)) {
+        moveTo(asked->x, asked->y - decorationHeight());
+        m_placedAt = monotonicMs();
+        m_placedSize = size();
+        return;
+    }
     // Dialogs over their parent, those another program shows for a window, such as a portal's
     // file picker, over that window, and everything else in the middle of the screen.
     wlr_box ownSize = size();
@@ -787,6 +795,19 @@ void XwaylandView::requestSize(int width, int height)
 {
     const wlr_box place = placeInX();
     wlr_xwayland_surface_configure(xsurface, place.x, place.y, width, height);
+}
+
+bool XwaylandView::keepsAskedPlace() const
+{
+    // Said in its hints and meant: many programs give a place of 0,0 they never meant, and
+    // windows of their own are placed all the same.
+    const xcb_size_hints_t* hints = xsurface->size_hints;
+    const bool says = hints && (hints->flags & (XCB_ICCCM_SIZE_HINT_US_POSITION | XCB_ICCCM_SIZE_HINT_P_POSITION))
+        && (xsurface->x != 0 || xsurface->y != 0);
+    return says
+        && (xsurface->parent
+            || (xsurface->window_type_len > 0
+                && !wlr_xwayland_surface_has_window_type(xsurface, WLR_XWAYLAND_NET_WM_WINDOW_TYPE_NORMAL)));
 }
 
 wlr_box XwaylandView::placeInX() const

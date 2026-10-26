@@ -95,6 +95,9 @@ protected:
     virtual void sendMinimized(bool) { }
     // Where the program would have the window, if it says; full screen, it fills the output there.
     virtual std::optional<wlr_box> askedPlace() const { return std::nullopt; }
+    // Whether the window is put where it asked to be rather than placed, as a program's own
+    // popups are that X11 manages, such as a field to rename something in.
+    virtual bool keepsAskedPlace() const { return false; }
 
     void onMapped();
     void onUnmapped();
@@ -211,6 +214,7 @@ protected:
     void sendFullscreen(bool fullscreen) override;
     void sendMinimized(bool minimized) override;
     std::optional<wlr_box> askedPlace() const override { return m_asked; }
+    bool keepsAskedPlace() const override;
 
 private:
     void associate();
