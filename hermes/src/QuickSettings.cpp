@@ -519,6 +519,16 @@ QToolButton* QuickSettings::topButton(const QString& icon, const QString& name)
     return button;
 }
 
+bool QuickSettings::event(QEvent* event)
+{
+    const bool handled = QWidget::event(event);
+    // Rows that came or went while the menu was closed are measured only once it asks for the
+    // layout again; the panel then takes the size they need, as it would have at once.
+    if (event->type() == QEvent::LayoutRequest && size() != sizeHint())
+        adjustSize();
+    return handled;
+}
+
 void QuickSettings::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
