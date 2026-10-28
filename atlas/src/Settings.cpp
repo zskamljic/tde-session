@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -98,6 +100,13 @@ std::string configFolder()
     return config && *config ? config : std::string(home ? home : "") + "/.config";
 }
 
+std::string stateFolder()
+{
+    const char* state = std::getenv("XDG_STATE_HOME");
+    const char* home = std::getenv("HOME");
+    return state && *state ? state : std::string(home ? home : "") + "/.local/state";
+}
+
 } // namespace
 
 std::string settingsPath()
@@ -118,6 +127,16 @@ Settings loadSettings(const std::string& path)
     if (!lua)
         return settings;
     table(lua, "input", [&] {
+        table(lua, "keyboard", [&] {
+            if (const auto numLock = string(lua, "numlock")) {
+                if (*numLock == "last")
+                    settings.numLock = NumLock::Last;
+                else if (*numLock == "on")
+                    settings.numLock = NumLock::On;
+                else if (*numLock == "off")
+                    settings.numLock = NumLock::Off;
+            }
+        });
         table(lua, "mouse", [&] { readPointer(lua, settings.mouse); });
         table(lua, "touchpad", [&] { readPointer(lua, settings.touchpad); });
     });
@@ -183,6 +202,38 @@ DesktopSettings loadDesktopSettings(const std::string& path)
             settings.cursorSize = *size;
     });
     return settings;
+}
+
+std::string numLockStatePath()
+{
+    return stateFolder() + "/tde/numlock";
+}
+
+bool loadNumLockState(const std::string& path)
+{
+    std::ifstream file(path);
+    std::string state;
+    file >> state;
+    return state == "on";
+}
+
+void saveNumLockState(const std::string& path, bool on)
+{
+    // Written whole and moved into place, so whoever reads it never finds half of it.
+    std::error_code error;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), error);
+    const std::string written = path + ".new";
+    {
+        std::ofstream file(written, std::ios::trunc);
+        file << (on ? "on\n" : "off\n");
+        if (!file.flush()) {
+            wlr_log(WLR_ERROR, "Num Lock could not be kept in %s", path.c_str());
+            return;
+        }
+    }
+    std::filesystem::rename(written, path, error);
+    if (error)
+        wlr_log(WLR_ERROR, "Num Lock could not be kept in %s: %s", path.c_str(), error.message().c_str());
 }
 
 } // namespace atlas

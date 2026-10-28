@@ -3,6 +3,7 @@
 #include <tde/LuaConfig.hpp>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QPainter>
@@ -16,6 +17,7 @@ namespace {
 using Mode = SessionConfig::Background::Mode;
 using Style = SessionConfig::Switcher::Style;
 using Corner = SessionConfig::Windows::Corner;
+using NumLock = SessionConfig::Input::Keyboard::NumLock;
 
 constexpr int MaxDuration = 2000; // ms
 constexpr int MaxPixels = 100'000;
@@ -37,6 +39,12 @@ constexpr std::pair<QStringView, Corner> corners[] = {
     {u"overview", Corner::Overview},
     {u"desktop", Corner::Desktop},
     {u"off", Corner::Off},
+};
+
+constexpr std::pair<QStringView, NumLock> numLocks[] = {
+    {u"last", NumLock::Last},
+    {u"on", NumLock::On},
+    {u"off", NumLock::Off},
 };
 
 QString boolText(bool value)
@@ -165,6 +173,10 @@ SessionConfig loadSessionConfig(const QString& path)
                 if (const auto typing = reader.boolean("disable_while_typing"))
                     pointer.disableWhileTyping = *typing;
             };
+            reader.table("keyboard", [&] {
+                if (const auto numLock = reader.choice<NumLock>("numlock", numLocks))
+                    config.input.keyboard.numLock = *numLock;
+            });
             reader.table("mouse", [&] { readPointer(config.input.mouse); });
             reader.table("touchpad", [&] { readPointer(config.input.touchpad); });
         });
@@ -247,6 +259,9 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"        suspend_on_battery = %1, -- and on battery"_s.arg(config.power.suspendOnBattery),
         u"    },"_s,
         u"    input = {"_s,
+        u"        -- Num Lock at login: \"last\" as it was left, \"on\" or \"off\"."_s,
+        u"        keyboard = { numlock = %1 },"_s.arg(
+            tde::luaString(tde::choiceName<NumLock>(numLocks, config.input.keyboard.numLock))),
         u"        -- Speeds in percent: of the pointer from -100 to 100 around the usual, of scrolling"_s,
         u"        -- from 10 to 1000 of the usual distance."_s,
         u"        mouse = { speed = %1, scroll_speed = %2, natural_scroll = %3 },"_s.arg(config.input.mouse.speed)
@@ -267,6 +282,28 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
         return false;
     file.write((lines.join(u'\n') + u'\n').toUtf8());
+    return file.commit();
+}
+
+QString numLockStatePath()
+{
+    const QString state = qEnvironmentVariable("XDG_STATE_HOME");
+    return (state.isEmpty() ? QDir::homePath() + u"/.local/state"_s : state) + u"/tde/numlock"_s;
+}
+
+bool loadNumLockState(const QString& path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly | QIODevice::Text) && file.readAll().trimmed() == "on";
+}
+
+bool saveNumLockState(bool on, const QString& path)
+{
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    file.write(on ? "on\n" : "off\n");
     return file.commit();
 }
 

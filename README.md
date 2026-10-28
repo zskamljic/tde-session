@@ -136,7 +136,8 @@ how the displays are arranged (a display dragged next to another snaps to it) an
 the bar, which output and input sound uses and how loud, the power mode and when the screens
 turn off and the computer sleeps, plugged in and on battery, what Alt+Tab shows of the windows,
 how long the animations take, the keyboard layouts, the keys that switch them and the compose
-key, how fast the mouse and the touchpad move and scroll, and which way, and tapping to click,
+key, Num Lock (turned on and off there for keyboards without the key) and how it is at login,
+as it was left or always on or off, how fast the mouse and the touchpad move and scroll, and which way, and tapping to click,
 whether and when the screen locks by itself, and before sleeping, and the fingers that unlock it,
 which applications open web pages, mail, music and the rest, the terminal, which programs start
 at login, which end of title bars has the window buttons (GTK programs are told too), what the
@@ -187,7 +188,9 @@ services that `tde-session.target` brings up and takes down with the session; th
 for other desktops do not. Daedalus lists them under Startup Applications, to turn off (by a copy
 in `~/.config/autostart` that says so) or to add applications to, from the next login on.
 Keyboard layouts come from `XKB_DEFAULT_LAYOUT` and friends, or else from the system layout
-that `localectl`, and Daedalus, set; Atlas follows changes to it at once.
+that `localectl`, and Daedalus, set; Atlas follows changes to it at once. Num Lock goes for every keyboard at
+once; Atlas keeps whether it is on in `~/.local/state/tde/numlock`, and turns it on or off when
+that file is written.
 
 ## Testing in a virtual machine
 

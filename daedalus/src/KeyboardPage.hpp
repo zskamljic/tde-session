@@ -1,9 +1,11 @@
 #pragma once
 
-#include "Widgets.hpp"
+#include "Pages.hpp"
 
 #include <QString>
 #include <QStringList>
+
+class QFileSystemWatcher;
 
 #include <vector>
 
@@ -46,9 +48,10 @@ inline QString withSwitchOption(const QString& options, const QString& option)
 // The keyboard layouts, switching between them, and the compose key, all for the computer:
 // the layouts are kept by
 // systemd-localed, as `localectl set-x11-keymap` keeps them, so the login screen has them too.
+// Num Lock, now and at login, is the session's.
 class KeyboardPage : public Page {
 public:
-    explicit KeyboardPage(QWidget* parent = nullptr);
+    explicit KeyboardPage(Settings& settings, QWidget* parent = nullptr);
 
 private:
     void load();
@@ -56,12 +59,17 @@ private:
     // Hands the layouts and options to localed; shows what it has after.
     void save(const std::vector<InputSource>& sources, const QString& options);
     void addSource();
+    // The Num Lock switch as the compositor has it, after the key was pressed too.
+    void showNumLock();
 
     std::vector<InputSource> m_known; // every layout there is
     std::vector<InputSource> m_sources; // those in use, the first the default
     QString m_model;
     QString m_options;
     QWidget* m_content = nullptr;
+    Settings& m_settings;
+    QFileSystemWatcher* m_numLockWatch = nullptr; // on the folder where the compositor keeps it
+    Switch* m_numLock = nullptr;
 };
 
 } // namespace daedalus

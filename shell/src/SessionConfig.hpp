@@ -94,8 +94,17 @@ struct SessionConfig {
         bool operator==(const Power&) const = default;
     } power;
 
-    // Mice and touchpads, which the compositor sets up.
+    // Keyboards, mice and touchpads, which the compositor sets up.
     struct Input {
+        struct Keyboard {
+            // How Num Lock is at login: as it was left, or on or off whatever it was.
+            enum class NumLock { Last, On, Off };
+
+            NumLock numLock = NumLock::Last;
+
+            bool operator==(const Keyboard&) const = default;
+        };
+
         struct Pointer {
             int speed = 0; // -100 to 100, percent around the usual
             int scrollSpeed = 100; // percent of the usual distance
@@ -106,6 +115,7 @@ struct SessionConfig {
             bool operator==(const Pointer&) const = default;
         };
 
+        Keyboard keyboard;
         Pointer mouse;
         Pointer touchpad {.naturalScroll = true};
 
@@ -119,6 +129,13 @@ QString sessionConfigPath();
 // Problems are reported on stderr; what is missing or wrong keeps its default.
 SessionConfig loadSessionConfig(const QString& path = sessionConfigPath());
 bool saveSessionConfig(const SessionConfig& config, const QString& path = sessionConfigPath());
+
+// Where the compositor keeps whether Num Lock is on, ~/.local/state/tde/numlock; it follows
+// the file as it is written, so writing it turns Num Lock on or off on keyboards without the key.
+QString numLockStatePath();
+// Whether Num Lock is on, as the file says; off when it says nothing.
+bool loadNumLockState(const QString& path = numLockStatePath());
+bool saveNumLockState(bool on, const QString& path = numLockStatePath());
 
 // The background's picture, the way up the camera meant it, at `scale` of its size when that
 // is below 1; null when it cannot be read, with the reason in `error`.

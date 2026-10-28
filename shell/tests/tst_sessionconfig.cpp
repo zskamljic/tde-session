@@ -29,6 +29,7 @@ private slots:
         config.windows.corner = shell::SessionConfig::Windows::Corner::Desktop;
         config.power = {.blank = 0, .suspend = 45, .suspendOnBattery = 10};
         config.animations = {.overview = 0, .flip = 600, .flipStep = 90, .windows = 120};
+        config.input.keyboard.numLock = shell::SessionConfig::Input::Keyboard::NumLock::On;
         config.input.mouse = {.speed = -40, .scrollSpeed = 50, .naturalScroll = true};
         config.input.touchpad = {.speed = 25, .scrollSpeed = 150, .tapToClick = false, .disableWhileTyping = false};
         config.displays.primary = u"Dell U2720Q ABC123"_s;
@@ -54,6 +55,17 @@ private slots:
         file.write("return { background = { mode = \"sideways\", color = \"blue-ish\" }, switcher = 3 }\n");
         file.close();
         QCOMPARE(shell::loadSessionConfig(path), shell::SessionConfig());
+    }
+
+    void numLockStateIsKept()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"state/tde/numlock"_s);
+        QVERIFY(!shell::loadNumLockState(path));
+        QVERIFY(shell::saveNumLockState(true, path));
+        QVERIFY(shell::loadNumLockState(path));
+        QVERIFY(shell::saveNumLockState(false, path));
+        QVERIFY(!shell::loadNumLockState(path));
     }
 
     void hotCornerTurnedOffBeforeStaysOff()

@@ -8,12 +8,16 @@
 #include <QDBusMessage>
 #include <QDBusReply>
 #include <QDBusVariant>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -45,6 +49,15 @@ const std::pair<const char*, const char*> ComposeKeys[] = {
     {"compose:caps", "Caps Lock"},
     {"compose:prsc", "Print Screen"},
     {"compose:sclk", "Scroll Lock"},
+};
+
+using NumLock = shell::SessionConfig::Input::Keyboard::NumLock;
+
+// How Num Lock may be at login.
+const std::pair<NumLock, const char*> NumLockStarts[] = {
+    {NumLock::Last, "As it was left"},
+    {NumLock::On, "On"},
+    {NumLock::Off, "Off"},
 };
 
 QString localeProperty(const QString& name)
@@ -133,8 +146,9 @@ QString withOption(const QString& options, const QString& group, const QString& 
     return kept.join(u',');
 }
 
-KeyboardPage::KeyboardPage(QWidget* parent)
+KeyboardPage::KeyboardPage(Settings& settings, QWidget* parent)
     : Page(parent)
+    , m_settings(settings)
 {
     QFile list(u"/usr/share/X11/xkb/rules/evdev.lst"_s);
     if (list.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -145,7 +159,21 @@ KeyboardPage::KeyboardPage(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(24);
     addWidget(m_content);
+
+    // The compositor writes it anew whenever Num Lock is pressed; the folder shows that.
+    const QString state = QFileInfo(shell::numLockStatePath()).absolutePath();
+    QDir().mkpath(state);
+    m_numLockWatch = new QFileSystemWatcher({state}, this);
+    connect(m_numLockWatch, &QFileSystemWatcher::directoryChanged, this, &KeyboardPage::showNumLock);
     load();
+}
+
+void KeyboardPage::showNumLock()
+{
+    if (!m_numLock)
+        return;
+    const QSignalBlocker quiet(m_numLock);
+    m_numLock->setChecked(shell::loadNumLockState());
 }
 
 void KeyboardPage::load()
@@ -236,6 +264,26 @@ void KeyboardPage::sync()
         u"Compose key"_s, u"Followed by others, types what is not on the keyboard: ' then e for é"_s, compose);
     special->addNote(u"Right Alt is the AltGr key of many layouts, which then types only what Compose does."_s);
     layout->addWidget(special);
+
+    auto* numLock = new Group(u"Num Lock"_s, m_content);
+    m_numLock = new Switch(numLock);
+    m_numLock->setChecked(shell::loadNumLockState());
+    connect(m_numLock, &Switch::toggled, this, [](bool on) {
+        if (!shell::saveNumLockState(on))
+            qWarning("tde-daedalus: Num Lock could not be turned %s", on ? "on" : "off");
+    });
+    numLock->addRow(u"Num Lock"_s, u"The keys of the number pad type digits, rather than move about"_s, m_numLock);
+    auto* start = new QComboBox(numLock);
+    for (const auto& [value, label] : NumLockStarts)
+        start->addItem(QString::fromUtf8(label), int(value));
+    start->setCurrentIndex(start->findData(int(m_settings.config.input.keyboard.numLock)));
+    connect(start, &QComboBox::activated, this, [this, start] {
+        m_settings.config.input.keyboard.numLock = NumLock(start->currentData().toInt());
+        m_settings.save();
+    });
+    numLock->addRow(u"At login"_s, u"How Num Lock is when the session starts"_s, start);
+    numLock->addNote(u"For keyboards without a Num Lock key, it is turned on and off here."_s);
+    layout->addWidget(numLock);
 }
 
 void KeyboardPage::save(const std::vector<InputSource>& sources, const QString& options)

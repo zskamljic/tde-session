@@ -91,6 +91,25 @@ void setSystemKeymap(wlr_keyboard* keyboard)
     wlr_keyboard_set_keymap(keyboard, keymap.get());
 }
 
+// The bit of Num Lock among the modifiers of the keyboard's keymap; 0 when it has none.
+uint32_t numLockMask(const wlr_keyboard* keyboard)
+{
+    if (!keyboard->keymap)
+        return 0;
+    const xkb_mod_index_t index = xkb_keymap_mod_get_index(keyboard->keymap, XKB_MOD_NAME_NUM);
+    return index == XKB_MOD_INVALID ? 0 : 1u << index;
+}
+
+// Turns Num Lock on or off on the keyboard, and its light with it.
+void setNumLock(wlr_keyboard* keyboard, bool on)
+{
+    const uint32_t mask = numLockMask(keyboard);
+    const wlr_keyboard_modifiers& now = keyboard->modifiers;
+    const uint32_t locked = on ? now.locked | mask : now.locked & ~mask;
+    if (mask && locked != now.locked)
+        wlr_keyboard_notify_modifiers(keyboard, now.depressed, now.latched, locked, now.group);
+}
+
 bool isSuper(xkb_keysym_t sym)
 {
     return sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R;
@@ -140,7 +159,7 @@ Keyboard::Keyboard(Server& server, wlr_keyboard* keyboard, bool virtualKeyboard)
         wlr_seat_keyboard_notify_key(m_server.seat, event->time_msec, event->keycode, event->state);
     });
     m_modifiers.connect(keyboard->events.modifiers, [this] {
-        m_server.modifiersChanged(*this->keyboard);
+        m_server.modifiersChanged(*this);
         wlr_seat_set_keyboard(m_server.seat, this->keyboard);
         wlr_seat_keyboard_notify_modifiers(m_server.seat, &this->keyboard->modifiers);
     });
@@ -262,7 +281,7 @@ void Server::newKeyboard(wlr_keyboard* keyboard, bool virtualKeyboard)
 {
     // Virtual keyboards bring the keymap of the program behind them.
     if (!virtualKeyboard)
-        setSystemKeymap(keyboard);
+        giveSystemKeymap(keyboard);
     wlr_keyboard_set_repeat_info(keyboard, 25, 600);
     m_keyboards.push_back(std::make_unique<Keyboard>(*this, keyboard, virtualKeyboard));
     wlr_seat_set_keyboard(seat, keyboard);
@@ -290,7 +309,25 @@ void Server::keyboardLayoutChanged()
     inotify_add_watch(m_keyboardWatch.get(), "/etc/X11/xorg.conf.d", WatchedChanges);
     for (const auto& keyboard : m_keyboards) {
         if (!keyboard->virtualKeyboard)
-            setSystemKeymap(keyboard->keyboard);
+            giveSystemKeymap(keyboard->keyboard);
+    }
+}
+
+void Server::giveSystemKeymap(wlr_keyboard* keyboard)
+{
+    // A new keymap starts with nothing locked; Num Lock is put back rather than followed.
+    m_replacingKeymap = true;
+    setSystemKeymap(keyboard);
+    m_replacingKeymap = false;
+    setNumLock(keyboard, m_numLock);
+}
+
+void Server::turnNumLock(bool on)
+{
+    m_numLock = on;
+    for (const auto& keyboard : m_keyboards) {
+        if (!keyboard->virtualKeyboard)
+            setNumLock(keyboard->keyboard, on);
     }
 }
 
@@ -324,6 +361,21 @@ void Server::watchSettings()
     if (m_settingsWatch)
         m_settingsWatchSource = addReader<&Server::applySettings>(eventLoop, m_settingsWatch.get(), this);
     applySettings();
+
+    // Num Lock at login, as the settings say or as it was left; kept for Settings to show.
+    const std::string state = numLockStatePath();
+    switch (m_settings.numLock) {
+    case NumLock::Last:
+        turnNumLock(loadNumLockState(state));
+        break;
+    case NumLock::On:
+        turnNumLock(true);
+        break;
+    case NumLock::Off:
+        turnNumLock(false);
+        break;
+    }
+    saveNumLockState(state, m_numLock);
 }
 
 void Server::applySettings()
@@ -332,7 +384,7 @@ void Server::applySettings()
     // replacing the file, so the folder is watched rather than the file.
     if (m_settingsWatch) {
         drain(m_settingsWatch.get());
-        for (std::string folder : {settingsPath(), desktopSettingsPath()}) {
+        for (std::string folder : {settingsPath(), desktopSettingsPath(), numLockStatePath()}) {
             while (!folder.empty()) {
                 folder.erase(folder.rfind('/'));
                 if (inotify_add_watch(m_settingsWatch.get(), folder.empty() ? "/" : folder.c_str(), WatchedChanges)
@@ -341,6 +393,10 @@ void Server::applySettings()
             }
         }
     }
+
+    // Num Lock as Settings turns it, for keyboards without the key.
+    if (const bool numLock = loadNumLockState(numLockStatePath()); numLock != m_numLock)
+        turnNumLock(numLock);
 
     // The title bars drawn here and the pointer, as TDE's programs have them.
     if (DesktopSettings changed = loadDesktopSettings(desktopSettingsPath()); changed != desktop) {
@@ -525,14 +581,23 @@ void Server::repeatMediaKey()
     wl_event_source_timer_update(m_mediaRepeat.get(), m_mediaRepeatInterval);
 }
 
-void Server::modifiersChanged(wlr_keyboard& keyboard)
+void Server::modifiersChanged(Keyboard& keyboard)
 {
     // The modifier holding a window switcher open was let go: it switches. It is told from
     // here, as the key may have gone up before the switcher had the keyboard, or come as a
     // change of the modifiers alone.
-    if (m_pickingWith != 0 && !(wlr_keyboard_get_modifiers(&keyboard) & m_pickingWith)) {
+    if (m_pickingWith != 0 && !(wlr_keyboard_get_modifiers(keyboard.keyboard) & m_pickingWith)) {
         callPicker(m_pickingWith, "Release", "true");
         m_pickingWith = 0;
+    }
+
+    // Num Lock pressed on one keyboard goes for all of them, and is kept for the next login.
+    const uint32_t numLock = numLockMask(keyboard.keyboard);
+    if (keyboard.virtualKeyboard || m_replacingKeymap || !numLock)
+        return;
+    if (const bool on = keyboard.keyboard->modifiers.locked & numLock; on != m_numLock) {
+        turnNumLock(on);
+        saveNumLockState(numLockStatePath(), on);
     }
 }
 

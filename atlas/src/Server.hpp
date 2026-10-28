@@ -182,6 +182,10 @@ private:
     // Follows the system's keyboard layout as localectl changes it, on the keyboards there are.
     void watchKeyboardLayout();
     void keyboardLayoutChanged();
+    // The system's keymap for a keyboard of the machine, with Num Lock as it is on the others.
+    void giveSystemKeymap(wlr_keyboard* keyboard);
+    // Num Lock on or off on every keyboard of the machine.
+    void turnNumLock(bool on);
     // Follows the session's settings as Settings saves them.
     void watchSettings();
     void applySettings();
@@ -218,7 +222,7 @@ private:
 
 public: // called by Keyboard
     bool handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed);
-    void modifiersChanged(wlr_keyboard& keyboard);
+    void modifiersChanged(Keyboard& keyboard);
 
 private:
     bool runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode);
@@ -236,6 +240,8 @@ private:
     EventSource m_layoutIdle; // to see layout changes once they are all done
     FileDescriptor m_keyboardWatch; // inotify, on where the system keeps the keyboard layout
     EventSource m_keyboardWatchSource;
+    bool m_numLock = false; // on the keyboards of the machine
+    bool m_replacingKeymap = false; // what it does to the modifiers is not the user's doing
     Settings m_settings;
     FileDescriptor m_settingsWatch; // inotify, on the folders of the session's settings
     EventSource m_settingsWatchSource;

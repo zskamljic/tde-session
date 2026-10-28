@@ -19,9 +19,13 @@ struct PointerSettings {
 // What pushing the pointer into the top left corner, or clicking the bar's button there, does.
 enum class HotCorner { Overview, Desktop, Off };
 
+// How Num Lock is at login: as it was left, or on or off whatever it was.
+enum class NumLock { Last, On, Off };
+
 // What the compositor takes from the session's settings, ~/.config/tde/session/config.lua,
 // which Settings (Daedalus) writes.
 struct Settings {
+    NumLock numLock = NumLock::Last;
     PointerSettings mouse;
     PointerSettings touchpad {.naturalScroll = true};
     int windowAnimation = 200; // ms windows take to move into a tile
@@ -50,5 +54,11 @@ Settings loadSettings(const std::string& path);
 
 std::string desktopSettingsPath();
 DesktopSettings loadDesktopSettings(const std::string& path);
+
+// Whether Num Lock is on, kept in ~/.local/state/tde/numlock for the next login, and written
+// there by Settings to turn it on or off on keyboards without the key.
+std::string numLockStatePath();
+bool loadNumLockState(const std::string& path);
+void saveNumLockState(const std::string& path, bool on);
 
 } // namespace atlas
