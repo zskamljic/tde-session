@@ -191,7 +191,11 @@ Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* sc
             m_closing = false;
             hide();
             setLive(false);
+            return;
         }
+        // Open, the windows go on showing what they do; not while it moves, as copying them
+        // would take from the frames of the movement, which lag first when the computer is busy.
+        setLive(true);
     });
 }
 
@@ -254,8 +258,6 @@ void Overview::appear()
     show();
     m_search->setFocus();
     animateTo(1);
-    // The windows go on showing what they do.
-    setLive(true);
 }
 
 void Overview::setLive(bool live)
@@ -274,6 +276,7 @@ void Overview::closeOnto(quint64 chosen)
     m_closing = true;
     m_chosen = chosen;
     m_hovered = 0;
+    setLive(false);
     animateTo(0);
 }
 

@@ -183,7 +183,9 @@ for by the bar.
 
 Hermes and Argus run as the systemd user services `tde-hermes.service` and `tde-argus.service`,
 which `tde-session.target` starts; should either crash, systemd starts it again at once (a lock
-screen it started stays). Other programs started with the session are listed in
+screen it started stays). They run in `session.slice`, weighted ahead of applications for the
+processor, so the overview and the bar keep up while programs keep the computer busy; in the
+overview, the windows go on showing what they do once it is open, not while it opens. Other programs started with the session are listed in
 `/usr/share/tde/autostart`; a copy in `~/.config/tde/autostart` takes its place, and should no
 longer start the bar and the overview, as copies made before did. Programs that start at login
 the usual way, from `/etc/xdg/autostart` and `~/.config/autostart`, start too, as systemd

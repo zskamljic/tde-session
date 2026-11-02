@@ -6,6 +6,10 @@ PartOf=tde-session.target
 After=tde-session.target
 
 [Service]
+# With the desktop's own services rather than the applications, and ahead of them for the
+# processor: the overview and the bar stay quick while programs keep it busy.
+Slice=session.slice
+CPUWeight=1000
 ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/tde-hermes
 # Back at once should it crash; a lock screen it started stays meanwhile.
 Restart=on-failure
