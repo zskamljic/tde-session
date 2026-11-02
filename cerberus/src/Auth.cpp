@@ -1,13 +1,16 @@
 #include "Auth.hpp"
 
+#include <fcntl.h>
 #include <security/pam_appl.h>
-#include <sys/eventfd.h>
+#include <signal.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
-#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace cerberus {
 namespace {
@@ -58,53 +61,85 @@ int converse(int count, const pam_message** messages, pam_response** responses, 
     return PAM_SUCCESS;
 }
 
+// How many checks given up may still run; more would only pile up.
+constexpr std::size_t MaxAbandoned = 4;
+
 } // namespace
 
 Authenticator::Authenticator(std::string user)
     : m_user(std::move(user))
-    , m_event(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
 {
 }
 
 Authenticator::~Authenticator()
 {
-    if (m_thread.joinable())
-        m_thread.join();
-}
-
-void Authenticator::check(const Password& password)
-{
+    // Nothing waits for them any more.
     if (busy())
-        return;
-    m_password.clear();
-    m_password.append(std::string_view(password.data()));
-    m_thread = std::thread(&Authenticator::work, this);
+        m_abandoned.push_back(m_child);
+    for (const pid_t child : m_abandoned) {
+        kill(child, SIGKILL);
+        waitpid(child, nullptr, 0);
+    }
 }
 
-void Authenticator::work()
+bool Authenticator::check(const Password& password)
 {
-    // The service's file in /etc/pam.d says how passwords are checked here.
-    const pam_conv conversation {converse, const_cast<char*>(m_password.data())};
-    pam_handle_t* handle = nullptr;
-    bool accepted = false;
-    if (pam_start("tde-cerberus", m_user.c_str(), &conversation, &handle) == PAM_SUCCESS) {
-        accepted = pam_authenticate(handle, 0) == PAM_SUCCESS;
-        pam_end(handle, PAM_SUCCESS);
+    // Those given up and done are let go; while a few still run, no more are started.
+    std::erase_if(m_abandoned, [](pid_t child) { return waitpid(child, nullptr, WNOHANG) != 0; });
+    if (busy() || m_abandoned.size() >= MaxAbandoned)
+        return false;
+    int ends[2];
+    if (pipe2(ends, O_CLOEXEC) != 0)
+        return false;
+    const pid_t child = fork();
+    if (child < 0) {
+        close(ends[0]);
+        close(ends[1]);
+        return false;
     }
-    m_password.clear();
-    m_accepted = accepted;
-    const uint64_t one = 1;
-    [[maybe_unused]] const ssize_t written = write(m_event.get(), &one, sizeof(one));
+    if (child == 0) {
+        // The checking process: it says yes with a '1' and dies, taking its copy of the password
+        // with it. Anything else, its death included, is a no.
+        close(ends[0]);
+        // The service's file in /etc/pam.d says how passwords are checked here.
+        const pam_conv conversation {converse, const_cast<char*>(password.data())};
+        pam_handle_t* handle = nullptr;
+        bool accepted = false;
+        if (pam_start("tde-cerberus", m_user.c_str(), &conversation, &handle) == PAM_SUCCESS) {
+            accepted = pam_authenticate(handle, 0) == PAM_SUCCESS;
+            pam_end(handle, PAM_SUCCESS);
+        }
+        const char answer = accepted ? '1' : '0';
+        [[maybe_unused]] const ssize_t written = write(ends[1], &answer, 1);
+        _exit(0);
+    }
+    close(ends[1]);
+    m_answer = FileDescriptor(ends[0]);
+    m_child = child;
+    return true;
+}
+
+void Authenticator::cancel()
+{
+    if (!busy())
+        return;
+    m_answer.reset();
+    m_abandoned.push_back(m_child);
+    m_child = -1;
 }
 
 std::optional<bool> Authenticator::result()
 {
-    uint64_t count = 0;
-    if (read(m_event.get(), &count, sizeof(count)) != sizeof(count))
+    if (!busy())
         return std::nullopt;
-    if (m_thread.joinable())
-        m_thread.join();
-    return m_accepted.load();
+    char answer = '0';
+    const ssize_t length = read(m_answer.get(), &answer, 1);
+    if (length < 0 && (errno == EAGAIN || errno == EINTR))
+        return std::nullopt;
+    m_answer.reset();
+    waitpid(m_child, nullptr, 0);
+    m_child = -1;
+    return length == 1 && answer == '1';
 }
 
 } // namespace cerberus

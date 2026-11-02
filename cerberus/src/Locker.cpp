@@ -152,6 +152,7 @@ private:
     FileDescriptor m_clockTimer;
     FileDescriptor m_caretTimer;
     bool m_blinking = false;
+    bool m_pulsing = false; // the timer moves the dots of a check, not the caret
     int m_idle = 0; // seconds without a key while the password shows, until the curtain falls
 
     std::unique_ptr<Authenticator> m_auth;
@@ -448,9 +449,17 @@ void Locker::key(uint32_t key, bool pressed)
 
 void Locker::press(xkb_keysym_t sym, uint32_t key)
 {
-    // While the password is checked, it stays as it is.
-    if (m_auth->busy())
+    // While the password is checked, it stays as it is; Escape gives the check up, as one that
+    // waits long (on a fingerprint, say) may.
+    if (m_auth->busy()) {
+        if (sym == XKB_KEY_Escape) {
+            m_auth->cancel();
+            m_face.status = Face::Status::Ready;
+            updateCaret(true);
+            drawAll();
+        }
         return;
+    }
     if (m_face.status == Face::Status::Wrong)
         m_face.status = Face::Status::Ready;
     m_idle = 0;
@@ -464,11 +473,12 @@ void Locker::press(xkb_keysym_t sym, uint32_t key)
     switch (sym) {
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
-        if (!m_password.empty()) {
+        // Kept as typed when it cannot be checked yet, for Enter to try again.
+        if (!m_password.empty() && m_auth->check(m_password)) {
             m_face.status = Face::Status::Checking;
-            m_auth->check(m_password);
             m_password.clear();
             stopRepeat();
+            m_face.pulse = 0;
         }
         break;
     case XKB_KEY_BackSpace:
@@ -523,16 +533,19 @@ void Locker::setFocused(bool focused)
 
 void Locker::updateCaret(bool restart)
 {
-    const bool wanted = !m_face.curtain && m_face.focused;
+    // While the password is checked, the same timer moves the dots that say so, more quickly.
+    const bool checking = m_face.status == Face::Status::Checking;
+    const bool wanted = !m_face.curtain && (m_face.focused || checking);
     if (restart)
         m_face.caret = true;
-    if (wanted == m_blinking && !restart)
+    if (wanted == m_blinking && checking == m_pulsing && !restart)
         return;
     m_blinking = wanted;
+    m_pulsing = checking;
     itimerspec timer {};
     if (wanted) {
-        timer.it_value.tv_nsec = 530'000'000L;
-        timer.it_interval.tv_nsec = 530'000'000L;
+        timer.it_value.tv_nsec = checking ? 200'000'000L : 530'000'000L;
+        timer.it_interval.tv_nsec = timer.it_value.tv_nsec;
     }
     timerfd_settime(m_caretTimer.get(), 0, &timer, nullptr);
 }
@@ -613,6 +626,7 @@ void Locker::authenticated(bool accepted)
         return;
     }
     m_face.status = Face::Status::Wrong;
+    updateCaret(true);
     drawAll();
 }
 
@@ -698,7 +712,10 @@ int Locker::run()
             tickClock();
         if ((fds[5].revents & POLLIN) && read(m_caretTimer.get(), &expirations, sizeof(expirations)) > 0
             && m_blinking) {
-            m_face.caret = !m_face.caret;
+            if (m_pulsing)
+                ++m_face.pulse;
+            else
+                m_face.caret = !m_face.caret;
             drawAll();
         }
         if (fds[1].revents & POLLIN) {

@@ -130,11 +130,17 @@ void draw(cairo_t* cr, int width, int height, const Face& face, bool main)
     const double total = dots > 0 ? dots * 2 * Dot + (dots - 1) * Gap : 0;
     const double middle = y + FieldHeight / 2;
     double caretX = centreX;
-    if (dots == 0) {
+    if (dots == 0 && face.status == Face::Status::Checking) {
+        // Three dots in the middle, lit in turn, while the password is checked.
+        for (int i = 0; i < 3; ++i) {
+            setColor(cr, face.pulse % 3 == unsigned(i) ? Text : DimText);
+            cairo_new_path(cr);
+            cairo_arc(cr, centreX + (i - 1) * (2 * Dot + Gap), middle, Dot, 0, 2 * M_PI);
+            cairo_fill(cr);
+        }
+    } else if (dots == 0) {
         setColor(cr, DimText);
-        const char* placeholder = !face.focused     ? "Click here to type the password"
-            : face.status == Face::Status::Checking ? ""
-                                                    : "Password";
+        const char* placeholder = face.focused ? "Password" : "Click here to type the password";
         PangoLayout* layout = pango_cairo_create_layout(cr);
         PangoFontDescription* description = pango_font_description_from_string("Sans 11");
         pango_layout_set_font_description(layout, description);

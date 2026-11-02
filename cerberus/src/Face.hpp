@@ -24,6 +24,7 @@ struct Face {
     bool curtain = true;
     bool focused = false; // the keyboard comes here, so the password can be typed
     bool caret = true; // shown at this blink
+    unsigned pulse = 0; // which of the dots of a check is lit
 };
 
 // Draws `face` on an output of `width` by `height`, in its logical size: all of it on the `main`
