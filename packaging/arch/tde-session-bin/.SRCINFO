@@ -32,6 +32,7 @@ pkgbase = tde-session-bin
 	depends = xdg-desktop-portal-wlr
 	optdepends = tde-ariadne: the file manager, which picks files for other programs too
 	optdepends = xorg-xwayland: X11 programs
+	optdepends = wayvnc: reaching the desktop from another computer or a phone
 	optdepends = networkmanager: networks and Wi-Fi in the bar and the settings
 	optdepends = bluez: Bluetooth in the bar and the settings
 	optdepends = upower: the battery, and suspending sooner on it

@@ -122,6 +122,14 @@ Escape gives up. Screenshots are saved in `~/Pictures/Screenshots` and copied to
 the notification that says so shows the file in the file manager. Windows are taken alone, with
 their rounded corners see-through.
 
+The desktop can be reached from another computer or a phone with
+[wayvnc](https://github.com/any1/wayvnc), a VNC server that shows the screens and takes the
+pointer and keys through what Atlas offers already. Run in the session, `wayvnc 127.0.0.1` serves
+this computer alone, to be reached through an SSH tunnel (`ssh -L 5900:localhost:5900 …`); to
+listen on the network, give it a password and a key first, as its manual says
+(`enable_auth=true`, `username`, `password` and `rsa_private_key_file` in
+`~/.config/wayvnc/config`), and run `wayvnc 0.0.0.0`.
+
 ## Building
 
 ```sh
