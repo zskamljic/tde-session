@@ -1,5 +1,8 @@
 #pragma once
 
+#include <SessionConfig.hpp>
+
+#include <QDBusContext>
 #include <QDateTime>
 #include <QImage>
 #include <QObject>
@@ -31,6 +34,11 @@ struct Notification {
     QString soundName; // of the sound theme, likewise
     bool suppressSound = false;
     QDateTime time;
+    // Who sent it: the application, by its desktop entry or the name it gives, and the program
+    // and process that sent it on the bus, when they are known.
+    QString appId;
+    QString program;
+    uint pid = 0;
     bool banner = true; // still shown below the bar, not yet only in the list
 
     bool hasDefaultAction() const;
@@ -40,6 +48,18 @@ struct Notification {
     // the theme; empty for none.
     QString sound() const;
 };
+
+// Something the sound server plays now: the process and program that play it, and the name
+// they give.
+struct Playing {
+    uint pid = 0;
+    QString program;
+    QString name;
+};
+
+// Whether the program that sent `notification` plays a sound already, in `playing`, as many do
+// for their own notifications: then the desktop's would only be a second one.
+bool soundsItself(const Notification& notification, const std::vector<Playing>& playing);
 
 // A notification's body as markup that is safe to show: of the tags the spec allows, bold,
 // italics, underlines, line breaks and links to web and mail addresses stay, everything
@@ -54,7 +74,7 @@ QImage imageFromHint(const QDBusArgument& argument);
 // The notification service of the desktop, org.freedesktop.Notifications: programs send
 // notifications here, which stay until they time out (when they move to the list behind the
 // clock), the user dismisses them, or the program closes them.
-class NotificationServer : public QObject {
+class NotificationServer : public QObject, protected QDBusContext {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.Notifications")
 
@@ -63,8 +83,9 @@ public:
 
     explicit NotificationServer(QObject* parent = nullptr);
 
-    // Takes the service's name on the session bus; false when another program has it.
-    bool start();
+    // Takes the service's name on the session bus; false when another program has it. The
+    // applications that send notifications are kept in `senders`, for the settings to list.
+    bool start(const QString& senders = shell::notificationSendersPath());
 
     // Newest first.
     const std::vector<Notification>& notifications() const { return m_notifications; }
@@ -81,6 +102,8 @@ public:
     // are critical.
     bool isQuiet() const { return m_quiet; }
     void setQuiet(bool quiet);
+    // Do not disturb, and which applications are not shown or make no sound.
+    void setSettings(const shell::SessionConfig::Notifications& settings);
 
 public slots:
     Q_SCRIPTABLE QStringList GetCapabilities() const;
@@ -104,10 +127,15 @@ signals:
 
 private:
     void close(uint id, Reason reason);
+    // Keeps the application that sent `notification` among the senders, if it is new.
+    void remember(const Notification& notification);
 
     std::vector<Notification> m_notifications;
     uint m_nextId = 1;
     bool m_quiet = false;
+    shell::SessionConfig::Notifications m_settings;
+    QString m_sendersPath; // none until started
+    std::vector<shell::NotificationSender> m_senders;
 };
 
 } // namespace hermes

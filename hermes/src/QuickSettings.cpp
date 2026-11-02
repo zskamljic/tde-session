@@ -6,6 +6,7 @@
 
 #include <Icons.hpp>
 #include <Layouts.hpp>
+#include <SessionConfig.hpp>
 #include <tde/DesktopConfig.hpp>
 #include <tde/Theme.hpp>
 
@@ -202,7 +203,14 @@ QuickSettings::QuickSettings(Audio& audio, Brightness& brightness, Network& netw
     connect(m_darkStyle, &QToolButton::clicked, this, [this](bool on) { emit darkStyleRequested(on); });
     m_quiet = toggle(u"Do Not Disturb"_s);
     m_quiet->setToolTip(u"Notifications go to the list behind the clock without a banner or a sound"_s);
-    connect(m_quiet, &QToolButton::clicked, this, [this](bool on) { m_notifications.setQuiet(on); });
+    connect(m_quiet, &QToolButton::clicked, this, [this](bool on) {
+        m_notifications.setQuiet(on);
+        // Kept for the next login, and for the settings to show.
+        shell::SessionConfig config = shell::loadSessionConfig();
+        config.notifications.quiet = on;
+        if (!shell::saveSessionConfig(config))
+            qWarning("tde-hermes: cannot save do not disturb");
+    });
     m_powerMode = toggle(QString());
     m_powerMode->setCheckable(false);
     m_powerMode->setToolTip(u"Power mode: a click switches to the next"_s);

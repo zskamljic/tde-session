@@ -1,5 +1,7 @@
 #include "Audio.hpp"
 
+#include "Notifications.hpp"
+
 #include <pulse/pulseaudio.h>
 
 #include <QMetaObject>
@@ -222,6 +224,49 @@ void Audio::surveyBluetooth()
                 step));
         },
         step));
+}
+
+void Audio::playing(std::function<void(std::vector<Playing>)> done)
+{
+    struct Step {
+        Audio* self;
+        std::function<void(std::vector<Playing>)> done;
+        std::vector<Playing> playing;
+    };
+    auto step = std::make_unique<Step>(Step {this, std::move(done), {}});
+    if (m_loop->context) {
+        Locked lock(m_loop->mainloop);
+        if (pa_context_get_state(m_loop->context) == PA_CONTEXT_READY) {
+            pa_operation* operation = pa_context_get_sink_input_info_list(
+                m_loop->context,
+                [](pa_context*, const pa_sink_input_info* input, int last, void* data) {
+                    auto* step = static_cast<Step*>(data);
+                    if (!last && input) {
+                        if (input->corked)
+                            return;
+                        const auto property = [&](const char* name) {
+                            const char* value = pa_proplist_gets(input->proplist, name);
+                            return value ? QString::fromUtf8(value) : QString();
+                        };
+                        step->playing.push_back({property(PA_PROP_APPLICATION_PROCESS_ID).toUInt(),
+                            property(PA_PROP_APPLICATION_PROCESS_BINARY), property(PA_PROP_APPLICATION_NAME)});
+                        return;
+                    }
+                    // All answered, or failed: told on the bar's thread.
+                    std::shared_ptr<Step> finished(step);
+                    QMetaObject::invokeMethod(
+                        finished->self, [finished] { finished->done(std::move(finished->playing)); },
+                        Qt::QueuedConnection);
+                },
+                step.get());
+            if (operation) {
+                step.release();
+                pa_operation_unref(operation);
+                return;
+            }
+        }
+    }
+    step->done({});
 }
 
 void Audio::keepQuality(const Survey& survey)

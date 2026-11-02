@@ -132,6 +132,8 @@ void SettingsWindow::buildPages()
     addPage(
         u"appearance"_s, u"preferences-desktop-wallpaper"_s, u"Appearance"_s, new BackgroundPage(m_settings, m_stack));
     addPage(u"displays"_s, u"preferences-desktop-display"_s, u"Displays"_s, new DisplaysPage(m_settings, m_stack));
+    addPage(u"notifications"_s, u"preferences-system-notifications"_s, u"Notifications"_s,
+        new NotificationsPage(m_settings, m_stack));
     addPage(u"sound"_s, u"audio-speakers"_s, u"Sound"_s, new SoundPage(m_stack));
     addPage(u"power"_s, u"battery-good"_s, u"Power"_s, new PowerPage(m_settings, m_stack));
     addPage(u"windows"_s, u"preferences-system-windows"_s, u"Windows"_s, new WindowsPage(m_settings, m_stack));

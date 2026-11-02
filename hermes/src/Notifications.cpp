@@ -2,6 +2,8 @@
 
 #include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrl>
@@ -54,6 +56,17 @@ QString Notification::sound() const
     if (!soundName.isEmpty())
         return soundName;
     return urgency == Urgency::Critical ? u"dialog-warning"_s : u"message-new-instant"_s;
+}
+
+bool soundsItself(const Notification& notification, const std::vector<Playing>& playing)
+{
+    const auto same
+        = [](const QString& a, const QString& b) { return !a.isEmpty() && a.compare(b, Qt::CaseInsensitive) == 0; };
+    return std::ranges::any_of(playing, [&](const Playing& stream) {
+        return (notification.pid && stream.pid == notification.pid) || same(notification.program, stream.program)
+            || same(notification.appName, stream.name) || same(notification.appId, stream.program)
+            || same(notification.appId, stream.name);
+    });
 }
 
 QString bodyMarkup(const QString& whole, qsizetype maxLength)
@@ -179,8 +192,10 @@ NotificationServer::NotificationServer(QObject* parent)
 {
 }
 
-bool NotificationServer::start()
+bool NotificationServer::start(const QString& senders)
 {
+    m_sendersPath = senders;
+    m_senders = shell::loadNotificationSenders(senders);
     auto bus = QDBusConnection::sessionBus();
     if (!bus.registerService(u"org.freedesktop.Notifications"_s))
         return false;
@@ -244,6 +259,30 @@ uint NotificationServer::Notify(const QString& appName, uint replacesId, const Q
         }
     }
 
+    // Known by its desktop entry, as the settings know it, else by its name or its program.
+    if (calledFromDBus()) {
+        notification.pid = connection().interface()->servicePid(message().service()).value();
+        if (notification.pid)
+            notification.program = QFileInfo(u"/proc/%1/exe"_s.arg(notification.pid)).symLinkTarget().section(u'/', -1);
+    }
+    notification.appId = notification.desktopEntry.endsWith(u".desktop") ? notification.desktopEntry.chopped(8)
+                                                                         : notification.desktopEntry;
+    if (notification.appId.isEmpty())
+        notification.appId = !appName.isEmpty() ? appName : notification.program;
+    remember(notification);
+    const auto app = m_settings.find(notification.appId);
+    if (!app.sound)
+        notification.suppressSound = true;
+    // Not shown at all: the program is answered as if it were, and hears no more of it.
+    if (!app.show && !notification.appId.isEmpty()) {
+        const uint id = replacesId ? replacesId : m_nextId++;
+        if (m_nextId == 0)
+            m_nextId = 1;
+        if (replacesId)
+            close(replacesId, Reason::Undefined);
+        return id;
+    }
+
     // Kept quiet: straight into the list, or gone at once when there is no point in keeping it.
     const bool quietly = m_quiet && notification.urgency != Notification::Urgency::Critical;
     if (quietly)
@@ -278,6 +317,22 @@ uint NotificationServer::Notify(const QString& appName, uint replacesId, const Q
     if (dropped)
         QTimer::singleShot(0, this, [this, id] { close(id, Reason::Expired); });
     return id;
+}
+
+void NotificationServer::setSettings(const shell::SessionConfig::Notifications& settings)
+{
+    m_settings = settings;
+    setQuiet(settings.quiet);
+}
+
+void NotificationServer::remember(const Notification& notification)
+{
+    if (m_sendersPath.isEmpty() || notification.appId.isEmpty()
+        || std::ranges::contains(m_senders, notification.appId, &shell::NotificationSender::id))
+        return;
+    m_senders.push_back({notification.appId, notification.appName});
+    if (!shell::saveNotificationSenders(m_senders, m_sendersPath))
+        qWarning("tde-hermes: cannot write %s", qPrintable(m_sendersPath));
 }
 
 void NotificationServer::setQuiet(bool quiet)

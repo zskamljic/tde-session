@@ -42,8 +42,32 @@ private slots:
                 .position = QPoint(2560, 0),
                 .transform = 1},
         });
+        config.notifications.quiet = true;
+        config.notifications.keep({.id = u"slack"_s, .sound = false});
+        config.notifications.keep({.id = u"Some \"App\""_s, .show = false});
         QVERIFY(shell::saveSessionConfig(config, path));
         QCOMPARE(shell::loadSessionConfig(path), config);
+    }
+
+    void notificationAppsAsByDefaultAreForgotten()
+    {
+        shell::SessionConfig::Notifications notifications;
+        notifications.keep({.id = u"slack"_s, .sound = false});
+        QCOMPARE(notifications.find(u"slack"_s).sound, false);
+        QCOMPARE(notifications.find(u"discord"_s), (shell::SessionConfig::Notifications::App {.id = u"discord"_s}));
+        notifications.keep({.id = u"slack"_s});
+        QVERIFY(notifications.apps.empty());
+    }
+
+    void notificationSendersAreKept()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"state/tde/notification-senders"_s);
+        QVERIFY(shell::loadNotificationSenders(path).empty());
+        const std::vector<shell::NotificationSender> senders {
+            {u"slack"_s, u"Slack"_s}, {u"notify-send"_s, u"notify-send"_s}, {u"Firefox"_s, u""_s}};
+        QVERIFY(shell::saveNotificationSenders(senders, path));
+        QCOMPARE(shell::loadNotificationSenders(path), senders);
     }
 
     void wrongValuesKeepDefaults()

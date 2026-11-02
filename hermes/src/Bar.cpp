@@ -56,6 +56,7 @@ namespace {
 
 constexpr int Height = 34;
 constexpr int Spacing = 6;
+constexpr int SoundDelay = 250; // ms after a notification arrives, to hear whether its program sounds
 
 // The look of the bar's buttons: flat, a rounded highlight under the pointer and while open.
 QString buttonStyle(const QString& extra)
@@ -160,6 +161,7 @@ Bar::Bar(QWidget* parent)
     const auto applySession = [this] {
         const shell::SessionConfig config = shell::loadSessionConfig();
         m_seconds = config.clock.seconds;
+        m_notifications.setSettings(config.notifications);
         m_locking->setClockSeconds(m_seconds);
         m_displays.setSettings(config.displays);
         m_powerSaving->setTimes(config.power.blank, config.power.suspend, config.power.suspendOnBattery);
@@ -200,8 +202,17 @@ Bar::Bar(QWidget* parent)
         qWarning("tde-hermes: another program shows the notifications already");
     }
     connect(&m_notifications, &NotificationServer::arrived, this, [this](uint id) {
-        if (const Notification* notification = m_notifications.find(id); notification && notification->banner)
-            m_sounds.play(*notification);
+        const Notification* notification = m_notifications.find(id);
+        if (!notification || !notification->banner || notification->sound().isEmpty())
+            return;
+        // Programs that play a sound of their own start it about when they send the notification;
+        // a moment later, the desktop's plays only when theirs does not.
+        QTimer::singleShot(SoundDelay, this, [this, sent = *notification] {
+            m_audio.playing([this, sent](const std::vector<Playing>& playing) {
+                if (!soundsItself(sent, playing))
+                    m_sounds.play(sent);
+            });
+        });
     });
     connect(&m_notifications, &NotificationServer::changed, this, &Bar::updateClock);
     checkDesktopConfig();

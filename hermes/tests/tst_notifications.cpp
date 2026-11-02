@@ -128,6 +128,40 @@ private slots:
         QCOMPARE(arrived.count(), 1);
     }
 
+    void programsSoundingThemselves()
+    {
+        Notification slack;
+        slack.appName = u"Slack"_s;
+        slack.appId = u"slack"_s;
+        slack.program = u"slack"_s;
+        slack.pid = 40;
+        QVERIFY(!soundsItself(slack, {}));
+        QVERIFY(soundsItself(slack, {{.pid = 40, .program = {}, .name = {}}}));
+        QVERIFY(soundsItself(slack, {{.pid = 41, .program = u"slack"_s, .name = {}}}));
+        QVERIFY(soundsItself(slack, {{.pid = 41, .program = u"electron"_s, .name = u"Slack"_s}}));
+        QVERIFY(!soundsItself(slack, {{.pid = 7, .program = u"wine-preloader"_s, .name = u"World of Warcraft"_s}}));
+        // Nothing known of the sender matches nothing.
+        QVERIFY(!soundsItself(Notification {}, {{.pid = 0, .program = {}, .name = {}}}));
+    }
+
+    void hiddenAndSilencedApplications()
+    {
+        NotificationServer server;
+        shell::SessionConfig::Notifications settings;
+        settings.keep({.id = u"Quiet"_s, .sound = false});
+        settings.keep({.id = u"Hidden"_s, .show = false});
+        server.setSettings(settings);
+        const auto from = [&](const QString& app, const QVariantMap& hints = {}) {
+            return server.Notify(app, 0, {}, u"s"_s, {}, {}, hints, -1);
+        };
+        QCOMPARE(server.find(from(u"Loud"_s))->sound(), u"message-new-instant"_s);
+        QCOMPARE(server.find(from(u"Quiet"_s))->sound(), QString());
+        QVERIFY(server.find(from(u"Hidden"_s)) == nullptr);
+        // Known by the desktop entry first.
+        QVERIFY(server.find(from(u"Some Name"_s, {{u"desktop-entry"_s, u"Hidden.desktop"_s}})) == nullptr);
+        QCOMPARE(server.notifications().size(), 2u);
+    }
+
     void markup_data()
     {
         QTest::addColumn<QString>("body");

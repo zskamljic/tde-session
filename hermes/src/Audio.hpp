@@ -6,8 +6,12 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 struct pa_context;
+namespace hermes {
+struct Playing;
+}
 struct pa_threaded_mainloop;
 
 namespace hermes {
@@ -34,6 +38,9 @@ public:
     // Mutes the default input, or lets it be heard again; `done` is told which, on the bar's
     // thread, once it is done.
     void toggleMicrophone(std::function<void(bool muted)> done);
+    // What plays now, and is not paused; `done` gets it on the bar's thread, nothing when there
+    // is no sound server.
+    void playing(std::function<void(std::vector<Playing>)> done);
 
 signals:
     void changed();

@@ -78,6 +78,19 @@ void SessionConfig::Displays::keep(Layout layout)
     layouts.push_back(std::move(layout));
 }
 
+SessionConfig::Notifications::App SessionConfig::Notifications::find(const QString& id) const
+{
+    const auto it = std::ranges::find(apps, id, &App::id);
+    return it == apps.end() ? App {.id = id} : *it;
+}
+
+void SessionConfig::Notifications::keep(const App& app)
+{
+    std::erase_if(apps, [&](const App& other) { return other.id == app.id; });
+    if (app != App {.id = app.id})
+        apps.push_back(app);
+}
+
 QString sessionConfigPath()
 {
     return tde::configDirectory() + u"/session/config.lua"_s;
@@ -180,6 +193,24 @@ SessionConfig loadSessionConfig(const QString& path)
             reader.table("mouse", [&] { readPointer(config.input.mouse); });
             reader.table("touchpad", [&] { readPointer(config.input.touchpad); });
         });
+        reader.table("notifications", [&] {
+            auto& notifications = config.notifications;
+            if (const auto quiet = reader.boolean("quiet"))
+                notifications.quiet = *quiet;
+            reader.table("apps", [&] {
+                reader.forEachArrayTable([&](int) {
+                    SessionConfig::Notifications::App app;
+                    if (const auto id = reader.string("id"))
+                        app.id = *id;
+                    if (const auto show = reader.boolean("show"))
+                        app.show = *show;
+                    if (const auto sound = reader.boolean("sound"))
+                        app.sound = *sound;
+                    if (!app.id.isEmpty())
+                        notifications.keep(app);
+                });
+            });
+        });
         reader.table("power", [&] {
             constexpr int MaxMinutes = 24 * 60;
             if (const auto blank = reader.integer("blank", 0, MaxMinutes))
@@ -245,6 +276,22 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"        layouts = {"_s,
     };
     lines << layouts;
+    QStringList apps;
+    for (const auto& app : config.notifications.apps)
+        apps << u"            { id = %1, show = %2, sound = %3 },"_s.arg(
+            tde::luaString(app.id), boolText(app.show), boolText(app.sound));
+    lines << QStringList {
+        u"        },"_s,
+        u"    },"_s,
+        u"    notifications = {"_s,
+        u"        -- Do not disturb: no banners and no sounds, but for critical notifications; they"_s,
+        u"        -- still go to the list behind the clock."_s,
+        u"        quiet = %1,"_s.arg(boolText(config.notifications.quiet)),
+        u"        -- Applications whose notifications are not shown, or make no sound, by their"_s,
+        u"        -- desktop entry or the name they send."_s,
+        u"        apps = {"_s,
+    };
+    lines << apps;
     lines << QStringList {
         u"        },"_s,
         u"    },"_s,
@@ -304,6 +351,39 @@ bool saveNumLockState(bool on, const QString& path)
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
         return false;
     file.write(on ? "on\n" : "off\n");
+    return file.commit();
+}
+
+QString notificationSendersPath()
+{
+    const QString state = qEnvironmentVariable("XDG_STATE_HOME");
+    return (state.isEmpty() ? QDir::homePath() + u"/.local/state"_s : state) + u"/tde/notification-senders"_s;
+}
+
+std::vector<NotificationSender> loadNotificationSenders(const QString& path)
+{
+    std::vector<NotificationSender> senders;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return senders;
+    for (const QString& line : QString::fromUtf8(file.readAll()).split(u'\n', Qt::SkipEmptyParts)) {
+        const QString id = line.section(u'\t', 0, 0);
+        if (!id.isEmpty() && !std::ranges::contains(senders, id, &NotificationSender::id))
+            senders.push_back({id, line.section(u'\t', 1)});
+    }
+    return senders;
+}
+
+bool saveNotificationSenders(const std::vector<NotificationSender>& senders, const QString& path)
+{
+    QStringList lines;
+    for (const NotificationSender& sender : senders)
+        lines << QString(sender.id).remove(u'\t').remove(u'\n') + u'\t' + QString(sender.name).remove(u'\n');
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    file.write((lines.join(u'\n') + u'\n').toUtf8());
     return file.commit();
 }
 

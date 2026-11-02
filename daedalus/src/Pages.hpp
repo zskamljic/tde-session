@@ -34,4 +34,11 @@ public:
     explicit DateTimePage(Settings& settings, QWidget* parent = nullptr);
 };
 
+// Do not disturb, and for each application that sent notifications, whether they show and
+// make a sound.
+class NotificationsPage : public Page {
+public:
+    explicit NotificationsPage(Settings& settings, QWidget* parent = nullptr);
+};
+
 } // namespace daedalus

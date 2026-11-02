@@ -122,8 +122,45 @@ struct SessionConfig {
         bool operator==(const Input&) const = default;
     } input;
 
+    // Notifications: whether they show at all while one is busy, and, for each application
+    // that sends them, whether they show and sound.
+    struct Notifications {
+        struct App {
+            QString id; // its desktop entry without ".desktop", or the name it sends
+            bool show = true; // shown at all; off, they are let go of as they come
+            bool sound = true;
+
+            bool operator==(const App&) const = default;
+        };
+
+        bool quiet = false; // do not disturb: no banners and no sounds, but for critical ones
+        std::vector<App> apps; // only those set otherwise than shown with sound
+
+        // How notifications of the application `id` are, as set or as by default.
+        App find(const QString& id) const;
+        // Keeps `app`, or forgets it when it is as by default.
+        void keep(const App& app);
+
+        bool operator==(const Notifications&) const = default;
+    } notifications;
+
     bool operator==(const SessionConfig&) const = default;
 };
+
+// An application that sent notifications, for the settings to list.
+struct NotificationSender {
+    QString id; // as SessionConfig::Notifications::App has it
+    QString name; // the name it sends
+
+    bool operator==(const NotificationSender&) const = default;
+};
+
+// Where the bar keeps the applications that sent notifications,
+// ~/.local/state/tde/notification-senders, a line each, the id and the name split by a tab.
+QString notificationSendersPath();
+std::vector<NotificationSender> loadNotificationSenders(const QString& path = notificationSendersPath());
+bool saveNotificationSenders(
+    const std::vector<NotificationSender>& senders, const QString& path = notificationSendersPath());
 
 QString sessionConfigPath();
 // Problems are reported on stderr; what is missing or wrong keeps its default.

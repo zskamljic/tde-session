@@ -33,13 +33,16 @@ brightness keys show their level near the bottom of the screen for a moment. Blu
 headphones left in their headset mode after a call go back to music quality once nothing
 records from their microphone.
 
-Notifications show in the top right corner, below the bar, for five seconds, or until they
-are dealt with when urgent; the pointer over one keeps it. They sound as they arrive, from the
-freedesktop sound theme. A click on one opens what it is about and brings its program's window
-forward, and its buttons do what they say. Those that time out wait behind the clock, which shows
-a dot meanwhile, until they are dismissed. With do not disturb, only urgent ones show and sound;
-the rest go straight behind the clock. Behind the clock are the calendar too and, while a
-program plays music or video, its controls, which the media keys work as well.
+Notifications show in the top right corner, below the bar, for five seconds, or until they are
+dealt with when urgent; the pointer over one keeps it. They sound as they arrive, from the
+freedesktop sound theme, unless their program plays a sound of its own along with them, as Slack
+does. A click on one opens what it is about and brings its program's window forward, and its
+buttons do what they say. Those that time out wait behind the clock, which shows a dot meanwhile,
+until they are dismissed. With do not disturb, which stays on across logins, only urgent ones show
+and sound; the rest go straight behind the clock. Settings lists the applications that sent
+notifications, each to be shown with sound, shown silently or not shown at all. Behind the clock
+are the calendar too and, while a program plays music or video, its controls, which the media keys
+work as well.
 
 The lock screen shows the clock until a key is pressed or the screen clicked; then the password
 field, ringed in the accent colour with a blinking caret while it takes keys, and the key pressed

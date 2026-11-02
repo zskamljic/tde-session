@@ -1,5 +1,6 @@
 #include "Pages.hpp"
 
+#include <Applications.hpp>
 #include <DesktopSettings.hpp>
 
 #include <tde/DesktopConfig.hpp>
@@ -8,6 +9,8 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QSpinBox>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -119,6 +122,52 @@ DateTimePage::DateTimePage(Settings& settings, QWidget* parent)
     });
     Group* clock = addGroup(u"Clock"_s);
     clock->addRow(u"Seconds"_s, u"In the clock of the bar and of the lock screen"_s, seconds);
+}
+
+NotificationsPage::NotificationsPage(Settings& settings, QWidget* parent)
+    : Page(parent)
+{
+    auto* quiet = new Switch(this);
+    quiet->setChecked(settings.config.notifications.quiet);
+    connect(quiet, &Switch::toggled, this, [&settings](bool on) {
+        settings.config.notifications.quiet = on;
+        settings.save();
+    });
+    Group* general = addGroup(u"Notifications"_s);
+    general->addRow(u"Do Not Disturb"_s,
+        u"Only critical notifications show; the rest go to the list behind the clock, silently"_s, quiet);
+
+    // Those that sent some, and those set otherwise before, by the names their desktop entries
+    // give them where there are such.
+    std::vector<shell::NotificationSender> senders = shell::loadNotificationSenders();
+    for (const auto& app : settings.config.notifications.apps) {
+        if (!std::ranges::contains(senders, app.id, &shell::NotificationSender::id))
+            senders.push_back({app.id, app.id});
+    }
+    const auto apps = shell::loadApplications(qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(u':'));
+    const auto nameOf = [&](const shell::NotificationSender& sender) {
+        if (const shell::Application* app = shell::findApplication(apps, sender.id))
+            return app->name;
+        return sender.name.isEmpty() ? sender.id : sender.name;
+    };
+    std::ranges::sort(
+        senders, [&](const auto& a, const auto& b) { return QString::localeAwareCompare(nameOf(a), nameOf(b)) < 0; });
+
+    Group* group = addGroup(u"Applications"_s);
+    for (const shell::NotificationSender& sender : senders) {
+        auto* choice = new QComboBox(this);
+        choice->addItems({u"Shown, with sound"_s, u"Shown, silently"_s, u"Not shown"_s});
+        const auto app = settings.config.notifications.find(sender.id);
+        choice->setCurrentIndex(!app.show ? 2 : !app.sound ? 1 : 0);
+        connect(choice, &QComboBox::currentIndexChanged, this, [&settings, id = sender.id](int index) {
+            settings.config.notifications.keep({.id = id, .show = index != 2, .sound = index == 0});
+            settings.save();
+        });
+        group->addRow(nameOf(sender), {}, choice);
+    }
+    if (senders.empty())
+        group->addRow(u"No notifications yet"_s, u"Applications show up here once they send one"_s);
+    group->addNote(u"Programs that play a sound of their own with a notification are not given a second one."_s);
 }
 
 } // namespace daedalus
