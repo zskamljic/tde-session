@@ -538,6 +538,7 @@ void XdgView::commit()
     if (mapped) {
         sizeCommitted();
         damaged();
+        server.viewCommitted(*this);
     }
     // Pictures show the window without its shadow.
     wlr_scene_subsurface_tree_set_clip(&m_captureContent->node, &toplevel->base->geometry);
@@ -608,7 +609,21 @@ void XdgView::close()
 
 void XdgView::requestSize(int width, int height)
 {
-    wlr_xdg_toplevel_set_size(toplevel, width, height);
+    m_sizeSerial = wlr_xdg_toplevel_set_size(toplevel, width, height);
+    m_sizeAsked = monotonicMs();
+}
+
+bool XdgView::sizePending() const
+{
+    // A window that does not answer is not waited for long.
+    constexpr uint64_t Patience = 100; // ms
+    const uint32_t taken = toplevel->base->current.configure_serial;
+    return m_sizeSerial != 0 && int32_t(taken - m_sizeSerial) < 0 && monotonicMs() - m_sizeAsked < Patience;
+}
+
+void XdgView::setResizing(bool resizing)
+{
+    wlr_xdg_toplevel_set_resizing(toplevel, resizing);
 }
 
 void XdgView::sendActivated(bool activated)

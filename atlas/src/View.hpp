@@ -40,6 +40,11 @@ public:
     void moveTo(int x, int y);
     // Asks the window to take this geometry; it moves at once and resizes when it can.
     void setGeometry(const wlr_box& box);
+    // A size asked for that the window has not taken up yet; another asked meanwhile would only
+    // make it fall further behind, drawing stretched pictures of the sizes it passed.
+    virtual bool sizePending() const { return false; }
+    // Being resized by the user, which the window may draw differently.
+    virtual void setResizing(bool) { }
     // As setGeometry(), with a picture of the window going from where it was to there
     // meanwhile, until the window drew itself in its new size.
     void animateTo(const wlr_box& box);
@@ -162,6 +167,9 @@ public:
 
     wlr_xdg_toplevel* toplevel;
 
+    bool sizePending() const override;
+    void setResizing(bool resizing) override;
+
 protected:
     wlr_box size() const override { return toplevel->base->geometry; }
     void requestSize(int width, int height) override;
@@ -174,6 +182,8 @@ private:
     void applyDecorationMode();
 
     wlr_xdg_toplevel_decoration_v1* m_decorationObject = nullptr;
+    uint32_t m_sizeSerial = 0; // of the configure that asked for the last size
+    uint64_t m_sizeAsked = 0; // ms, of the monotonic clock
     Listener m_decorationRequest;
     Listener m_decorationDestroy;
     Listener m_map;

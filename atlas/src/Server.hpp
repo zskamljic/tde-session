@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -91,6 +92,8 @@ public:
 
     void beginMove(View& view);
     void beginResize(View& view, uint32_t edges);
+    // The window drew something: a size held back while it was busy may go to it now.
+    void viewCommitted(View& view);
 
     // Puts a window on `output`, at the same place in it as where it is.
     void moveToOutput(View& view, wlr_output& output);
@@ -265,6 +268,7 @@ private:
     double m_grabY = 0;
     wlr_box m_grabBox {};
     uint32_t m_resizeEdges = 0;
+    std::optional<wlr_box> m_resizeWanted; // where the pointer took it while it was busy
     Tile m_snapTarget = Tile::None;
     wlr_scene_rect* m_snapPreview = nullptr;
     EventSource m_snapPreviewTimer; // while it grows into place

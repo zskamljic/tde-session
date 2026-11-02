@@ -1174,7 +1174,17 @@ void Server::beginResize(View& view, uint32_t edges)
     const double edgeY = geometry.y + ((edges & WLR_EDGE_BOTTOM) ? geometry.height : 0);
     m_grabX = cursor->x - edgeX;
     m_grabY = cursor->y - edgeY;
+    m_resizeWanted.reset();
+    view.setResizing(true);
     wlr_cursor_set_xcursor(cursor, xcursor, wlr_xcursor_get_resize_name(static_cast<wlr_edges>(edges)));
+}
+
+void Server::viewCommitted(View& view)
+{
+    if (&view != m_grabbed || m_cursorMode != CursorMode::Resize || !m_resizeWanted || view.sizePending())
+        return;
+    view.setGeometry(*m_resizeWanted);
+    m_resizeWanted.reset();
 }
 
 void Server::updateMove()
@@ -1219,13 +1229,28 @@ void Server::updateResize()
     else if (m_resizeEdges & WLR_EDGE_RIGHT)
         right = std::max(int(edgeX), left + minWidth);
 
-    m_grabbed->setGeometry({left, top, right - left, bottom - top});
+    // One size at a time, each once the window took up the last, as it would otherwise only
+    // fall behind, showing stretched pictures meanwhile.
+    const wlr_box wanted {left, top, right - left, bottom - top};
+    if (m_grabbed->sizePending()) {
+        m_resizeWanted = wanted;
+        return;
+    }
+    m_resizeWanted.reset();
+    m_grabbed->setGeometry(wanted);
 }
 
 void Server::finishGrab()
 {
     if (m_cursorMode == CursorMode::Move && m_grabbed && m_snapTarget != Tile::None)
         m_grabbed->setTile(m_snapTarget, true);
+    if (m_cursorMode == CursorMode::Resize && m_grabbed && m_grabbed->mapped) {
+        // Where it was let go, whether or not the window kept up.
+        if (m_resizeWanted)
+            m_grabbed->setGeometry(*m_resizeWanted);
+        m_grabbed->setResizing(false);
+    }
+    m_resizeWanted.reset();
     showSnapPreview(Tile::None, {});
     m_snapTarget = Tile::None;
     m_cursorMode = CursorMode::Passthrough;

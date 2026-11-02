@@ -102,7 +102,9 @@ which the window grows into; Super and a drag moves a window from anywhere in it
 pointer into the top left corner, or clicking the narrow button there at the start of the bar,
 opens the overview as Super does; it can show the desktop instead, as the button at the end of
 Windows 7's taskbar did, and doing it again before using another window brings the windows back.
-New windows open in the middle of the screen.
+New windows open in the middle of the screen. Resizing a window by its edges gives it one size at
+a time, each once it has drawn the last, so slow ones such as browsers do not stretch what they
+show meanwhile.
 In Argus, the windows go on showing what they do; a click on one switches to it, a middle click
 or the × on it (in the corner where the window buttons are) closes it, and with several displays, dragging it to another display's part of
 the overview moves it there.
