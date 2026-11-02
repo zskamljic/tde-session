@@ -42,6 +42,7 @@ add_executable(tde-atlas
     src/Morph.cpp
     src/Parts.cpp
     src/Placement.cpp
+    src/WindowMemory.cpp
     src/PrimaryOutput.cpp
     src/Server.cpp
     src/Settings.cpp
@@ -67,6 +68,10 @@ if(TDE_SESSION_BUILD_TESTS)
     add_executable(tst_placement tests/tst_placement.cpp src/Placement.cpp)
     target_include_directories(tst_placement PRIVATE src)
     add_test(NAME tst_placement COMMAND tst_placement)
+
+    add_executable(tst_windowmemory tests/tst_windowmemory.cpp src/WindowMemory.cpp)
+    target_include_directories(tst_windowmemory PRIVATE src)
+    add_test(NAME tst_windowmemory COMMAND tst_windowmemory)
 
     add_executable(tst_slices tests/tst_slices.cpp src/Slices.cpp)
     target_include_directories(tst_slices PRIVATE src)

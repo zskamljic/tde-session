@@ -955,19 +955,71 @@ void Server::updateXwaylandCursor()
     }
 }
 
+// Settings knows a display by its make, model and serial number, or where it is plugged in when
+// there is none to tell two of a kind apart.
+std::string outputIdentity(const wlr_output* output)
+{
+    std::string base = std::string(output->make ? output->make : "") + ' ' + (output->model ? output->model : "");
+    base.erase(0, base.find_first_not_of(' '));
+    base.erase(base.find_last_not_of(' ') + 1);
+    if (base.empty())
+        return std::string(output->name);
+    return output->serial && *output->serial ? base + ' ' + output->serial : base + " (" + output->name + ')';
+}
+
+std::optional<wlr_box> Server::displayBox(const std::string& identity) const
+{
+    for (const auto& output : outputs) {
+        if (outputIdentity(output->output) != identity)
+            continue;
+        const wlr_box box = output->box();
+        if (!wlr_box_empty(&box))
+            return box;
+    }
+    return std::nullopt;
+}
+
+void Server::rememberPlace(const View& view, std::optional<wlr_box> at)
+{
+    // Only an application's own main windows, as it leaves them.
+    if (!view.mapped || view.fullscreen || view.parentView() || importedParent(view) || view.appId().empty())
+        return;
+    const wlr_box box = at ? *at : view.isTiled() && !wlr_box_empty(&view.restore) ? view.restore : view.geometry();
+    const Output* output = outputAt(box.x + box.width / 2.0, box.y + box.height / 2.0);
+    if (!output)
+        return;
+    const wlr_box display = output->box();
+    m_windowMemory.remember({
+        .appId = view.appId(),
+        .display = outputIdentity(output->output),
+        .x = box.x - display.x,
+        .y = box.y - display.y,
+        .width = box.width,
+        .height = std::max(1, box.height - view.decorationHeight()),
+        .tile = int(view.tile),
+    });
+}
+
+const RememberedWindow* Server::rememberedPlace(const View& view) const
+{
+    if (view.parentView() || importedParent(view) || view.appId().empty())
+        return nullptr;
+    const RememberedWindow* kept = m_windowMemory.find(view.appId());
+    if (!kept || !displayBox(kept->display))
+        return nullptr;
+    // A second window of the application would only cover the first.
+    for (const View* other : m_order) {
+        if (other != &view && other->mapped && other->appId() == view.appId())
+            return nullptr;
+    }
+    return kept;
+}
+
 void Server::updatePrimaryOutput()
 {
     // Settings knows a display by its make, model and serial number, or where it is plugged in
     // when there is none to tell two of a kind apart; when it names none that is on, the first
     // one is, as for the bar.
-    const auto identity = [](const wlr_output* output) {
-        std::string base = std::string(output->make ? output->make : "") + ' ' + (output->model ? output->model : "");
-        base.erase(0, base.find_first_not_of(' '));
-        base.erase(base.find_last_not_of(' ') + 1);
-        if (base.empty())
-            return std::string(output->name);
-        return output->serial && *output->serial ? base + ' ' + output->serial : base + " (" + output->name + ')';
-    };
     const wlr_output* primary = nullptr;
     for (const auto& output : outputs) {
         wlr_box box;
@@ -976,7 +1028,7 @@ void Server::updatePrimaryOutput()
             continue;
         if (!primary)
             primary = output->output;
-        if (identity(output->output) == m_settings.primaryDisplay) {
+        if (outputIdentity(output->output) == m_settings.primaryDisplay) {
             primary = output->output;
             break;
         }

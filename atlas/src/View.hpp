@@ -113,6 +113,7 @@ protected:
     void updatePublished();
     void updateOutput();
 
+    Tile m_rememberedTile = Tile::None; // to go into once shown, as the last window of its kind was
     wlr_scene_tree* m_content = nullptr; // the program's surfaces, in the tree
     wlr_scene* m_captureScene;
     wlr_scene_tree* m_captureTree = nullptr;

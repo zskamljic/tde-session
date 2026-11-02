@@ -5,6 +5,7 @@
 #include "Owned.hpp"
 #include "PrimaryOutput.hpp"
 #include "Settings.hpp"
+#include "WindowMemory.hpp"
 #include "wlr.hpp"
 
 #include <chrono>
@@ -94,6 +95,14 @@ public:
     void beginResize(View& view, uint32_t edges);
     // The window drew something: a size held back while it was busy may go to it now.
     void viewCommitted(View& view);
+
+    // Keeps where `view` is, or is going to be at `box`, for the next window of its application.
+    void rememberPlace(const View& view, std::optional<wlr_box> box = std::nullopt);
+    // Where a new window of `view`'s application goes, as the last was left: on the same display,
+    // when it is there and no other window of the application is open.
+    const RememberedWindow* rememberedPlace(const View& view) const;
+    // The layout box of the display Settings knows by `identity`, when it is on.
+    std::optional<wlr_box> displayBox(const std::string& identity) const;
 
     // Puts a window on `output`, at the same place in it as where it is.
     void moveToOutput(View& view, wlr_output& output);
@@ -246,6 +255,7 @@ private:
     bool m_numLock = false; // on the keyboards of the machine
     bool m_replacingKeymap = false; // what it does to the modifiers is not the user's doing
     Settings m_settings;
+    WindowMemory m_windowMemory;
     FileDescriptor m_settingsWatch; // inotify, on the folders of the session's settings
     EventSource m_settingsWatchSource;
     wlr_idle_inhibit_manager_v1* m_idleInhibit = nullptr;
@@ -269,6 +279,7 @@ private:
     wlr_box m_grabBox {};
     uint32_t m_resizeEdges = 0;
     std::optional<wlr_box> m_resizeWanted; // where the pointer took it while it was busy
+    std::optional<wlr_box> m_resizeLast; // where the pointer took it last
     Tile m_snapTarget = Tile::None;
     wlr_scene_rect* m_snapPreview = nullptr;
     EventSource m_snapPreviewTimer; // while it grows into place

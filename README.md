@@ -102,7 +102,10 @@ which the window grows into; Super and a drag moves a window from anywhere in it
 pointer into the top left corner, or clicking the narrow button there at the start of the bar,
 opens the overview as Super does; it can show the desktop instead, as the button at the end of
 Windows 7's taskbar did, and doing it again before using another window brings the windows back.
-New windows open in the middle of the screen. Resizing a window by its edges gives it one size at
+New windows open where the last window of their application was, on the same display, as large
+and maximized or in half the screen as it was, when that display is there and no other window of
+the application is open; otherwise in the middle of the screen. Atlas keeps these places in
+`~/.local/state/tde/windows`. Resizing a window by its edges gives it one size at
 a time, each once it has drawn the last, so slow ones such as browsers do not stretch what they
 show meanwhile.
 In Argus, the windows go on showing what they do; a click on one switches to it, a middle click

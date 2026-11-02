@@ -40,10 +40,13 @@ void View::onMapped()
     mapped = true;
     publish();
     server.viewMapped(*this);
+    if (const Tile kept = std::exchange(m_rememberedTile, Tile::None); kept != Tile::None)
+        setTile(kept, false);
 }
 
 void View::onUnmapped()
 {
+    server.rememberPlace(*this);
     endMorph();
     mapped = false;
     unpublish();
@@ -74,6 +77,19 @@ void View::place()
     if (const std::optional<wlr_box> asked = askedPlace();
         asked && keepsAskedPlace() && server.outputAt(asked->x + asked->width / 2.0, asked->y + asked->height / 2.0)) {
         moveTo(asked->x, asked->y - decorationHeight());
+        m_placedAt = monotonicMs();
+        m_placedSize = size();
+        return;
+    }
+    // Where the last window of the application was, on the same display, when it is there.
+    if (const RememberedWindow* kept = server.rememberedPlace(*this)) {
+        const wlr_box display = *server.displayBox(kept->display);
+        const wlr_box usable = server.usableArea(display.x + display.width / 2.0, display.y + display.height / 2.0);
+        const wlr_box own = size();
+        const int height = own.height + decorationHeight();
+        moveTo(std::max(std::min(display.x + kept->x, usable.x + usable.width - own.width), usable.x),
+            std::max(std::min(display.y + kept->y, usable.y + usable.height - height), usable.y));
+        m_rememberedTile = static_cast<Tile>(kept->tile);
         m_placedAt = monotonicMs();
         m_placedSize = size();
         return;
@@ -325,6 +341,7 @@ void View::setTile(Tile wanted, bool animate)
         animateTo(box);
     else
         setGeometry(box);
+    server.rememberPlace(*this, wanted == Tile::None ? std::optional(box) : std::nullopt);
     updateFrame();
     if (m_foreign)
         wlr_foreign_toplevel_handle_v1_set_maximized(m_foreign, wanted == Tile::Maximized);
@@ -532,7 +549,9 @@ void XdgView::commit()
         wlr_xdg_toplevel_set_wm_capabilities(toplevel,
             WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE | WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE
                 | WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
-        wlr_xdg_toplevel_set_size(toplevel, 0, 0);
+        // As large as the last window of the application, or as large as it likes.
+        const RememberedWindow* kept = server.rememberedPlace(*this);
+        wlr_xdg_toplevel_set_size(toplevel, kept ? kept->width : 0, kept ? kept->height : 0);
         applyDecorationMode();
     }
     if (mapped) {
