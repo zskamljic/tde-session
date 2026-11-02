@@ -109,7 +109,7 @@ a systemd scope of its own, rather than as part of Argus.
 
 Print freezes the screens for a screenshot: drawing on them selects a part, which can be moved
 and resized by its edges, and the buttons at the bottom switch to taking a whole screen or a
-window, picked with a click (S, C and W switch too). Enter or the round button takes it,
+window, picked with a click (S, C and W switch too). Enter, Ctrl+C or the round button takes it,
 Escape gives up. Screenshots are saved in `~/Pictures/Screenshots` and copied to the clipboard;
 the notification that says so shows the file in the file manager. Windows are taken alone, with
 their rounded corners see-through.

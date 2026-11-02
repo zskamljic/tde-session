@@ -252,7 +252,11 @@ protected:
             m_owner.setMode(Screenshot::Mode::Selection);
             break;
         case Qt::Key_C:
-            m_owner.setMode(Screenshot::Mode::Screen);
+            // Ctrl+C copies, as anywhere else: it takes what is picked, and C alone picks a screen.
+            if (event->modifiers() & Qt::ControlModifier)
+                m_owner.take();
+            else
+                m_owner.setMode(Screenshot::Mode::Screen);
             break;
         case Qt::Key_W:
             m_owner.setMode(Screenshot::Mode::Window);
