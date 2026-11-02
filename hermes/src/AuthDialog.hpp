@@ -33,8 +33,12 @@ signals:
 
 protected:
     void reject() override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // Hands over what was typed, unless it is being checked already.
+    void submit();
+
     QComboBox* m_users = nullptr;
     QLabel* m_prompt;
     QLineEdit* m_password;

@@ -6,6 +6,7 @@
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -71,16 +72,18 @@ AuthDialog::AuthDialog(const QString& message, const QString& iconName, const QS
     contentLayout()->addWidget(m_status);
 
     auto* buttons = new QDialogButtonBox;
-    buttons->addButton(QDialogButtonBox::Cancel);
+    QPushButton* cancel = buttons->addButton(QDialogButtonBox::Cancel);
     m_accept = buttons->addButton(u"Authenticate"_s, QDialogButtonBox::AcceptRole);
     connect(buttons, &QDialogButtonBox::rejected, this, &AuthDialog::reject);
-    connect(buttons, &QDialogButtonBox::accepted, this, [this] {
-        if (m_accept->isEnabled())
-            emit authenticate(m_password->text());
-    });
+    connect(buttons, &QDialogButtonBox::accepted, this, &AuthDialog::submit);
     contentLayout()->addSpacing(6);
     contentLayout()->addWidget(buttons);
     setDefaultButton(m_accept);
+    // While the field waits for polkit, disabled, the focus falls to Cancel, and Enter could stay
+    // with it once the field is back, cancelling what was just typed. Enter in the field is
+    // taken by the field, and Cancel is never pressed by it.
+    cancel->setAutoDefault(false);
+    m_password->installEventFilter(this);
     m_password->setFocus();
     setBusy(true); // until polkit asks for the password
 }
@@ -123,6 +126,24 @@ void AuthDialog::setBusy(bool busy)
     m_accept->setEnabled(!busy);
     if (m_users)
         m_users->setEnabled(!busy);
+}
+
+void AuthDialog::submit()
+{
+    if (m_accept->isEnabled())
+        emit authenticate(m_password->text());
+}
+
+bool AuthDialog::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_password && event->type() == QEvent::KeyPress) {
+        const int key = static_cast<QKeyEvent*>(event)->key();
+        if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+            submit();
+            return true;
+        }
+    }
+    return tde::Dialog::eventFilter(watched, event);
 }
 
 void AuthDialog::reject()
