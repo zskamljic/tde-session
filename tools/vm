@@ -7,6 +7,8 @@
 #   tools/vm deploy            install this checkout of the session on the machine
 #   tools/vm install FILE...   install packages built on the host (e.g. libtde, tde-ariadne)
 #   tools/vm screenshot FILE   save what the machine shows as a PNG
+#   tools/vm keys KEY...       press keys as its keyboard: text, or QEMU names in angle brackets
+#                              (tools/vm keys tde '<ret>' '<ctrl-alt-f2>')
 #   tools/vm reset             throw the machine away, keeping the downloaded image
 #
 # Everything lives in ${TDE_VM_DIR:-~/.cache/tde-vm}. The user is "tde", password "tde".
@@ -28,6 +30,7 @@ packages=(
     mesa noto-fonts adwaita-icon-theme
     qt6-base qt6-svg qt6-wayland qt6-imageformats lua libarchive
     gvfs udisks2 bubblewrap librsvg
+    greetd accountsservice gdk-pixbuf2 xorg-xinit xorg-server gnome-keyring openssh
 )
 
 ssh_options=(-i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
@@ -45,6 +48,7 @@ qemu() {
         -audiodev pipewire,id=sound -device ich9-intel-hda -device hda-output,audiodev=sound \
         -chardev socket,id=console,path="$dir/console.sock",server=on,wait=off,logfile="$dir/console.log" \
         -serial chardev:console \
+        -qmp unix:"$dir/qmp.sock",server=on,wait=off \
         "$display" "$@"
 }
 
@@ -148,6 +152,8 @@ create() {
 }
 
 deploy() {
+    # Cloud images come without rsync, and a machine whose set-up stopped early may lack it yet.
+    vm_ssh 'command -v rsync >/dev/null || sudo pacman -Sy --noconfirm --needed rsync >/dev/null'
     rsync -a --delete --exclude .git --exclude build -e "ssh ${ssh_options[*]} -p $port" \
         "$source_dir/" tde@127.0.0.1:tde-session/
     # Packages first: machines made before some were added get them, and builds need them. A
@@ -163,6 +169,48 @@ deploy() {
             sudo systemctl --global enable follow-window-size.service 2>/dev/null &&
             { systemctl --user daemon-reload; systemctl --user restart follow-window-size.service; true; }'
     echo "deployed; log out (Ctrl+Alt+Delete) or restart the machine to use it"
+}
+
+# Typed through QEMU's monitor, the keys arrive as from a real keyboard, which the login screen
+# takes where it refuses virtual ones.
+press_keys() {
+    (($#)) || { echo "usage: tools/vm keys KEY..." >&2; exit 1; }
+    python3 -I - "$dir/qmp.sock" "$@" <<'PY'
+import json, socket, sys, time
+names = {' ': 'spc', '-': 'minus', '=': 'equal', '.': 'dot', ',': 'comma', '/': 'slash',
+         ';': 'semicolon', "'": 'apostrophe', '[': 'bracket_left', ']': 'bracket_right',
+         '\\': 'backslash', '`': 'grave_accent', '\n': 'ret', '\t': 'tab'}
+shifted = {'!': '1', '@': '2', '#': '3', '$': '4', '%': '5', '^': '6', '&': '7', '*': '8',
+           '(': '9', ')': '0', '_': 'minus', '+': 'equal', ':': 'semicolon', '"': 'apostrophe',
+           '<': 'comma', '>': 'dot', '?': 'slash', '{': 'bracket_left', '}': 'bracket_right',
+           '|': 'backslash', '~': 'grave_accent'}
+qmp = socket.socket(socket.AF_UNIX)
+qmp.connect(sys.argv[1])
+stream = qmp.makefile('rw')
+def call(command, **arguments):
+    stream.write(json.dumps({'execute': command, 'arguments': arguments}) + '\n')
+    stream.flush()
+    while 'return' not in (reply := json.loads(stream.readline())) and 'error' not in reply:
+        pass
+    if 'error' in reply:
+        sys.exit(reply['error']['desc'])
+stream.readline()
+call('qmp_capabilities')
+def press(chord):
+    call('human-monitor-command', **{'command-line': 'sendkey ' + chord})
+    time.sleep(0.05)
+for word in sys.argv[2:]:
+    if word.startswith('<') and word.endswith('>') and len(word) > 2:
+        press(word[1:-1])
+        continue
+    for c in word:
+        if c.isupper():
+            press('shift-' + c.lower())
+        elif c in shifted:
+            press('shift-' + names.get(shifted[c], shifted[c]))
+        else:
+            press(names.get(c, c))
+PY
 }
 
 install_packages() {
@@ -187,9 +235,17 @@ case ${1:-} in
     ssh) shift; vm_ssh "$@" ;;
     deploy) deploy ;;
     install) shift; install_packages "$@" ;;
+    keys) shift; press_keys "$@" ;;
     screenshot)
         [[ -n ${2:-} ]] || { echo "usage: tools/vm screenshot FILE" >&2; exit 1; }
-        vm_ssh 'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 grim -' >"$2" ;;
+        # What the screen shows, whoever shows it: the login screen or a session. QEMU's own
+        # screendump sees nothing of a virgl screen, so the active session's display is asked.
+        vm_ssh 'session=$(loginctl show-seat seat0 -p ActiveSession --value)
+                user=$(loginctl show-session "$session" -p Name --value)
+                uid=$(id -u "$user")
+                display=$(sudo ls /run/user/$uid | grep -m1 "^wayland-[0-9]*$")
+                sudo -u "$user" env XDG_RUNTIME_DIR=/run/user/$uid WAYLAND_DISPLAY=$display \
+                    timeout 10 grim -' >"$2" ;;
     reset) rm -f "$disk" "$seed" ;;
     *) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 1 ;;
 esac
