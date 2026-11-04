@@ -9,7 +9,8 @@ The desktop session of TDE, tofiffe's desktop environment:
   and the desktop's background;
 - **Hermes** (`tde-hermes`), the bar along the top: the applications, the clock, the tray
   icons and the quick settings; it also shows the notifications;
-- **Cerberus** (`tde-cerberus`), the lock screen;
+- **Cerberus** (`tde-cerberus`), the lock screen, and **Charon** (`tde-charon`), the login
+  screen, for greetd;
 - **tde-askpass**, which asks for the passphrases of SSH keys and for passwords for ssh, git
   and `sudo -A`;
 - **Daedalus** (`tde-daedalus`), the settings: the network, Bluetooth, the theme and the
@@ -68,7 +69,44 @@ Windows draw their own title bars, as they do on GNOME; for those that do not, l
 programs and Qt programs outside TDE, Atlas draws one, and a margin around them to resize them by. X11 programs run through Xwayland,
 started the first time one connects.
 
-Pick **TDE** on the login screen of GDM, LightDM or any display manager that lists Wayland sessions.
+Pick **TDE** on the login screen of GDM, LightDM or any display manager that lists Wayland sessions,
+or log in with TDE's own.
+
+## Logging in
+
+**Charon** (`tde-charon`) is TDE's login screen, for [greetd](https://sr.ht/~kennylevinsen/greetd/),
+in place of GDM; it looks like the lock screen. It lists the people who can log in, by name and
+picture as AccountsService knows them, with "Not listed?" to type a name; the one who logged in
+last is asked for their password at once, and the arrow beside it goes back to the list. Under the
+password is the session to start, TDE or any other Wayland session, and X11 ones when
+`xorg-xinit` is installed; each person's choice is remembered, and until they make one, the one
+GDM remembered for them. What PAM asks and says shows there as it would with GDM; a password
+that ran out, though, greetd cannot change, so the login screen says to change it on another
+terminal (Ctrl+Alt+F2) first. The button at the top right suspends, restarts or turns the
+computer off. Left alone, the screens go dark after five minutes, and a computer on its battery
+sleeps after fifteen. Sessions start through the person's login shell, which reads their profile
+as GDM's sessions do.
+
+Logging in with the password unlocks the keyring with it, as GDM does, and with the keyring the
+SSH keys whose passphrases it keeps (gcr's SSH agent stays the session's). For that, greetd's
+PAM service needs the keyring's lines; the login screen says so at the bottom while it has
+none. To switch from GDM:
+
+```sh
+sudo pacman -S greetd
+sudo cp /usr/share/tde/charon/greetd.toml /etc/greetd/config.toml
+sudo cp /usr/share/tde/charon/greetd.pam /etc/pam.d/greetd
+sudo cp /usr/share/tde/charon/greetd-greeter.pam /etc/pam.d/greetd-greeter
+sudo systemctl disable gdm && sudo systemctl enable greetd
+```
+
+Charon runs in Atlas (`tde-atlas --greeter tde-charon`) as greetd's `greeter` user, which cannot
+read anyone's settings. As with GDM, where `monitors.xml` is copied by hand, the displays are
+laid out as they are in a session once their settings are copied to it, the pointer and
+touchpad with them: `sudo tde-charon --take-settings` (from a session, after changing them in
+Settings). With several displays, the login shows on the primary one. At the login screen no key
+starts anything; Ctrl+Alt+F1 to F12 switch terminals, and the volume and brightness keys work.
+Switching users while one is logged in is not possible with greetd.
 
 ## Keys
 

@@ -27,4 +27,11 @@ fi
 
 export XDG_CURRENT_DESKTOP=TDE
 export XDG_SESSION_DESKTOP=tde
+# An SSH agent the user's systemd started, as gcr's is, keeps the keys the keyring unlocks. GDM
+# passes systemd's environment on to the session; display managers that do not, as greetd,
+# leave it to be taken from there.
+if [ -z "$SSH_AUTH_SOCK" ]; then
+    agent=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^SSH_AUTH_SOCK=//p')
+    [ -S "$agent" ] && export SSH_AUTH_SOCK="$agent"
+fi
 exec tde-atlas "$@"

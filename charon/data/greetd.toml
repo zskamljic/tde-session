@@ -1,0 +1,13 @@
+# greetd's configuration for TDE's login screen: copy it to /etc/greetd/config.toml.
+
+[terminal]
+vt = 1
+
+[general]
+# Charon starts sessions through the user's login shell, which reads the profiles as GDM's
+# sessions do; greetd need not read them first.
+source_profile = false
+
+[default_session]
+command = "tde-atlas --greeter tde-charon"
+user = "greeter"

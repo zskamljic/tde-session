@@ -1,0 +1,9 @@
+#%PAM-1.0
+# greetd's PAM service for the login screen itself, which runs as the greeter user: copy it to
+# /etc/pam.d/greetd-greeter. Without it greetd takes the service of those who log in for the
+# greeter too, and the login screen would start a keyring of its own that nothing unlocks.
+# greetd asks the greeter for no password; its credentials are set up all the same.
+
+auth       required     pam_permit.so
+account    include      system-local-login
+session    include      system-local-login

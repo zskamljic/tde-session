@@ -9,6 +9,7 @@ arch=(x86_64 aarch64)
 url='https://github.com/zskamljic/tde-session'
 license=(GPL-3.0-or-later)
 depends=(
+  gdk-pixbuf2
   glibc
   layer-shell-qt
   libcanberra
@@ -54,6 +55,9 @@ optdepends=(
   'gnome-keyring: remembering the passphrases of SSH keys'
   'fprintd: unlocking the screen with a finger'
   'brightnessctl: the keyboard light keys, where the keyboard does not change it itself'
+  'greetd: Charon, the login screen'
+  'accountsservice: names and pictures of people on the login screen'
+  'xorg-xinit: X11 sessions from the login screen'
 )
 provides=("$_pkgname")
 conflicts=("$_pkgname")

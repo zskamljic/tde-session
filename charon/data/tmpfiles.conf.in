@@ -1,0 +1,4 @@
+# What the login screen remembers, and the settings given to it with tde-charon --take-settings.
+d @TDE_GREETER_DIR@ 0755 greeter greeter -
+d @TDE_GREETER_DIR@/config 0755 greeter greeter -
+d @TDE_GREETER_DIR@/state 0755 greeter greeter -
