@@ -14,6 +14,12 @@ set(code ${CMAKE_CURRENT_BINARY_DIR}/ext-session-lock-v1-protocol.c)
 add_custom_command(OUTPUT ${header} COMMAND ${WAYLAND_SCANNER} client-header ${xml} ${header} DEPENDS ${xml})
 add_custom_command(OUTPUT ${code} COMMAND ${WAYLAND_SCANNER} private-code ${xml} ${code} DEPENDS ${xml})
 
+# What the lock screen shares with the login screen, Charon: how both draw, and the password
+# typed into them.
+add_library(cerberus-common STATIC common/Clock.cpp common/Paint.cpp common/Password.cpp)
+target_include_directories(cerberus-common PUBLIC common)
+target_link_libraries(cerberus-common PUBLIC PkgConfig::PANGOCAIRO)
+
 add_executable(tde-cerberus
     src/main.cpp
     src/Auth.cpp
@@ -21,20 +27,19 @@ add_executable(tde-cerberus
     src/Fingerprint.cpp
     src/Locker.cpp
     src/LoginHint.cpp
-    src/Password.cpp
     ${header}
     ${code}
 )
 target_include_directories(tde-cerberus PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(tde-cerberus PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
-target_link_libraries(tde-cerberus PRIVATE
+target_link_libraries(tde-cerberus PRIVATE cerberus-common
     PkgConfig::WAYLAND_CLIENT PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO PkgConfig::PAM PkgConfig::SYSTEMD)
 install(TARGETS tde-cerberus)
 # How passwords are checked: as at the login prompt.
 install(FILES tde-cerberus.pam DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/pam.d RENAME tde-cerberus)
 
 if(TDE_SESSION_BUILD_TESTS)
-    add_executable(tst_password tests/tst_password.cpp src/Password.cpp)
-    target_include_directories(tst_password PRIVATE src)
+    add_executable(tst_password tests/tst_password.cpp)
+    target_link_libraries(tst_password PRIVATE cerberus-common)
     add_test(NAME tst_password COMMAND tst_password)
 endif()

@@ -1,6 +1,7 @@
 #include "Locker.hpp"
 
 #include "Auth.hpp"
+#include "Clock.hpp"
 #include "Face.hpp"
 #include "Fingerprint.hpp"
 #include "LoginHint.hpp"
@@ -10,7 +11,6 @@
 #include "ext-session-lock-v1-client-protocol.h"
 
 #include <cairo.h>
-#include <langinfo.h>
 #include <poll.h>
 #include <pwd.h>
 #include <sys/mman.h>
@@ -35,25 +35,6 @@ struct XkbDeleter {
     void operator()(xkb_keymap* keymap) const { xkb_keymap_unref(keymap); }
     void operator()(xkb_state* state) const { xkb_state_unref(state); }
 };
-
-std::string formatted(const char* format)
-{
-    char text[128];
-    const std::time_t now = std::time(nullptr);
-    std::tm local {};
-    localtime_r(&now, &local);
-    return std::strftime(text, sizeof(text), format, &local) ? text : "";
-}
-
-// The clock as the locale writes it: with AM and PM where that is usual.
-std::string timeText(bool seconds)
-{
-    const std::string_view format = nl_langinfo(T_FMT);
-    const bool twelveHours = format.find("%I") != std::string_view::npos || format.find("%r") != std::string_view::npos;
-    if (twelveHours)
-        return formatted(seconds ? "%-I:%M:%S %p" : "%-I:%M %p");
-    return formatted(seconds ? "%H:%M:%S" : "%H:%M");
-}
 
 std::string fullName(const passwd* user)
 {
