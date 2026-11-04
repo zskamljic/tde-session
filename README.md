@@ -137,10 +137,12 @@ Switching users while one is logged in is not possible with greetd.
 | Ctrl+Alt+F1…F12 | Switch to another virtual terminal |
 
 Dragging a window to the top edge maximizes it, to a side edge fills that half of the screen,
-which the window grows into; Super and a drag moves a window from anywhere in it. Pushing the
-pointer into the top left corner, or clicking the narrow button there at the start of the bar,
-opens the overview as Super does; it can show the desktop instead, as the button at the end of
-Windows 7's taskbar did, and doing it again before using another window brings the windows back.
+and into a corner, or against an edge within an eighth of the screen of one, fills that quarter;
+a preview shows the place, which the window grows into; Super and a drag moves a window from
+anywhere in it. Pushing the pointer into the top left corner, or clicking the narrow button
+there at the start of the bar, opens the overview as Super does; it can show the desktop
+instead, as the button at the end of Windows 7's taskbar did, and doing it again before using
+another window brings the windows back.
 New windows open where the last window of their application was, on the same display, as large
 and maximized or in half or a quarter of the screen as it was, when that display is there and no other window of
 the application is open; otherwise in the middle of the screen. Atlas keeps these places in

@@ -1225,17 +1225,35 @@ void Server::updateMove()
 {
     m_grabbed->moveTo(int(cursor->x - m_grabX), int(cursor->y - m_grabY));
 
-    // Near the top of the screen the window will fill it, near a side it will fill that half.
+    // Near the top of the screen the window will fill it, near a side it will fill that half,
+    // and against any edge close to a corner, the quarter there. The corners reach an eighth of
+    // the screen along its edges, enough to be found without aiming.
     const Output* output = outputAt(cursor->x, cursor->y);
     if (!output)
         return;
     const wlr_box full = output->box();
+    const bool atLeft = cursor->x <= full.x + SnapEdge;
+    const bool atRight = cursor->x >= full.x + full.width - 1 - SnapEdge;
+    const bool atTop = cursor->y <= full.y + SnapEdge;
+    const bool atBottom = cursor->y >= full.y + full.height - 1 - SnapEdge;
+    const bool nearLeft = cursor->x <= full.x + full.width / 8.0;
+    const bool nearRight = cursor->x >= full.x + full.width - full.width / 8.0;
+    const bool nearTop = cursor->y <= full.y + full.height / 8.0;
+    const bool nearBottom = cursor->y >= full.y + full.height - full.height / 8.0;
     Tile target = Tile::None;
-    if (cursor->y <= full.y + SnapEdge)
+    if ((atLeft && nearTop) || (atTop && nearLeft))
+        target = Tile::TopLeft;
+    else if ((atRight && nearTop) || (atTop && nearRight))
+        target = Tile::TopRight;
+    else if ((atLeft && nearBottom) || (atBottom && nearLeft))
+        target = Tile::BottomLeft;
+    else if ((atRight && nearBottom) || (atBottom && nearRight))
+        target = Tile::BottomRight;
+    else if (atTop)
         target = Tile::Maximized;
-    else if (cursor->x <= full.x + SnapEdge)
+    else if (atLeft)
         target = Tile::Left;
-    else if (cursor->x >= full.x + full.width - 1 - SnapEdge)
+    else if (atRight)
         target = Tile::Right;
     if (target != m_snapTarget) {
         m_snapTarget = target;
