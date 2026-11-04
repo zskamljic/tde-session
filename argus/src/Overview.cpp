@@ -43,6 +43,44 @@ QRectF interpolate(const QRectF& from, const QRectF& to, double t)
     return QRectF(from.topLeft() + (to.topLeft() - from.topLeft()) * t, from.size() + (to.size() - from.size()) * t);
 }
 
+// The search field, round at both ends. It draws its own fill and focus ring in one stroke, as the
+// theme draws its entries: a style sheet's border is laid down in pieces, and where the pieces of
+// a round end meet the straight edges, they overlap in brighter dots.
+class SearchField : public QLineEdit {
+public:
+    explicit SearchField(QWidget* parent)
+        : QLineEdit(parent)
+    {
+        setAttribute(Qt::WA_Hover);
+        setStyleSheet(
+            u"QLineEdit { background: transparent; border: none; padding: 0 %1px; }"_s.arg(SearchHeight / 3 + 2));
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        const auto& colors = tde::theme::colors();
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor fill = colors.text;
+        fill.setAlpha(underMouse() && !hasFocus() ? 30 : 20);
+        const QRectF pill = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(fill);
+        painter.drawRoundedRect(pill, pill.height() / 2, pill.height() / 2);
+        if (hasFocus()) {
+            QColor ring = colors.accent;
+            ring.setAlpha(170);
+            const QRectF inside = QRectF(rect()).adjusted(1, 1, -1, -1);
+            painter.setPen(QPen(ring, 2));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(inside, inside.height() / 2, inside.height() / 2);
+        }
+        painter.end();
+        QLineEdit::paintEvent(event);
+    }
+};
+
 } // namespace
 
 std::vector<QRect> layOut(const std::vector<QSize>& sizes, const QRect& area, int spacing, int titleHeight)
@@ -133,12 +171,10 @@ Overview::Overview(Toplevels& toplevels, const Wallpaper& wallpaper, QScreen* sc
     m_canvas = new Canvas(this, [this](QPainter& painter) { paint(painter); });
 
     // Typing anywhere goes to the search field, which hands the keys that move around on to us.
-    m_search = new QLineEdit(this);
+    m_search = new SearchField(this);
     m_search->setObjectName(u"search"_s);
     m_search->setPlaceholderText(u"Type to search"_s);
     m_search->setFixedSize(SearchWidth, SearchHeight);
-    m_search->setStyleSheet(
-        u"#search { border-radius: %1px; padding: 0 %2px; }"_s.arg(SearchHeight / 2).arg(SearchHeight / 3));
     m_search->installEventFilter(this);
     setFocusProxy(m_search);
     connect(m_search, &QLineEdit::textChanged, this, &Overview::updateMode);
