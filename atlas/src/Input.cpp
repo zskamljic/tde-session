@@ -537,7 +537,7 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
 
     m_superAlone = count > 0 && isSuper(syms[0]) && (modifiers & ~WLR_MODIFIER_LOGO) == 0;
     for (int i = 0; i < count; ++i) {
-        if (runBinding(modifiers, syms[i], keycode)) {
+        if (runBinding(*keyboard.keyboard, modifiers, syms[i], keycode)) {
             startMediaRepeat(keyboard, keycode, syms[i]);
             s_consumedKeys.insert(keycode);
             return true;
@@ -608,7 +608,7 @@ void Server::modifiersChanged(Keyboard& keyboard)
     }
 }
 
-bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
+bool Server::runBinding(const wlr_keyboard& keyboard, uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
 {
     constexpr uint32_t Super = WLR_MODIFIER_LOGO;
     constexpr uint32_t Alt = WLR_MODIFIER_ALT;
@@ -619,6 +619,19 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
         if (view)
             action(*view);
         return true;
+    };
+    // Whether another key is down beside this one, read as bindings are, so that keyboards with
+    // keymaps of their own, as virtual ones, count too.
+    const auto held = [&keyboard, keycode](xkb_keysym_t wanted) {
+        for (size_t i = 0; i < keyboard.num_keycodes; ++i) {
+            const xkb_keycode_t key = keyboard.keycodes[i] + 8;
+            const xkb_keysym_t* syms = nullptr;
+            const int count = xkb_keymap_key_get_syms_by_level(
+                keyboard.keymap, key, xkb_state_key_get_layout(keyboard.xkb_state, key), 0, &syms);
+            if (keyboard.keycodes[i] != keycode && std::ranges::contains(syms, syms + count, wanted))
+                return true;
+        }
+        return false;
     };
 
     // Switching windows, drawn by the overview: Alt+Tab, Alt and the key above Tab for the
@@ -672,9 +685,16 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
             return withView([](View& v) { v.close(); });
         case XKB_KEY_h:
             return withView([](View& v) { v.setMinimized(true); });
+        // With two arrows held together, as Up and Left, the window takes that quarter of its
+        // screen, whichever of them came first.
         case XKB_KEY_Up:
+            if (held(XKB_KEY_Left) || held(XKB_KEY_Right))
+                return withView([&](View& v) { v.setTile(held(XKB_KEY_Left) ? Tile::TopLeft : Tile::TopRight, true); });
             return withView([](View& v) { v.setTile(Tile::Maximized, true); });
         case XKB_KEY_Down:
+            if (held(XKB_KEY_Left) || held(XKB_KEY_Right))
+                return withView(
+                    [&](View& v) { v.setTile(held(XKB_KEY_Left) ? Tile::BottomLeft : Tile::BottomRight, true); });
             return withView([](View& v) {
                 if (v.fullscreen)
                     v.setFullscreen(false);
@@ -682,8 +702,12 @@ bool Server::runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode)
                     v.setTile(Tile::None, true);
             });
         case XKB_KEY_Left:
+            if (held(XKB_KEY_Up) || held(XKB_KEY_Down))
+                return withView([&](View& v) { v.setTile(held(XKB_KEY_Up) ? Tile::TopLeft : Tile::BottomLeft, true); });
             return withView([](View& v) { v.setTile(v.tile == Tile::Right ? Tile::None : Tile::Left, true); });
         case XKB_KEY_Right:
+            if (held(XKB_KEY_Up) || held(XKB_KEY_Down))
+                return withView([&](View& v) { v.setTile(held(XKB_KEY_Up) ? Tile::TopRight : Tile::BottomRight, true); });
             return withView([](View& v) { v.setTile(v.tile == Tile::Left ? Tile::None : Tile::Right, true); });
         case XKB_KEY_a:
             spawn("tde-argus --applications");
@@ -1281,12 +1305,7 @@ void Server::showSnapPreview(Tile tile, const wlr_box& area)
         m_snapPreviewTimer.reset();
         return;
     }
-    wlr_box box = area;
-    if (tile == Tile::Left || tile == Tile::Right) {
-        box.width = area.width / 2;
-        if (tile == Tile::Right)
-            box.x += area.width - box.width;
-    }
+    const wlr_box box = tileBox(tile, area);
     // The accent colour of the theme, see through; colours are premultiplied.
     constexpr float alpha = 0.3f;
     const float color[4] = {0x52 / 255.0f * alpha, 0x94 / 255.0f * alpha, 0xe2 / 255.0f * alpha, alpha};

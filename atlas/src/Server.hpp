@@ -37,7 +37,13 @@ struct NodeOwner {
     Kind kind;
 };
 
-enum class Tile { None, Maximized, Left, Right };
+// A window's place on its screen, other than where it was put. The order is kept, as window
+// memory stores them by number.
+enum class Tile { None, Maximized, Left, Right, TopLeft, TopRight, BottomLeft, BottomRight };
+
+// Where `tile` lies within `area`, the part of a screen that windows may cover; a quarter of it
+// for the corner tiles.
+wlr_box tileBox(Tile tile, const wlr_box& area);
 
 // The compositor: the Wayland display, its outputs and input devices, and the windows on it.
 class Server {
@@ -250,7 +256,7 @@ public: // called by Keyboard
     void modifiersChanged(Keyboard& keyboard);
 
 private:
-    bool runBinding(uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode);
+    bool runBinding(const wlr_keyboard& keyboard, uint32_t modifiers, xkb_keysym_t sym, uint32_t keycode);
     // The volume, brightness and media keys, which work on the lock screen too.
     bool runMediaKey(xkb_keysym_t sym);
     // Those of them that change a level go on while held, as typing repeats.

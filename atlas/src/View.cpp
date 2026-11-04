@@ -306,6 +306,29 @@ void View::setActivated(bool activated)
         wlr_foreign_toplevel_handle_v1_set_activated(m_foreign, activated);
 }
 
+wlr_box tileBox(Tile tile, const wlr_box& area)
+{
+    wlr_box box = area;
+    const bool left = tile == Tile::Left || tile == Tile::TopLeft || tile == Tile::BottomLeft;
+    const bool right = tile == Tile::Right || tile == Tile::TopRight || tile == Tile::BottomRight;
+    const bool top = tile == Tile::TopLeft || tile == Tile::TopRight;
+    const bool bottom = tile == Tile::BottomLeft || tile == Tile::BottomRight;
+    // An odd size gives its extra pixel to the right or the bottom, so the halves meet.
+    if (left)
+        box.width = area.width / 2;
+    if (right) {
+        box.x += area.width / 2;
+        box.width = area.width - area.width / 2;
+    }
+    if (top)
+        box.height = area.height / 2;
+    if (bottom) {
+        box.y += area.height / 2;
+        box.height = area.height - area.height / 2;
+    }
+    return box;
+}
+
 void View::setTile(Tile wanted, bool animate)
 {
     if (fullscreen)
@@ -320,21 +343,7 @@ void View::setTile(Tile wanted, bool animate)
         restore = current;
 
     const wlr_box area = server.usableArea(current.x + current.width / 2.0, current.y + current.height / 2.0);
-    wlr_box box = area;
-    switch (wanted) {
-    case Tile::None:
-        box = wlr_box_empty(&restore) ? current : restore;
-        break;
-    case Tile::Maximized:
-        break;
-    case Tile::Left:
-        box.width = area.width / 2;
-        break;
-    case Tile::Right:
-        box.width = area.width / 2;
-        box.x += area.width - box.width;
-        break;
-    }
+    const wlr_box box = wanted == Tile::None ? (wlr_box_empty(&restore) ? current : restore) : tileBox(wanted, area);
     tile = wanted;
     sendTiled(wanted);
     if (animate)
@@ -665,6 +674,18 @@ void XdgView::sendTiled(Tile tile)
     case Tile::Right:
         edges = WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT;
         break;
+    case Tile::TopLeft:
+        edges = WLR_EDGE_TOP | WLR_EDGE_LEFT;
+        break;
+    case Tile::TopRight:
+        edges = WLR_EDGE_TOP | WLR_EDGE_RIGHT;
+        break;
+    case Tile::BottomLeft:
+        edges = WLR_EDGE_BOTTOM | WLR_EDGE_LEFT;
+        break;
+    case Tile::BottomRight:
+        edges = WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT;
+        break;
     }
     wlr_xdg_toplevel_set_maximized(toplevel, tile == Tile::Maximized);
     wlr_xdg_toplevel_set_tiled(toplevel, edges);
@@ -870,7 +891,9 @@ void XwaylandView::sendReactivated()
 
 void XwaylandView::sendTiled(Tile tile)
 {
-    wlr_xwayland_surface_set_maximized(xsurface, tile == Tile::Maximized, tile != Tile::None);
+    // X has no tiles: a half is told as maximized from top to bottom, a quarter as nothing.
+    const bool tall = tile == Tile::Maximized || tile == Tile::Left || tile == Tile::Right;
+    wlr_xwayland_surface_set_maximized(xsurface, tile == Tile::Maximized, tall);
 }
 
 void XwaylandView::sendFullscreen(bool fullscreen)

@@ -120,6 +120,7 @@ Switching users while one is logged in is not possible with greetd.
 | Alt+\` | Switch between windows of the same application |
 | Super+Up / Super+Down | Maximize / restore |
 | Super+Left / Super+Right | Fill the left / right half of the screen |
+| Super+Up+Left, Super+Down+Right, … | Fill that quarter of the screen the window is on (the two arrows held together, in either order) |
 | Super+H | Minimize |
 | Alt+F4, Super+Q | Close |
 | Alt+F10 | Maximize or restore |
@@ -141,7 +142,7 @@ pointer into the top left corner, or clicking the narrow button there at the sta
 opens the overview as Super does; it can show the desktop instead, as the button at the end of
 Windows 7's taskbar did, and doing it again before using another window brings the windows back.
 New windows open where the last window of their application was, on the same display, as large
-and maximized or in half the screen as it was, when that display is there and no other window of
+and maximized or in half or a quarter of the screen as it was, when that display is there and no other window of
 the application is open; otherwise in the middle of the screen. Atlas keeps these places in
 `~/.local/state/tde/windows`. Resizing a window by its edges gives it one size at
 a time, each once it has drawn the last, so slow ones such as browsers do not stretch what they

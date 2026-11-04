@@ -89,7 +89,7 @@ std::vector<RememberedWindow> WindowMemory::parse(std::string_view text)
         const auto y = number(fields[3], -MaxPixels, MaxPixels);
         const auto width = number(fields[4], 1, MaxPixels);
         const auto height = number(fields[5], 1, MaxPixels);
-        const auto tile = number(fields[6], 0, 3);
+        const auto tile = number(fields[6], 0, 7);
         if (!x || !y || !width || !height || !tile)
             continue;
         std::erase_if(windows, [&](const RememberedWindow& other) { return other.appId == fields[0]; });
