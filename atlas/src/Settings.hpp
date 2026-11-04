@@ -22,6 +22,25 @@ enum class HotCorner { Overview, Desktop, Off };
 // How Num Lock is at login: as it was left, or on or off whatever it was.
 enum class NumLock { Last, On, Off };
 
+// Where a display goes in a layout Settings saved: known by make, model and serial number, as
+// for the primary display, with its mode, its scale in percent and how it is turned.
+struct DisplayPlacement {
+    std::string display;
+    bool enabled = true;
+    int width = 0;
+    int height = 0;
+    int refresh = 0; // mHz
+    int x = 0;
+    int y = 0;
+    int scale = 100;
+    int transform = 0; // as wl_output has it
+
+    bool operator==(const DisplayPlacement&) const = default;
+};
+
+// The displays plugged in together, and where each goes.
+using DisplayLayout = std::vector<DisplayPlacement>;
+
 // What the compositor takes from the session's settings, ~/.config/tde/session/config.lua,
 // which Settings (Daedalus) writes.
 struct Settings {
@@ -31,6 +50,8 @@ struct Settings {
     int windowAnimation = 200; // ms windows take to move into a tile
     HotCorner hotCorner = HotCorner::Overview; // the overview, as Super opens it
     std::string primaryDisplay; // as Settings knows displays, by make, model and serial; empty for the first
+    // Laid out by the bar in a session; at the login screen, by the compositor itself.
+    std::vector<DisplayLayout> displayLayouts;
 
     bool operator==(const Settings&) const = default;
 };
@@ -47,6 +68,10 @@ struct DesktopSettings {
 
     bool operator==(const DesktopSettings&) const = default;
 };
+
+// From now on, settings files are read without the libraries that reach out of Lua: at the login
+// screen they were copied from someone's session, and only their values are wanted.
+void restrictSettings();
 
 std::string settingsPath();
 // What is missing or wrong keeps its default; problems go to the log.

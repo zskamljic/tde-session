@@ -7,14 +7,20 @@
 #include <string>
 
 #include <signal.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace {
 
 void usage(const char* program)
 {
-    std::printf("Usage: %s [--debug] [--version]\n\n"
+    std::printf("Usage: %s [--debug] [--version] [--greeter COMMAND [ARGUMENT...]]\n\n"
                 "Atlas, the compositor of TDE. Runs ~/.config/tde/autostart, or else the one TDE comes with,\n"
-                "once it is up.\n",
+                "once it is up.\n\n"
+                "With --greeter, runs COMMAND alone, as the login screen, and ends when it does, with its\n"
+                "exit status. The displays, pointer and keyboard follow the settings copied to\n" TDE_GREETER_DIR
+                "/config.\n",
         program);
 }
 
@@ -33,14 +39,60 @@ int terminate(int, void* data)
     return 0;
 }
 
+// The greeter, which the compositor runs for as long as it runs.
+struct Greeter {
+    atlas::Server* server = nullptr;
+    pid_t pid = -1;
+    int status = 1;
+};
+
+int greeterEnded(int fd, uint32_t, void* data)
+{
+    auto* greeter = static_cast<Greeter*>(data);
+    int status = 0;
+    if (waitpid(greeter->pid, &status, WNOHANG) == greeter->pid) {
+        greeter->status = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+        close(fd);
+        greeter->server->terminate();
+    }
+    return 0;
+}
+
+// Starts `argv` as the compositor's child, heard of through `loop` once it ends.
+bool startGreeter(Greeter& greeter, char** argv, wl_event_loop* loop)
+{
+    greeter.pid = fork();
+    if (greeter.pid < 0)
+        return false;
+    if (greeter.pid == 0) {
+        // The signals the compositor waits for are blocked in it, and would be in the greeter.
+        sigset_t none;
+        sigemptyset(&none);
+        sigprocmask(SIG_SETMASK, &none, nullptr);
+        execvp(argv[0], argv);
+        std::fprintf(stderr, "tde-atlas: cannot run %s\n", argv[0]);
+        _exit(127);
+    }
+    const int fd = int(syscall(SYS_pidfd_open, greeter.pid, 0));
+    if (fd < 0)
+        return false;
+    wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE, greeterEnded, &greeter);
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
 {
     bool debug = false;
+    char** greeterCommand = nullptr;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--debug") == 0) {
             debug = true;
+        } else if (std::strcmp(argv[i], "--greeter") == 0 && i + 1 < argc) {
+            // What follows is the greeter's, arguments and all.
+            greeterCommand = argv + i + 1;
+            break;
         } else if (std::strcmp(argv[i], "--version") == 0) {
             std::printf("tde-atlas %s\n", TDE_SESSION_VERSION);
             return 0;
@@ -52,10 +104,35 @@ int main(int argc, char* argv[])
     wlr_log_init(debug ? WLR_DEBUG : WLR_INFO, nullptr);
 
     atlas::Server server;
+    if (greeterCommand) {
+        // The settings, kept where the greeter's user can read them, are those an administrator
+        // copied there from a session; Num Lock is kept there as it was left.
+        setenv("XDG_CONFIG_HOME", TDE_GREETER_DIR "/config", true);
+        setenv("XDG_STATE_HOME", TDE_GREETER_DIR "/state", true);
+        setenv("XDG_SESSION_TYPE", "wayland", true);
+        server.greeter = true;
+        atlas::restrictSettings();
+    }
     if (!server.start())
         return 1;
     wl_event_loop_add_signal(server.eventLoop, SIGTERM, terminate, &server);
     wl_event_loop_add_signal(server.eventLoop, SIGINT, terminate, &server);
+
+    if (greeterCommand) {
+        Greeter greeter {.server = &server};
+        if (!startGreeter(greeter, greeterCommand, server.eventLoop)) {
+            std::fprintf(stderr, "tde-atlas: cannot start the greeter\n");
+            return 1;
+        }
+        wlr_log(WLR_INFO, "greeting on WAYLAND_DISPLAY=%s", server.socketName().c_str());
+        server.run();
+        // Gone with the compositor, should it have stopped first.
+        if (waitpid(greeter.pid, nullptr, WNOHANG) == 0) {
+            kill(greeter.pid, SIGTERM);
+            waitpid(greeter.pid, nullptr, 0);
+        }
+        return greeter.status;
+    }
 
     // Programs started through D-Bus or systemd need to find the display too. Then the
     // session's target starts, and with it the programs of the XDG autostart folders, which

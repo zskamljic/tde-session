@@ -57,7 +57,8 @@ target_compile_definitions(tde-atlas PRIVATE
     WLR_USE_UNSTABLE
     TDE_SESSION_VERSION="${PROJECT_VERSION}"
     TDE_DATA_DIR="${TDE_DATA_DIR}"
-    TDE_ASKPASS="${CMAKE_INSTALL_FULL_BINDIR}/tde-askpass")
+    TDE_ASKPASS="${CMAKE_INSTALL_FULL_BINDIR}/tde-askpass"
+    TDE_GREETER_DIR="${TDE_GREETER_DIR}")
 # The wlroots headers are C; their C-isms are worked around in wlr.hpp.
 target_compile_options(tde-atlas PRIVATE -Wno-pedantic -Wno-missing-field-initializers)
 target_link_libraries(tde-atlas PRIVATE PkgConfig::WLROOTS PkgConfig::WAYLAND_SERVER PkgConfig::XKBCOMMON PkgConfig::PANGOCAIRO
@@ -72,6 +73,14 @@ if(TDE_SESSION_BUILD_TESTS)
     add_executable(tst_windowmemory tests/tst_windowmemory.cpp src/WindowMemory.cpp)
     target_include_directories(tst_windowmemory PRIVATE src)
     add_test(NAME tst_windowmemory COMMAND tst_windowmemory)
+
+    # Settings log what is wrong with them through wlroots.
+    add_executable(tst_settings tests/tst_settings.cpp src/Settings.cpp ${wlr_headers})
+    target_include_directories(tst_settings PRIVATE src ${CMAKE_CURRENT_BINARY_DIR})
+    target_compile_definitions(tst_settings PRIVATE WLR_USE_UNSTABLE)
+    target_compile_options(tst_settings PRIVATE -Wno-pedantic)
+    target_link_libraries(tst_settings PRIVATE PkgConfig::WLROOTS PkgConfig::LUA)
+    add_test(NAME tst_settings COMMAND tst_settings)
 
     add_executable(tst_slices tests/tst_slices.cpp src/Slices.cpp)
     target_include_directories(tst_slices PRIVATE src)

@@ -128,6 +128,9 @@ LayerSurface::LayerSurface(Server& server, wlr_layer_surface_v1* surface, Output
         mapped = true;
         if (this->output)
             this->server.arrange(*this->output);
+        // The greeter goes where the pointer is, which it hears of without it having to move.
+        if (this->server.greeter)
+            this->server.refreshPointerFocus();
     });
     m_unmap.connect(surface->surface->events.unmap, [this] {
         mapped = false;

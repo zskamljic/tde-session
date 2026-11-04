@@ -71,6 +71,24 @@ void readPointer(lua_State* lua, PointerSettings& pointer)
         pointer.disableWhileTyping = *typing;
 }
 
+// Runs `body` with each table of the array on top of the stack in turn.
+void forEachTable(lua_State* lua, const std::function<void()>& body)
+{
+    for (lua_Integer i = 1;; ++i) {
+        lua_rawgeti(lua, -1, i);
+        if (!lua_istable(lua, -1)) {
+            lua_pop(lua, 1);
+            return;
+        }
+        body();
+        lua_pop(lua, 1);
+    }
+}
+
+constexpr int MaxPixels = 100'000; // as Settings has it
+
+bool s_restricted = false;
+
 using LuaState = std::unique_ptr<lua_State, decltype(&lua_close)>;
 
 // The table the config file at `path` returns, on top of the stack of the state; null when
@@ -81,7 +99,21 @@ LuaState run(const std::string& path)
     lua_State* lua = state.get();
     if (!lua)
         return state;
-    luaL_openlibs(lua);
+    if (s_restricted) {
+        // What values can be worked out with, and nothing that opens files or runs programs.
+        for (const auto& [name, open] : {std::pair {"_G", luaopen_base}, std::pair {LUA_TABLIBNAME, luaopen_table},
+                 std::pair {LUA_STRLIBNAME, luaopen_string}, std::pair {LUA_MATHLIBNAME, luaopen_math}}) {
+            luaL_requiref(lua, name, open, 1);
+            lua_pop(lua, 1);
+        }
+        // The base library loads files and code too.
+        for (const char* name : {"dofile", "loadfile", "load", "require"}) {
+            lua_pushnil(lua);
+            lua_setglobal(lua, name);
+        }
+    } else {
+        luaL_openlibs(lua);
+    }
     if (luaL_loadfile(lua, path.c_str()) != LUA_OK || lua_pcall(lua, 0, 1, 0) != LUA_OK) {
         // No file is no problem: it has the defaults.
         if (const char* error = lua_tostring(lua, -1); error && !std::string_view(error).contains("No such file"))
@@ -108,6 +140,11 @@ std::string stateFolder()
 }
 
 } // namespace
+
+void restrictSettings()
+{
+    s_restricted = true;
+}
 
 std::string settingsPath()
 {
@@ -160,6 +197,27 @@ Settings loadSettings(const std::string& path)
     table(lua, "displays", [&] {
         if (const auto primary = string(lua, "primary"))
             settings.primaryDisplay = *primary;
+        table(lua, "layouts", [&] {
+            forEachTable(lua, [&] {
+                DisplayLayout layout;
+                forEachTable(lua, [&] {
+                    DisplayPlacement placement;
+                    placement.display = string(lua, "display").value_or("");
+                    placement.enabled = boolean(lua, "enabled").value_or(true);
+                    placement.width = integer(lua, "width", 1, MaxPixels).value_or(0);
+                    placement.height = integer(lua, "height", 1, MaxPixels).value_or(0);
+                    placement.refresh = integer(lua, "refresh", 0, 1'000'000).value_or(0);
+                    placement.x = integer(lua, "x", -MaxPixels, MaxPixels).value_or(0);
+                    placement.y = integer(lua, "y", -MaxPixels, MaxPixels).value_or(0);
+                    placement.scale = integer(lua, "scale", 25, 500).value_or(100);
+                    placement.transform = integer(lua, "transform", 0, 7).value_or(0);
+                    if (!placement.display.empty())
+                        layout.push_back(std::move(placement));
+                });
+                if (!layout.empty())
+                    settings.displayLayouts.push_back(std::move(layout));
+            });
+        });
     });
     return settings;
 }

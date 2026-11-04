@@ -103,7 +103,9 @@ bool Server::start()
     setUpShells();
     setUpInput();
     setUpProtocols();
-    setUpXwayland();
+    // Nothing at the login screen needs X11.
+    if (!greeter)
+        setUpXwayland();
     setUpLock();
     setUpWindowInfo();
 
@@ -310,6 +312,8 @@ void Server::outputLayoutChanged()
     }
     wlr_output_manager_v1_set_configuration(m_outputManager, config);
     updatePrimaryOutput();
+    if (greeter)
+        applyGreeterLayout();
 
     moveWindowsWithOutputs();
     for (const auto& output : outputs)
@@ -389,6 +393,15 @@ void Server::keepWindowsOnScreen()
 
 void Server::applyOutputConfiguration(wlr_output_configuration_v1* config, bool testOnly)
 {
+    if (commitOutputConfiguration(config, testOnly))
+        wlr_output_configuration_v1_send_succeeded(config);
+    else
+        wlr_output_configuration_v1_send_failed(config);
+    wlr_output_configuration_v1_destroy(config);
+}
+
+bool Server::commitOutputConfiguration(wlr_output_configuration_v1* config, bool testOnly)
+{
     // All outputs at once, each with a frame of the size it is to have: either the whole
     // configuration takes or none of it does.
     std::vector<wlr_backend_output_state> states;
@@ -443,11 +456,7 @@ void Server::applyOutputConfiguration(wlr_output_configuration_v1* config, bool 
     // Made for a configuration that did not take, or only tried.
     for (const auto& [output, sceneOutput] : made)
         wlr_scene_output_destroy(sceneOutput);
-    if (ok)
-        wlr_output_configuration_v1_send_succeeded(config);
-    else
-        wlr_output_configuration_v1_send_failed(config);
-    wlr_output_configuration_v1_destroy(config);
+    return ok;
 }
 
 Output* Server::outputAt(double x, double y) const
@@ -965,6 +974,94 @@ std::string outputIdentity(const wlr_output* output)
     if (base.empty())
         return std::string(output->name);
     return output->serial && *output->serial ? base + ' ' + output->serial : base + " (" + output->name + ')';
+}
+
+void Server::applyGreeterLayout()
+{
+    std::vector<std::string> present;
+    for (const auto& output : outputs)
+        present.push_back(outputIdentity(output->output));
+    std::ranges::sort(present);
+    std::string key;
+    for (const std::string& identity : present)
+        key += identity + '\n';
+
+    // Once for each set of displays: what comes of it changes the layout again, and the displays
+    // may be moved about with wlr-randr after.
+    if (key != m_greeterDisplays) {
+        m_greeterDisplays = key;
+        for (const std::string& identity : present)
+            wlr_log(WLR_DEBUG, "greeter: display %s", identity.c_str());
+        const auto layout = std::ranges::find_if(m_settings.displayLayouts, [&](const DisplayLayout& candidate) {
+            std::vector<std::string> named;
+            for (const DisplayPlacement& placement : candidate)
+                named.push_back(placement.display);
+            std::ranges::sort(named);
+            return named == present;
+        });
+        wlr_log(WLR_DEBUG, "greeter: %s of %zu saved layouts fits",
+            layout != m_settings.displayLayouts.end() ? "one" : "none", m_settings.displayLayouts.size());
+        if (layout != m_settings.displayLayouts.end()) {
+            wlr_output_configuration_v1* config = wlr_output_configuration_v1_create();
+            for (const auto& output : outputs) {
+                const std::string identity = outputIdentity(output->output);
+                const DisplayPlacement& placement = *std::ranges::find(*layout, identity, &DisplayPlacement::display);
+                wlr_output_configuration_head_v1* head
+                    = wlr_output_configuration_head_v1_create(config, output->output);
+                head->state.enabled = placement.enabled;
+                if (!placement.enabled)
+                    continue;
+                // The mode of that size nearest the refresh rate saved, or one made up.
+                wlr_output_mode* best = nullptr;
+                wlr_output_mode* mode;
+                wl_list_for_each(mode, &output->output->modes, link)
+                {
+                    if (mode->width != placement.width || mode->height != placement.height)
+                        continue;
+                    if (!best
+                        || std::abs(mode->refresh - placement.refresh) < std::abs(best->refresh - placement.refresh))
+                        best = mode;
+                }
+                head->state.mode = best;
+                if (!best && placement.width > 0 && placement.height > 0) {
+                    head->state.custom_mode.width = placement.width;
+                    head->state.custom_mode.height = placement.height;
+                    head->state.custom_mode.refresh = placement.refresh;
+                }
+                head->state.scale = placement.scale / 100.0F;
+                head->state.transform = static_cast<wl_output_transform>(placement.transform);
+                head->state.x = placement.x;
+                head->state.y = placement.y;
+            }
+            if (!commitOutputConfiguration(config, false))
+                wlr_log(WLR_ERROR, "the displays could not be laid out as saved");
+            wlr_output_configuration_v1_destroy(config);
+            // Laid out anew, the layout changes, and it comes back here for the pointer.
+            return;
+        }
+    }
+
+    // The pointer goes to the middle of the primary display, once for each set of displays.
+    if (m_pointerPlacedFor == key)
+        return;
+    const Output* primary = nullptr;
+    for (const auto& output : outputs) {
+        const wlr_box box = output->box();
+        if (wlr_box_empty(&box))
+            continue;
+        if (!primary)
+            primary = output.get();
+        if (outputIdentity(output->output) == m_settings.primaryDisplay) {
+            primary = output.get();
+            break;
+        }
+    }
+    if (!primary)
+        return;
+    m_pointerPlacedFor = key;
+    const wlr_box box = primary->box();
+    wlr_cursor_warp_closest(cursor, nullptr, box.x + box.width / 2.0, box.y + box.height / 2.0);
+    refreshPointerFocus();
 }
 
 std::optional<wlr_box> Server::displayBox(const std::string& identity) const

@@ -54,6 +54,14 @@ public:
     // Runs `command` with the shell, detached from the compositor, `argument` as its $1 when
     // given.
     static void spawn(const std::string& command, const std::string& argument = {});
+    // At the login screen, the compositor runs only the greeter: no bar, overview or X11, and
+    // no key does anything but switch terminals and change levels. Displays are laid out as
+    // the settings it was given say, which the bar does in a session.
+    bool greeter = false;
+    // Whatever is under the pointer hears of it anew, as when it appeared under a pointer
+    // that has not moved.
+    void refreshPointerFocus();
+
     // The session lock: while locked, only the lock screen is seen and gets input.
     bool isLocked() const { return m_locked; }
     void unlocked();
@@ -182,6 +190,11 @@ private:
     void layoutChanged();
     void outputLayoutChanged();
     void applyOutputConfiguration(wlr_output_configuration_v1* config, bool testOnly);
+    // Commits or only tries `config` on all its outputs at once; whether it took.
+    bool commitOutputConfiguration(wlr_output_configuration_v1* config, bool testOnly);
+    // At the login screen: the layout saved for the displays there are, once for each set of
+    // them, and the pointer in the middle of the primary display, where the greeter asks.
+    void applyGreeterLayout();
     wlr_box onScreen(const wlr_box& box) const;
     void keepWindowsOnScreen();
     void moveWindowsWithOutputs();
@@ -262,6 +275,8 @@ private:
     wlr_xwayland* m_xwayland = nullptr;
     bool m_xwaylandRunning = false; // its window manager is up, to take a pointer
     PrimaryOutput m_primaryOutput;
+    std::string m_greeterDisplays; // the displays the greeter's layout was last applied for
+    std::string m_pointerPlacedFor; // the displays the pointer was last put on the primary one of
 
     std::vector<std::unique_ptr<View>> m_views;
     std::vector<View*> m_order; // mapped windows, most recently used first

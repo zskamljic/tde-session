@@ -450,16 +450,22 @@ void Server::loadCursorTheme()
     else
         setenv("XCURSOR_THEME", theme.c_str(), true);
     setenv("XCURSOR_SIZE", std::to_string(size).c_str(), true);
-    spawn(theme.empty() ? "systemctl --user unset-environment XCURSOR_THEME; "
-                          "dbus-update-activation-environment --systemd XCURSOR_SIZE"
-                        : "dbus-update-activation-environment --systemd XCURSOR_THEME XCURSOR_SIZE");
+    // At the login screen, nothing else starts that would want it.
+    if (!greeter)
+        spawn(theme.empty() ? "systemctl --user unset-environment XCURSOR_THEME; "
+                              "dbus-update-activation-environment --systemd XCURSOR_SIZE"
+                            : "dbus-update-activation-environment --systemd XCURSOR_THEME XCURSOR_SIZE");
     // Whatever is under the pointer sets its own again once the pointer enters it anew.
-    if (idleNotifier && m_cursorMode == CursorMode::Passthrough && !m_locked) {
-        wlr_seat_pointer_clear_focus(seat);
-        timespec now {};
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        cursorMotion(uint32_t(now.tv_sec * 1000 + now.tv_nsec / 1'000'000));
-    }
+    if (idleNotifier && m_cursorMode == CursorMode::Passthrough && !m_locked)
+        refreshPointerFocus();
+}
+
+void Server::refreshPointerFocus()
+{
+    wlr_seat_pointer_clear_focus(seat);
+    timespec now {};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    cursorMotion(uint32_t(now.tv_sec * 1000 + now.tv_nsec / 1'000'000));
 }
 
 void Server::keyboardDestroyed(Keyboard& keyboard)
@@ -499,8 +505,9 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
         stopMediaRepeat(keycode);
 
     // Locked, the keys are the lock screen's; switching to another terminal stays, and the
-    // volume, brightness and media keys.
-    if (m_locked) {
+    // volume, brightness and media keys. At the login screen too: nothing else may be started
+    // there, as the greeter's user.
+    if (m_locked || greeter) {
         m_superAlone = false;
         for (int i = 0; i < count && pressed; ++i) {
             if (modifiers == (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT) && syms[i] >= XKB_KEY_F1
@@ -817,6 +824,8 @@ NodeOwner* Server::ownerAt(double x, double y, wlr_surface** surface, double* sx
 
 void Server::checkHotCorner()
 {
+    if (greeter)
+        return;
     constexpr double Reach = 1; // how near the corner counts as in it
     constexpr double Away = 8; // how far away it has to go before it can go off again
     // The top left corner of an output with no other one to its left or above, where the

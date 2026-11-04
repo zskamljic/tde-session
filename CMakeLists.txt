@@ -12,6 +12,8 @@ endif()
 
 include(GNUInstallDirs)
 set(TDE_DATA_DIR ${CMAKE_INSTALL_PREFIX}/share/tde)
+# Where the login screen keeps what it remembers and the settings it was given.
+set(TDE_GREETER_DIR ${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/charon)
 configure_file(tde-session.in tde-session @ONLY)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/tde-session DESTINATION bin)
