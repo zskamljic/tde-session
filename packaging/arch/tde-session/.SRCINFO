@@ -51,6 +51,6 @@ pkgbase = tde-session
 	optdepends = accountsservice: names and pictures of people on the login screen
 	optdepends = xorg-xinit: X11 sessions from the login screen
 	source = tde-session-0.3.11.tar.gz::https://github.com/zskamljic/tde-session/archive/refs/tags/v0.3.11.tar.gz
-	sha256sums = SKIP
+	sha256sums = 03d627eec85cdcd9401f4604c8666268d9ae875fdc16fca717c19d36859748f7
 
 pkgname = tde-session
