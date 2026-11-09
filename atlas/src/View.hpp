@@ -50,8 +50,10 @@ public:
     void animateTo(const wlr_box& box);
 
     void setActivated(bool activated);
-    // With `animate`, it goes there as animateTo() has it: for tiles the user asked for.
-    void setTile(Tile tile, bool animate = false);
+    // With `animate`, it goes there as animateTo() has it: for tiles the user asked for. It
+    // tiles within what is free of the screen under its middle, or within `within`: the free part
+    // of the screen a drag let go on.
+    void setTile(Tile tile, bool animate = false, std::optional<wlr_box> within = std::nullopt);
     void setFullscreen(bool fullscreen);
     void setMinimized(bool minimized);
 

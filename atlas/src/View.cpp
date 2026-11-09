@@ -329,7 +329,7 @@ wlr_box tileBox(Tile tile, const wlr_box& area)
     return box;
 }
 
-void View::setTile(Tile wanted, bool animate)
+void View::setTile(Tile wanted, bool animate, std::optional<wlr_box> within)
 {
     if (fullscreen)
         return;
@@ -342,7 +342,8 @@ void View::setTile(Tile wanted, bool animate)
     if (wanted != Tile::None && tile == Tile::None)
         restore = current;
 
-    const wlr_box area = server.usableArea(current.x + current.width / 2.0, current.y + current.height / 2.0);
+    const wlr_box area
+        = within.value_or(server.usableArea(current.x + current.width / 2.0, current.y + current.height / 2.0));
     const wlr_box box = wanted == Tile::None ? (wlr_box_empty(&restore) ? current : restore) : tileBox(wanted, area);
     tile = wanted;
     sendTiled(wanted);

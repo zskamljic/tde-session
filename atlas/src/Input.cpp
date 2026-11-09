@@ -1293,7 +1293,7 @@ void Server::updateResize()
 void Server::finishGrab()
 {
     if (m_cursorMode == CursorMode::Move && m_grabbed && m_snapTarget != Tile::None)
-        m_grabbed->setTile(m_snapTarget, true);
+        m_grabbed->setTile(m_snapTarget, true, usableArea(cursor->x, cursor->y));
     else if (m_grabbed && m_grabbed->mapped && m_cursorMode == CursorMode::Move)
         rememberPlace(*m_grabbed);
     if (m_cursorMode == CursorMode::Resize && m_grabbed && m_grabbed->mapped) {
