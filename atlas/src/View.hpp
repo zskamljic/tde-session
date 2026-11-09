@@ -89,6 +89,9 @@ public:
     Tile tile = Tile::None;
     wlr_box restore {}; // the geometry to return to from a tile or full screen
     bool handled = false; // moved or resized by the user since it was placed
+    // Whether it is a main window of its program, the kind whose place is kept for the next
+    // one, rather than a splash screen, a toolbox or the like that X11 tells apart.
+    virtual bool isMainWindow() const { return true; }
 
 protected:
     virtual wlr_box size() const = 0; // width and height; x and y are ignored
@@ -228,6 +231,7 @@ protected:
     void sendMinimized(bool minimized) override;
     std::optional<wlr_box> askedPlace() const override { return m_asked; }
     bool keepsAskedPlace() const override;
+    bool isMainWindow() const override;
 
 private:
     void associate();

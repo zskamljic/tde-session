@@ -145,7 +145,7 @@ instead, as the button at the end of Windows 7's taskbar did, and doing it again
 another window brings the windows back.
 New windows open where the last window of their application was, on the same display, as large
 and maximized or in half or a quarter of the screen as it was, when that display is there and no other window of
-the application is open; otherwise in the middle of the screen. Atlas keeps these places in
+the application is open; otherwise in the middle of the screen, where splash screens open too. Atlas keeps these places in
 `~/.local/state/tde/windows`. Resizing a window by its edges gives it one size at
 a time, each once it has drawn the last, so slow ones such as browsers do not stretch what they
 show meanwhile.

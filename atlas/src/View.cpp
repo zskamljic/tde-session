@@ -866,6 +866,13 @@ bool XwaylandView::keepsAskedPlace() const
                 && !wlr_xwayland_surface_has_window_type(xsurface, WLR_XWAYLAND_NET_WM_WINDOW_TYPE_NORMAL)));
 }
 
+bool XwaylandView::isMainWindow() const
+{
+    // Without a type, a window is a normal one.
+    return xsurface->window_type_len == 0
+        || wlr_xwayland_surface_has_window_type(xsurface, WLR_XWAYLAND_NET_WM_WINDOW_TYPE_NORMAL);
+}
+
 wlr_box XwaylandView::placeInX() const
 {
     wlr_box box = contentGeometry();
