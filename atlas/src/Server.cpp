@@ -760,9 +760,17 @@ void Server::focusSurface(wlr_surface* surface)
     // While locked, the keyboard is the lock screen's alone.
     if (m_locked && !(m_lock && m_lock->owns(surface)))
         return;
-    if (wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat))
-        wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
-    else
+    if (wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat)) {
+        // A key a binding took, such as the Tab of Alt+Tab, may still be down as the window
+        // comes back; its release never reaches the window, so its press must not either, or
+        // the window holds it down for good.
+        std::vector<uint32_t> held;
+        for (size_t i = 0; i < keyboard->num_keycodes; ++i) {
+            if (!m_consumedKeys.contains(keyboard->keycodes[i]))
+                held.push_back(keyboard->keycodes[i]);
+        }
+        wlr_seat_keyboard_notify_enter(seat, surface, held.data(), held.size(), &keyboard->modifiers);
+    } else
         wlr_seat_keyboard_notify_enter(seat, surface, nullptr, 0, nullptr);
 }
 

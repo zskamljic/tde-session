@@ -11,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -335,6 +336,9 @@ private:
 
     // Super pressed and released on its own opens the overview.
     bool m_superAlone = false;
+    // Keys that were taken for a binding; their release does not go to the window either,
+    // and a window given the keyboard while one is still down is not told it is.
+    std::set<uint32_t> m_consumedKeys;
 
     // The hot corner goes off once on the way in, and again once the pointer has left it.
     bool m_hotCornerArmed = true;

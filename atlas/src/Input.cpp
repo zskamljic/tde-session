@@ -38,9 +38,6 @@ void drain(int fd)
     while (read(fd, events, sizeof events) > 0) { }
 }
 
-// Keys that were taken for a binding; their release does not go to the window either.
-std::set<uint32_t> s_consumedKeys;
-
 std::string environment(const char* name)
 {
     const char* value = std::getenv(name);
@@ -514,16 +511,16 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
                 && syms[i] <= XKB_KEY_F12) {
                 if (session)
                     wlr_session_change_vt(session, syms[i] - XKB_KEY_F1 + 1);
-                s_consumedKeys.insert(keycode);
+                m_consumedKeys.insert(keycode);
                 return true;
             }
             if (runMediaKey(syms[i])) {
                 startMediaRepeat(keyboard, keycode, syms[i]);
-                s_consumedKeys.insert(keycode);
+                m_consumedKeys.insert(keycode);
                 return true;
             }
         }
-        return !pressed && s_consumedKeys.erase(keycode) > 0;
+        return !pressed && m_consumedKeys.erase(keycode) > 0;
     }
 
     if (!pressed) {
@@ -532,14 +529,14 @@ bool Server::handleKey(Keyboard& keyboard, uint32_t keycode, bool pressed)
                 spawn("tde-argus --toggle");
         }
         m_superAlone = false;
-        return s_consumedKeys.erase(keycode) > 0;
+        return m_consumedKeys.erase(keycode) > 0;
     }
 
     m_superAlone = count > 0 && isSuper(syms[0]) && (modifiers & ~WLR_MODIFIER_LOGO) == 0;
     for (int i = 0; i < count; ++i) {
         if (runBinding(*keyboard.keyboard, modifiers, syms[i], keycode)) {
             startMediaRepeat(keyboard, keycode, syms[i]);
-            s_consumedKeys.insert(keycode);
+            m_consumedKeys.insert(keycode);
             return true;
         }
     }
