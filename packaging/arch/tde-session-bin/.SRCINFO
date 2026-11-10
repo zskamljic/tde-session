@@ -49,6 +49,6 @@ pkgbase = tde-session-bin
 	conflicts = tde-session
 	noextract = tde-session-0.3.12-x86_64.tar.zst
 	source = tde-session-0.3.12-x86_64.tar.zst::https://github.com/zskamljic/tde-session/releases/download/v0.3.12/tde-session-0.3.12-x86_64.tar.zst
-	sha256sums = SKIP
+	sha256sums = 222f45039b6fbf3a184e3399595adfc7bfddb9b52b3fd20e000869e41e598c02
 
 pkgname = tde-session-bin

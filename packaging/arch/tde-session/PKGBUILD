@@ -58,7 +58,7 @@ optdepends=(
   'xorg-xinit: X11 sessions from the login screen'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('798c1d7288252b7f1cbfa5471a9cff6469723eb057fba51b26215c89906eeff3')
 
 build() {
   cmake -B build -S "$pkgname-$pkgver" -G Ninja \
