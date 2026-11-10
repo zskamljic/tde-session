@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(tde-session VERSION 0.3.11 LANGUAGES C CXX)
+project(tde-session VERSION 0.3.12 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
