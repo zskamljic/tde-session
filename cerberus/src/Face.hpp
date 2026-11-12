@@ -17,11 +17,13 @@ struct Face {
     std::string date;
     std::string user;
     std::size_t typed = 0; // characters of the password, shown as dots
+    bool selected = false; // all of it, as Ctrl+A selects it
     Status status = Status::Ready;
     bool capsLock = false;
     Finger finger = Finger::None;
     // The clock alone, as when just locked; a key or a click lifts it to show the password.
     bool curtain = true;
+    double lift = 0; // how far up the curtain is as it goes, from 0 down to 1 up
     bool focused = false; // the keyboard comes here, so the password can be typed
     bool caret = true; // shown at this blink
     unsigned pulse = 0; // which of the dots of a check is lit

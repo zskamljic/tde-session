@@ -149,6 +149,11 @@ void entry(cairo_t* cr, double x, double y, const Entry& entry)
         cairo_save(cr);
         cairo_rectangle(cr, x + Inset - 1, y, room + 2, FieldHeight);
         cairo_clip(cr);
+        if (entry.selected) {
+            roundedRect(cr, std::max(start, x + Inset) - 2, middle - 11, std::min(width, room) + 4, 22, 4);
+            setColor(cr, Accent);
+            cairo_fill(cr);
+        }
         setColor(cr, Text);
         leftAligned(cr, entry.text, Font, start, middle);
         cairo_restore(cr);
@@ -158,6 +163,13 @@ void entry(cairo_t* cr, double x, double y, const Entry& entry)
         const std::size_t room = std::size_t((FieldWidth - 48) / (2 * Dot + Gap));
         const std::size_t dots = std::min(entry.typed, room);
         double dotX = x + Inset + Dot;
+        if (entry.selected) {
+            // Behind the dots, as a selection is behind text.
+            const double width = dots * 2 * Dot + (dots - 1) * Gap;
+            roundedRect(cr, x + Inset - 4, middle - Dot - 5, width + 8, 2 * Dot + 10, 4);
+            setColor(cr, Accent);
+            cairo_fill(cr);
+        }
         setColor(cr, Text);
         for (std::size_t i = 0; i < dots; ++i, dotX += 2 * Dot + Gap) {
             cairo_new_path(cr);

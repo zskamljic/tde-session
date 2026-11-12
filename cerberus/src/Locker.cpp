@@ -4,6 +4,7 @@
 #include "Clock.hpp"
 #include "Face.hpp"
 #include "Fingerprint.hpp"
+#include "Lift.hpp"
 #include "LoginHint.hpp"
 #include "Owned.hpp"
 #include "Password.hpp"
@@ -141,6 +142,7 @@ private:
     int m_ticks = 0; // of the clock, to try the fingerprint reader again now and then
     Password m_password;
     Face m_face;
+    Lift m_lift; // of the curtain, as it goes up and down
     bool m_seconds = false; // shown in the clock
     bool m_locked = false;
     bool m_finished = false;
@@ -259,6 +261,7 @@ void Locker::draw(Output& output)
             static_cast<unsigned char*>(buffer->data), CAIRO_FORMAT_ARGB32, width, height, stride));
         const Owned<cairo_t, cairo_destroy> cr(cairo_create(surface.get()));
         cairo_scale(cr.get(), output.scale, output.scale);
+        m_face.lift = m_lift.value();
         cerberus::draw(cr.get(), output.width, output.height, m_face, &output == mainOutput());
     }
 
@@ -451,7 +454,21 @@ void Locker::press(xkb_keysym_t sym, uint32_t key)
             return;
     }
 
+    const bool control = xkb_state_mod_name_is_active(m_state.get(), XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0;
+    // All that was typed, selected: what is typed next takes its place, and Backspace or
+    // Delete takes it away.
+    if (std::exchange(m_face.selected, false) && !control) {
+        if (sym == XKB_KEY_BackSpace || sym == XKB_KEY_Delete || sym == XKB_KEY_KP_Delete) {
+            m_password.clear();
+            sym = XKB_KEY_NoSymbol;
+        } else if (sym != XKB_KEY_Return && sym != XKB_KEY_KP_Enter && sym != XKB_KEY_Escape) {
+            m_password.clear();
+        }
+    }
+
     switch (sym) {
+    case XKB_KEY_NoSymbol:
+        break;
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
         // Kept as typed when it cannot be checked yet, for Enter to try again.
@@ -475,9 +492,11 @@ void Locker::press(xkb_keysym_t sym, uint32_t key)
         m_password.clear();
         break;
     default:
-        if (xkb_state_mod_name_is_active(m_state.get(), XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        if (control) {
             if (sym == XKB_KEY_u)
                 m_password.clear();
+            else if (sym == XKB_KEY_a)
+                m_face.selected = !m_password.empty();
             break;
         }
         char text[64];
@@ -498,6 +517,8 @@ void Locker::setCurtain(bool down)
     if (m_face.curtain == down)
         return;
     m_face.curtain = down;
+    m_face.selected = false;
+    m_lift.set(!down);
     m_idle = 0;
     updateCaret(true);
     drawAll();
@@ -571,11 +592,8 @@ void Locker::fingerprintChanged()
         break;
     }
     // What the reader says is under the curtain.
-    if (m_face.finger == Face::Finger::NoMatch || m_face.finger == Face::Finger::Retry) {
-        m_face.curtain = false;
-        m_idle = 0;
-        updateCaret(true);
-    }
+    if (m_face.finger == Face::Finger::NoMatch || m_face.finger == Face::Finger::Retry)
+        setCurtain(false);
     drawAll();
 }
 
@@ -669,6 +687,7 @@ int Locker::run()
             {m_clockTimer.get(), POLLIN, 0},
             {m_fingerprint->fd(), m_fingerprint->events(), 0},
             {m_caretTimer.get(), POLLIN, 0},
+            {m_lift.fd(), POLLIN, 0},
         };
         if (poll(fds, std::size(fds), m_fingerprint->timeout()) < 0) {
             wl_display_cancel_read(m_display);
@@ -697,6 +716,10 @@ int Locker::run()
                 ++m_face.pulse;
             else
                 m_face.caret = !m_face.caret;
+            drawAll();
+        }
+        if (fds[6].revents & POLLIN) {
+            m_lift.step();
             drawAll();
         }
         if (fds[1].revents & POLLIN) {

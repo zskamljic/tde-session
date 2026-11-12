@@ -46,9 +46,10 @@ notifications, each to be shown with sound, shown silently or not shown at all. 
 are the calendar too and, while a program plays music or video, its controls, which the media keys
 work as well.
 
-The lock screen shows the clock until a key is pressed or the screen clicked; then the password
-field, ringed in the accent colour with a blinking caret while it takes keys, and the key pressed
-already typed. Escape, or half a minute without typing, brings the clock back. With several
+The lock screen shows the clock until a key is pressed or the screen clicked; then the clock slides
+up and fades as the password field rises into its place, ringed in the accent colour with a blinking caret while it takes keys, and the key pressed
+already typed. Ctrl+A selects what was typed, for the next key to replace or Backspace to clear;
+Ctrl+U clears it. Escape, or half a minute without typing, brings the clock back. With several
 screens, the clock and the password show on the one the pointer is on, the others stay plain; a
 minute without input turns them all off, whatever programs ask, until the next key or movement.
 logind knows the session is locked (`loginctl show-session -p LockedHint`).

@@ -16,7 +16,7 @@ add_custom_command(OUTPUT ${code} COMMAND ${WAYLAND_SCANNER} private-code ${xml}
 
 # What the lock screen shares with the login screen, Charon: how both draw, and the password
 # typed into them.
-add_library(cerberus-common STATIC common/Clock.cpp common/Paint.cpp common/Password.cpp)
+add_library(cerberus-common STATIC common/Clock.cpp common/Lift.cpp common/Paint.cpp common/Password.cpp)
 target_include_directories(cerberus-common PUBLIC common)
 target_link_libraries(cerberus-common PUBLIC PkgConfig::PANGOCAIRO)
 

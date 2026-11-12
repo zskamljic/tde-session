@@ -63,6 +63,7 @@ struct Entry {
     bool checking = false; // three dots lit in turn, in place of what was typed
     unsigned pulse = 0; // which of those dots is lit
     bool wrong = false; // drawn in the colour of errors
+    bool selected = false; // all that is typed, as Ctrl+A selects it
 };
 
 // A field `FieldWidth` wide and `FieldHeight` high, round at the ends, with its top left
