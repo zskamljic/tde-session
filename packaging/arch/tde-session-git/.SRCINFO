@@ -11,6 +11,7 @@ pkgbase = tde-session-git
 	makedepends = ninja
 	makedepends = wayland-protocols
 	makedepends = wlr-protocols
+	depends = gdk-pixbuf2
 	depends = glibc
 	depends = layer-shell-qt
 	depends = libcanberra
@@ -19,7 +20,7 @@ pkgbase = tde-session-git
 	depends = libpulse
 	depends = libsecret
 	depends = libstdc++
-	depends = libtde>=0.3.0
+	depends = libtde>=0.4.0
 	depends = libxkbcommon
 	depends = lua
 	depends = openssh
@@ -47,6 +48,9 @@ pkgbase = tde-session-git
 	optdepends = gnome-keyring: remembering the passphrases of SSH keys
 	optdepends = fprintd: unlocking the screen with a finger
 	optdepends = brightnessctl: the keyboard light keys, where the keyboard does not change it itself
+	optdepends = greetd: Charon, the login screen
+	optdepends = accountsservice: names and pictures of people on the login screen
+	optdepends = xorg-xinit: X11 sessions from the login screen
 	provides = tde-session
 	conflicts = tde-session
 	source = tde-session::git+https://github.com/zskamljic/tde-session.git
