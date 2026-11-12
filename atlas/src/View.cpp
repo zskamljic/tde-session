@@ -855,12 +855,15 @@ void XwaylandView::requestSize(int width, int height)
 
 bool XwaylandView::keepsAskedPlace() const
 {
-    // Said in its hints and meant: many programs give a place of 0,0 they never meant, and
-    // windows of their own are placed all the same.
+    // Said in its hints and meant: many programs give a place of 0,0 they never meant. A main
+    // window keeps its place only when the program chose it on purpose, as Java does for a
+    // window it centres itself; one that merely mentions where it is, is placed all the same.
     const xcb_size_hints_t* hints = xsurface->size_hints;
-    const bool says = hints && (hints->flags & (XCB_ICCCM_SIZE_HINT_US_POSITION | XCB_ICCCM_SIZE_HINT_P_POSITION))
-        && (xsurface->x != 0 || xsurface->y != 0);
-    return says
+    if (!hints || (xsurface->x == 0 && xsurface->y == 0))
+        return false;
+    if (hints->flags & XCB_ICCCM_SIZE_HINT_US_POSITION)
+        return true;
+    return (hints->flags & XCB_ICCCM_SIZE_HINT_P_POSITION)
         && (xsurface->parent
             || (xsurface->window_type_len > 0
                 && !wlr_xwayland_surface_has_window_type(xsurface, WLR_XWAYLAND_NET_WM_WINDOW_TYPE_NORMAL)));
