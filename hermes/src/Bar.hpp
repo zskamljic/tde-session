@@ -7,6 +7,7 @@
 #include "Osd.hpp"
 #include "Sounds.hpp"
 #include "SystemStatus.hpp"
+#include "SystemUsage.hpp"
 
 #include <Bluetooth.hpp>
 #include <PowerProfiles.hpp>
@@ -31,6 +32,7 @@ namespace hermes {
 using shell::Window;
 using shell::Windows;
 
+class AppletButton;
 class Banners;
 class CornerButton;
 class Locking;
@@ -60,6 +62,8 @@ protected:
 
 private:
     void updateClock();
+    // Every applet in ~/.config/tde/applets, by the names of their files.
+    void loadApplets();
     // Puts the bar, the notifications and the level indicator on `screen`.
     void placeOn(QScreen* screen);
     void layOut();
@@ -94,6 +98,8 @@ private:
     QElapsedTimer m_calendarClosed; // to tell a click that closed it from one that opens it
     bool m_rebuildPending = false; // the theme changed while a panel was open
     Tray* m_tray = nullptr;
+    SystemUsage m_usage; // what applets read
+    QList<AppletButton*> m_applets; // left of the tray, in order
     QToolButton* m_system = nullptr; // the status icons, which open the quick settings
     Audio m_audio;
     Brightness m_brightness;

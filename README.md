@@ -173,6 +173,52 @@ listen on the network, give it a password and a key first, as its manual says
 (`enable_auth=true`, `username`, `password` and `rsa_private_key_file` in
 `~/.config/wayvnc/config`), and run `wayvnc 0.0.0.0`.
 
+## Applets
+
+Applets are small programs in the bar, left of the tray, written in Lua. Every `.lua` file in
+`~/.config/tde/applets` is one, shown in the order of the files' names; the bar reads them when
+it starts (`systemctl --user restart tde-hermes` after adding one). What goes wrong in one is told
+in the bar's log (`journalctl --user -u tde-hermes`) and leaves the rest of the bar as it was; a
+call that takes longer than 200 ms is stopped.
+
+The file returns a table, which is the applet: each hook gets it as `self`, to keep what it likes
+in.
+
+```lua
+local applet = {
+    width = 150,      -- pixels in the bar; 100 if left out
+    interval = 1000,  -- milliseconds between calls to update; at least 100
+    popup = { width = 520, height = 470 },  -- a panel that opens below when clicked; optional
+}
+
+function applet:update() end           -- every interval, and once at the start
+function applet:paint(canvas) end      -- draws it in the bar
+function applet.popup.paint(self, canvas) end  -- draws the panel
+
+return applet
+```
+
+The global `tde` table tells what the computer is doing, measured since it was last asked, and
+the desktop's colours:
+
+- `tde.cpu()`: `{ total = 12.5, cores = { 30.1, 2.0, ... } }`, how busy each core is, in percent;
+- `tde.memory()`: `{ total, used, swap_total, swap_used }`, in bytes;
+- `tde.network()`: `{ down, up }`, bytes per second through every interface but the loopback;
+- `tde.theme`: `window`, `base`, `header`, `text`, `dim_text`, `accent`, `accent_text`, `border`
+  and `error`, as `"#aarrggbb"`;
+- `tde.api`: 1, the version of all this.
+
+The canvas, `canvas.width` by `canvas.height` pixels, takes colours as `"#rrggbb"` or
+`"#aarrggbb"` and can be drawn on only within `paint`:
+
+- `canvas:rect(x, y, width, height, color [, radius])`, filled, its corners rounded by `radius`;
+- `canvas:line({ x1, y1, x2, y2, ... }, color [, width])`, through the points in turn;
+- `canvas:area({ x1, y1, x2, y2, x3, y3, ... }, color)`, the shape they make, filled;
+- `canvas:text(x, y, width, height, text, color [, { size = 9, bold = false, align = "left" }])`,
+  in the middle of the box from top to bottom, `align` being `"left"`, `"center"` or `"right"`.
+
+Lua's `string`, `table`, `math` and `utf8` are there; files, programs and modules are not.
+
 ## Building
 
 ```sh

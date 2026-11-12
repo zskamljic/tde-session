@@ -5,6 +5,7 @@ find_package(Tde 0.3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CANBERRA REQUIRED IMPORTED_TARGET libcanberra)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
+pkg_search_module(LUA REQUIRED IMPORTED_TARGET lua lua5.5 lua-5.5 lua5.4 lua-5.4 lua54)
 
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_get_variable(WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
@@ -26,14 +27,16 @@ foreach(xml ${WAYLAND_PROTOCOLS}/staging/ext-idle-notify/ext-idle-notify-v1.xml
 endforeach()
 
 # What can be tested without a compositor or a session bus.
-add_library(hermes-core STATIC src/Groups.cpp src/DBusMenu.cpp src/Notifications.cpp)
+add_library(hermes-core STATIC
+    src/Groups.cpp src/DBusMenu.cpp src/Notifications.cpp src/LuaApplet.cpp src/SystemUsage.cpp)
 target_include_directories(hermes-core PUBLIC src)
 target_compile_definitions(hermes-core PRIVATE TDE_SESSION_VERSION="${PROJECT_VERSION}")
-target_link_libraries(hermes-core PUBLIC tde-shell Qt6::Widgets Qt6::DBus)
+target_link_libraries(hermes-core PUBLIC tde-shell Qt6::Widgets Qt6::DBus Tde::Tde PkgConfig::LUA)
 
 add_executable(tde-hermes
     src/main.cpp
     src/Audio.cpp
+    src/AppletButton.cpp
     src/AuthDialog.cpp
     src/Bar.cpp
     src/CornerButton.cpp

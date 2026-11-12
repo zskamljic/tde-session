@@ -1,5 +1,6 @@
 #include "Bar.hpp"
 
+#include "AppletButton.hpp"
 #include "CornerButton.hpp"
 #include "Groups.hpp"
 #include "Locking.hpp"
@@ -20,6 +21,7 @@
 #include <WifiPassword.hpp>
 #include <tde/ConfigWatcher.hpp>
 #include <tde/DesktopConfig.hpp>
+#include <tde/LuaConfig.hpp>
 #include <tde/Dialog.hpp>
 #include <tde/Theme.hpp>
 
@@ -28,6 +30,8 @@
 #include <QActionEvent>
 #include <QApplication>
 #include <QCalendarWidget>
+#include <QDir>
+#include <QFileInfo>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
@@ -145,6 +149,7 @@ Bar::Bar(QWidget* parent)
     m_calendarMenu = createCalendarMenu();
 
     m_tray = new Tray(this);
+    loadApplets();
     m_locking = std::make_unique<Locking>();
     m_powerSaving = std::make_unique<PowerSaving>();
     m_polkit = std::make_unique<PolkitAgent>();
@@ -594,6 +599,21 @@ void Bar::placeOn(QScreen* screen)
     moveLayer(m_keys.osd(), screen);
 }
 
+void Bar::loadApplets()
+{
+    QDir folder(tde::configDirectory() + u"/applets"_s);
+    for (const QFileInfo& file : folder.entryInfoList({u"*.lua"_s}, QDir::Files, QDir::Name)) {
+        auto applet = std::make_unique<LuaApplet>(file.filePath(), m_usage);
+        // One that cannot run is told on stderr and left out.
+        if (!applet->load())
+            continue;
+        auto* button = new AppletButton(std::move(applet), this);
+        button->setStyleSheet(buttonStyle({}));
+        button->show();
+        m_applets << button;
+    }
+}
+
 void Bar::layOut()
 {
     // Shown on another screen while it is being made, before it has its parts.
@@ -608,13 +628,19 @@ void Bar::layOut()
     m_system->setGeometry(QRect(QPoint(area.right() - systemSize.width() + 1, 0), systemSize));
     const QSize traySize(m_tray->sizeHint().width(), height());
     m_tray->setGeometry(QRect(QPoint(m_system->x() - Spacing - traySize.width(), 0), traySize));
+    int appletsX = m_tray->x();
+    for (auto it = m_applets.crbegin(); it != m_applets.crend(); ++it) {
+        const int width = (*it)->sizeHint().width();
+        appletsX -= Spacing + width;
+        (*it)->setGeometry(appletsX, 3, width, height() - 6);
+    }
 
     // The clock in the middle of the screen, unless the applications reach it.
     const QSize clockSize(m_clock->sizeHint().width(), height() - 6);
     int clockX = (width() - clockSize.width()) / 2;
     const int taskbarWidth = m_taskbar->sizeHint().width();
     clockX = std::max(clockX, area.left() + taskbarWidth + Spacing);
-    clockX = std::min(clockX, m_tray->x() - Spacing - clockSize.width());
+    clockX = std::min(clockX, appletsX - Spacing - clockSize.width());
     m_clock->setGeometry(QRect(QPoint(clockX, 3), clockSize));
 
     m_taskbar->setGeometry(

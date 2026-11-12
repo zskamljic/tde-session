@@ -12,3 +12,8 @@ set_tests_properties(tst_dbusmenu PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscr
 add_executable(tst_notifications tst_notifications.cpp)
 target_link_libraries(tst_notifications PRIVATE hermes-core Qt6::Test)
 add_test(NAME tst_notifications COMMAND tst_notifications)
+
+add_executable(tst_applets tst_applets.cpp)
+target_link_libraries(tst_applets PRIVATE hermes-core Qt6::Test)
+add_test(NAME tst_applets COMMAND tst_applets)
+set_tests_properties(tst_applets PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
