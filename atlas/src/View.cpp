@@ -163,7 +163,7 @@ wlr_box View::contentGeometry() const
 
 int View::decorationHeight() const
 {
-    return m_decoration && !fullscreen ? Decoration::TitleHeight : 0;
+    return m_decoration && !fullscreen ? Decoration::titleHeight(server.desktop) : 0;
 }
 
 void View::setDecorated(bool decorated)
@@ -179,6 +179,18 @@ void View::setDecorated(bool decorated)
     if (!mapped || fullscreen)
         return;
     // The program's part stays where it is, the title bar coming or going above it.
+    if (isTiled())
+        setTile(tile);
+    else
+        moveTo(content.x, content.y - decorationHeight());
+}
+
+void View::titleBarResized(const wlr_box& content)
+{
+    updateFrame();
+    if (!mapped || fullscreen)
+        return;
+    // As when the title bar comes or goes, the program's part stays where it was.
     if (isTiled())
         setTile(tile);
     else

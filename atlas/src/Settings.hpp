@@ -65,6 +65,7 @@ struct DesktopSettings {
     std::vector<WindowButton> buttons {WindowButton::Minimize, WindowButton::Maximize, WindowButton::Close};
     std::string cursorTheme; // empty for the one XCURSOR_THEME names, or the default
     int cursorSize = 0; // 0 for the one XCURSOR_SIZE says, or 24
+    bool compactTitleBars = false; // lower title bars, with smaller buttons
 
     bool operator==(const DesktopSettings&) const = default;
 };

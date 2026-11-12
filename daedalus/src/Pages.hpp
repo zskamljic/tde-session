@@ -25,6 +25,7 @@ public:
     void desktopChanged(const tde::DesktopConfig& config) override;
 
 private:
+    QComboBox* m_titleBarSize = nullptr;
     QComboBox* m_buttonSide = nullptr; // of title bars, in the desktop config
 };
 

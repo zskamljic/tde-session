@@ -14,7 +14,11 @@
 namespace atlas {
 namespace {
 
-constexpr int ButtonSize = 26;
+// The buttons' size, for normal and compact title bars.
+int buttonSize(const DesktopSettings& desktop)
+{
+    return desktop.compactTitleBars ? 22 : 26;
+}
 constexpr int ButtonGap = 6;
 constexpr int SideMargin = 8;
 constexpr int CornerRadius = 8;
@@ -130,6 +134,8 @@ Decoration::State Decoration::current() const
         scale = output->output->scale;
     return State {
         .width = frame.width,
+        .height = titleHeight(m_view.server.desktop),
+        .buttonSize = buttonSize(m_view.server.desktop),
         .scale = scale,
         .title = m_view.title(),
         .activated = m_view.activated,
@@ -178,25 +184,26 @@ wlr_box Decoration::buttonBox(Part part, int width) const
         return {};
     const int index = int(found - desktop.buttons.begin());
     const int count = int(desktop.buttons.size());
-    const int x = desktop.buttonsLeft
-        ? SideMargin + index * (ButtonSize + ButtonGap)
-        : width - SideMargin - (count - index) * ButtonSize - (count - index - 1) * ButtonGap;
-    return {x, (TitleHeight - ButtonSize) / 2, ButtonSize, ButtonSize};
+    const int size = buttonSize(desktop);
+    const int height = titleHeight(desktop);
+    const int x = desktop.buttonsLeft ? SideMargin + index * (size + ButtonGap)
+                                      : width - SideMargin - (count - index) * size - (count - index - 1) * ButtonGap;
+    return {x, (height - size) / 2, size, size};
 }
 
 void Decoration::paint(cairo_t* cr, const State& state) const
 {
     // The bar, its top corners rounded unless the window fills a tile of the screen.
-    roundedTop(cr, state.width, TitleHeight, state.square ? 0 : CornerRadius);
+    roundedTop(cr, state.width, state.height, state.square ? 0 : CornerRadius);
     setColor(cr, Header);
     cairo_fill(cr);
     setColor(cr, Border);
-    cairo_rectangle(cr, 0, TitleHeight - 1, state.width, 1);
+    cairo_rectangle(cr, 0, state.height - 1, state.width, 1);
     cairo_fill(cr);
 
     // The title, centred over the whole width but clear of the buttons.
     const int count = int(state.buttons.size());
-    const int buttons = SideMargin + count * ButtonSize + std::max(0, count - 1) * ButtonGap + SideMargin;
+    const int buttons = SideMargin + count * state.buttonSize + std::max(0, count - 1) * ButtonGap + SideMargin;
     const int titleWidth = state.width - 2 * buttons;
     if (titleWidth > 0 && !state.title.empty()) {
         const std::unique_ptr<PangoLayout, decltype(&g_object_unref)> owned(
@@ -216,7 +223,7 @@ void Decoration::paint(cairo_t* cr, const State& state) const
         int textHeight = 0;
         pango_layout_get_pixel_size(layout, &textWidth, &textHeight);
         setColor(cr, state.activated ? Text : DimText);
-        cairo_move_to(cr, buttons, (TitleHeight - textHeight) / 2.0);
+        cairo_move_to(cr, buttons, (state.height - textHeight) / 2.0);
         pango_cairo_show_layout(cr, layout);
     }
 
@@ -286,7 +293,7 @@ void Decoration::paint(cairo_t* cr, const State& state) const
 void Decoration::draw(const State& state)
 {
     const int width = int(std::ceil(state.width * state.scale));
-    const int height = int(std::ceil(TitleHeight * state.scale));
+    const int height = int(std::ceil(state.height * state.scale));
     cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
     {
         const std::unique_ptr<cairo_t, decltype(&cairo_destroy)> cr(cairo_create(surface), &cairo_destroy);
@@ -299,7 +306,7 @@ void Decoration::draw(const State& state)
     auto* buffer = std::make_unique<CairoBuffer>(surface, width, height).release();
     for (wlr_scene_buffer* node : {m_bar, m_captureBar}) {
         wlr_scene_buffer_set_buffer(node, &buffer->base);
-        wlr_scene_buffer_set_dest_size(node, state.width, TitleHeight);
+        wlr_scene_buffer_set_dest_size(node, state.width, state.height);
     }
     // The scene holds on to it as long as it shows it.
     wlr_buffer_drop(&buffer->base);
@@ -341,7 +348,7 @@ Decoration::Part Decoration::partAt(double x, double y, uint32_t* edges) const
                                                       : 0);
         return Part::Edge;
     }
-    if (fy >= TitleHeight)
+    if (fy >= titleHeight(m_view.server.desktop))
         return Part::None;
     for (const Part part : {Part::Minimize, Part::Maximize, Part::Close}) {
         const wlr_box box = buttonBox(part, frame.width);

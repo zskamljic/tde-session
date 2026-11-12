@@ -17,7 +17,8 @@ class View;
 // and close, and around the window lies a margin to resize it by.
 class Decoration {
 public:
-    static constexpr int TitleHeight = 36;
+    // How tall title bars are, as the desktop's config has them: normal or compact.
+    static int titleHeight(const DesktopSettings& desktop) { return desktop.compactTitleBars ? 28 : 36; }
     static constexpr int ResizeMargin = 8; // outside the window, where dragging resizes it
 
     enum class Part { None, Title, Minimize, Maximize, Close, Edge };
@@ -41,6 +42,8 @@ public:
 private:
     struct State {
         int width = 0;
+        int height = 36;
+        int buttonSize = 26;
         float scale = 1;
         std::string title;
         bool activated = false;

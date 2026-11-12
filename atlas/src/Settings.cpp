@@ -253,6 +253,10 @@ DesktopSettings loadDesktopSettings(const std::string& path)
             settings.buttons = std::move(order);
         });
     });
+    table(lua, "title_bars", [&] {
+        if (const auto size = string(lua, "size"))
+            settings.compactTitleBars = *size == "compact";
+    });
     table(lua, "appearance", [&] {
         if (const auto theme = string(lua, "cursor_theme"))
             settings.cursorTheme = *theme;

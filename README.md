@@ -67,7 +67,8 @@ libappindicator or Electron). Programs that still use the old X11 tray can be sh
 `xembedsniproxy` from KDE's plasma-workspace.
 
 Windows draw their own title bars, as they do on GNOME; for those that do not, like most X11
-programs and Qt programs outside TDE, Atlas draws one, and a margin around them to resize them by. X11 programs run through Xwayland,
+programs and Qt programs outside TDE, Atlas draws one, and a margin around them to resize them by. Its title bars and
+the header bars of TDE's programs are normal or compact, as Settings has them. X11 programs run through Xwayland,
 started the first time one connects.
 
 Pick **TDE** on the login screen of GDM, LightDM or any display manager that lists Wayland sessions,

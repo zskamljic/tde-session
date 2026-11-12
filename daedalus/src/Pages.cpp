@@ -70,6 +70,15 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     m_buttonSide = new QComboBox(this);
     m_buttonSide->addItem(u"Right"_s, u"right"_s);
     m_buttonSide->addItem(u"Left"_s, u"left"_s);
+    // How tall title bars are, Atlas's and TDE's programs' header bars alike.
+    m_titleBarSize = new QComboBox(this);
+    m_titleBarSize->addItem(u"Normal"_s, u"normal"_s);
+    m_titleBarSize->addItem(u"Compact"_s, u"compact"_s);
+    connect(m_titleBarSize, &QComboBox::activated, this, [this] {
+        if (!shell::setDesktopString(
+                tde::desktopConfigPath(), u"title_bars"_s, u"size"_s, m_titleBarSize->currentData().toString()))
+            qWarning("tde-daedalus: cannot write %s", qPrintable(tde::desktopConfigPath()));
+    });
     desktopChanged(tde::loadDesktopConfig());
     connect(m_buttonSide, &QComboBox::activated, this, [this] {
         if (!shell::setDesktopString(
@@ -78,6 +87,7 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     });
     Group* titleBars = addGroup(u"Title Bars"_s);
     titleBars->addRow(u"Buttons"_s, u"The end of the title bar that has the window buttons"_s, m_buttonSide);
+    titleBars->addRow(u"Size"_s, u"How tall title bars are, with their buttons"_s, m_titleBarSize);
 
     auto* minimized = new Switch(this);
     minimized->setChecked(config.windows.minimizedInOverview);
@@ -118,6 +128,7 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
 void WindowsPage::desktopChanged(const tde::DesktopConfig& config)
 {
     m_buttonSide->setCurrentIndex(config.windowButtons.side == tde::ButtonSide::Left ? 1 : 0);
+    m_titleBarSize->setCurrentIndex(config.titleBarSize == tde::TitleBarSize::Compact ? 1 : 0);
 }
 
 DateTimePage::DateTimePage(Settings& settings, QWidget* parent)

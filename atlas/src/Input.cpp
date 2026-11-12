@@ -406,10 +406,19 @@ void Server::applySettings()
     if (DesktopSettings changed = loadDesktopSettings(desktopSettingsPath()); changed != desktop) {
         const bool cursorChanged
             = changed.cursorTheme != desktop.cursorTheme || changed.cursorSize != desktop.cursorSize;
+        const bool resized = changed.compactTitleBars != desktop.compactTitleBars;
+        std::vector<wlr_box> contents;
+        for (const auto& view : m_views)
+            contents.push_back(view->contentGeometry());
         desktop = std::move(changed);
-        for (const auto& view : m_views) {
-            if (view->decoration())
-                view->decoration()->update();
+        for (size_t i = 0; i < m_views.size(); ++i) {
+            View& view = *m_views[i];
+            if (!view.decoration())
+                continue;
+            if (resized)
+                view.titleBarResized(contents[i]);
+            else
+                view.decoration()->update();
         }
         if (cursorChanged)
             loadCursorTheme();

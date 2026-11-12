@@ -61,6 +61,8 @@ public:
 
     // Whether the compositor draws the title bar, for programs that do not.
     void setDecorated(bool decorated);
+    // Title bars took another height; `content` is where the program's part was before.
+    void titleBarResized(const wlr_box& content);
     Decoration* decoration() const { return m_decoration.get(); }
     int decorationHeight() const;
     // Lays out and draws the title bar again after the window changed.
