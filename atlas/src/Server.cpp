@@ -1087,8 +1087,8 @@ std::optional<wlr_box> Server::displayBox(const std::string& identity) const
 void Server::rememberPlace(const View& view, std::optional<wlr_box> at)
 {
     // Only an application's own main windows, as it leaves them.
-    if (!view.mapped || view.fullscreen || !view.isMainWindow() || view.parentView() || importedParent(view)
-        || view.appId().empty())
+    if (!view.mapped || view.fullscreen || !view.isMainWindow() || view.fixedSize() || view.parentView()
+        || importedParent(view) || view.appId().empty())
         return;
     const wlr_box box = at ? *at : view.isTiled() && !wlr_box_empty(&view.restore) ? view.restore : view.geometry();
     const Output* output = outputAt(box.x + box.width / 2.0, box.y + box.height / 2.0);
@@ -1109,7 +1109,7 @@ void Server::rememberPlace(const View& view, std::optional<wlr_box> at)
 const RememberedWindow* Server::rememberedPlace(const View& view) const
 {
     // A splash screen shown before the main window goes in the middle, not where that was.
-    if (!view.isMainWindow() || view.parentView() || importedParent(view) || view.appId().empty())
+    if (!view.isMainWindow() || view.fixedSize() || view.parentView() || importedParent(view) || view.appId().empty())
         return nullptr;
     const RememberedWindow* kept = m_windowMemory.find(view.appId());
     if (!kept || !displayBox(kept->display))

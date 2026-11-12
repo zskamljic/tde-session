@@ -92,6 +92,9 @@ public:
     // Whether it is a main window of its program, the kind whose place is kept for the next
     // one, rather than a splash screen, a toolbox or the like that X11 tells apart.
     virtual bool isMainWindow() const { return true; }
+    // Whether the program keeps the window at one size, as with an updater's progress, which
+    // is then no main window: it takes neither the place nor the tile its application had.
+    virtual bool fixedSize() const { return false; }
 
 protected:
     virtual wlr_box size() const = 0; // width and height; x and y are ignored
@@ -166,6 +169,7 @@ public:
     View* parentView() const override;
     int minimumWidth() const override;
     int minimumHeight() const override;
+    bool fixedSize() const override;
     void close() override;
 
     // The window's say in who draws its title bar, through xdg-decoration.
@@ -216,6 +220,7 @@ public:
     View* parentView() const override;
     int minimumWidth() const override;
     int minimumHeight() const override;
+    bool fixedSize() const override;
     void close() override;
 
     wlr_xwayland_surface* xsurface;

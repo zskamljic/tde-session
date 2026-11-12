@@ -631,6 +631,13 @@ int XdgView::minimumHeight() const
     return std::max(toplevel->current.min_height, 1);
 }
 
+bool XdgView::fixedSize() const
+{
+    const wlr_xdg_toplevel_state& state = toplevel->current;
+    return state.min_width > 0 && state.min_width == state.max_width && state.min_height > 0
+        && state.min_height == state.max_height;
+}
+
 void XdgView::close()
 {
     wlr_xdg_toplevel_send_close(toplevel);
@@ -833,6 +840,14 @@ int XwaylandView::minimumHeight() const
 {
     const xcb_size_hints_t* hints = xsurface->size_hints;
     return hints && (hints->flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE) ? std::max(hints->min_height, 1) : 1;
+}
+
+bool XwaylandView::fixedSize() const
+{
+    const xcb_size_hints_t* hints = xsurface->size_hints;
+    constexpr uint32_t both = XCB_ICCCM_SIZE_HINT_P_MIN_SIZE | XCB_ICCCM_SIZE_HINT_P_MAX_SIZE;
+    return hints && (hints->flags & both) == both && hints->min_width > 0 && hints->min_width == hints->max_width
+        && hints->min_height > 0 && hints->min_height == hints->max_height;
 }
 
 void XwaylandView::close()
