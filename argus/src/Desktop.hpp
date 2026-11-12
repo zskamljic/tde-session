@@ -56,6 +56,7 @@ private:
     shell::Displays m_displays;
     shell::SessionConfig::Displays m_displaySettings;
     int m_animationTime = 250;
+    bool m_showsMinimized = false;
     QPointer<QScreen> m_primary;
     std::vector<Screen> m_screens;
 };

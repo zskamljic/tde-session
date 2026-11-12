@@ -23,8 +23,11 @@ Desktop::~Desktop() = default;
 void Desktop::setSettings(const shell::SessionConfig& config)
 {
     m_animationTime = config.animations.overview;
-    for (const Screen& screen : m_screens)
+    m_showsMinimized = config.windows.minimizedInOverview;
+    for (const Screen& screen : m_screens) {
         screen.overview->setAnimationTime(m_animationTime);
+        screen.overview->setShowsMinimized(m_showsMinimized);
+    }
     if (config.displays != m_displaySettings) {
         m_displaySettings = config.displays;
         sync();
@@ -46,6 +49,7 @@ void Desktop::sync()
         entry.background->show();
         entry.overview = std::make_unique<Overview>(m_toplevels, m_wallpaper, screen, screen == primary);
         entry.overview->setAnimationTime(m_animationTime);
+        entry.overview->setShowsMinimized(m_showsMinimized);
         connect(entry.overview.get(), &Overview::closeRequested, this, [this](quint64 chosen) {
             for (const Screen& other : m_screens)
                 other.overview->closeOnto(chosen);

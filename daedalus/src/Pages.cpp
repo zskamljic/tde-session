@@ -79,10 +79,19 @@ WindowsPage::WindowsPage(Settings& settings, QWidget* parent)
     Group* titleBars = addGroup(u"Title Bars"_s);
     titleBars->addRow(u"Buttons"_s, u"The end of the title bar that has the window buttons"_s, m_buttonSide);
 
+    auto* minimized = new Switch(this);
+    minimized->setChecked(config.windows.minimizedInOverview);
+    connect(minimized, &Switch::toggled, this, [&settings](bool on) {
+        settings.config.windows.minimizedInOverview = on;
+        settings.save();
+    });
+
     Group* desktop = addGroup(u"Desktop"_s);
     desktop->addRow(u"Hot corner"_s,
         u"Pushing the pointer into the top left corner, or clicking the button there; doing it again undoes it"_s,
         corner);
+    desktop->addRow(u"Minimized windows in the overview"_s,
+        u"Off, a minimized window comes back only from its button in the bar"_s, minimized);
 
     Group* animations = addGroup(u"Animations"_s);
     const auto duration = [&](const QString& title, const QString& subtitle, int& value) {

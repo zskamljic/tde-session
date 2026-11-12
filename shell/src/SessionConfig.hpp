@@ -38,6 +38,8 @@ struct SessionConfig {
         enum class Corner { Overview, Desktop, Off };
 
         Corner corner = Corner::Overview; // the overview, as Super opens it
+        // Off, a minimized window is left out of the overview and comes back from the bar only.
+        bool minimizedInOverview = false;
 
         bool operator==(const Windows&) const = default;
     } windows;

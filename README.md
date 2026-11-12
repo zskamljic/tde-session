@@ -20,7 +20,8 @@ The desktop session of TDE, tofiffe's desktop environment:
 The bar shows the running applications the way Windows 7 did, a button each with a dot below
 for every window. A click switches to the application's window or, when it is active,
 minimizes it; with several windows, clicks go through them. A middle click opens another
-window, and a right click lists the windows.
+window, and a right click lists the windows. Minimized windows stay out of the overview and come
+back from their button in the bar, unless Settings shows them in the overview too.
 
 The status icons on the right, with the battery's charge and whether it charges, open the
 quick settings, much as GNOME's: at the top the battery and buttons to open the settings, lock

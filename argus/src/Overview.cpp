@@ -347,6 +347,8 @@ bool Overview::showsAllApplications() const
 
 bool Overview::showsWindow(const Toplevel& window) const
 {
+    if (window.minimized && !m_showsMinimized)
+        return false;
     const QPoint centre = window.frame.center();
     if (window.frame.isEmpty() || !QGuiApplication::screenAt(centre))
         return m_primary;

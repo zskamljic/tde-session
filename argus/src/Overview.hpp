@@ -50,6 +50,7 @@ public:
 
     // How long it takes to open or close, in milliseconds.
     void setAnimationTime(int milliseconds) { m_animationTime = milliseconds; }
+    void setShowsMinimized(bool shows) { m_showsMinimized = shows; }
 
     bool isOpen() const { return (isVisible() && !m_closing) || m_opening; }
     bool showsAllApplications() const;
@@ -121,6 +122,7 @@ private:
     // How far it is shown, from 0 with the windows where they are to 1 with them in place.
     shell::Tween m_shown;
     int m_animationTime = 250;
+    bool m_showsMinimized = false; // minimized windows among the others
     bool m_opening = false; // waiting for the pictures and places of the windows
     bool m_closing = false;
     quint64 m_chosen = 0; // the window it closes onto, drawn above the others

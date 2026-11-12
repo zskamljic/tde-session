@@ -123,6 +123,8 @@ SessionConfig loadSessionConfig(const QString& path)
             // Before it did more, it showed the desktop or nothing.
             else if (const auto hotCorner = reader.boolean("hot_corner"); hotCorner && !*hotCorner)
                 config.windows.corner = Corner::Off;
+            if (const auto minimized = reader.boolean("minimized_in_overview"))
+                config.windows.minimizedInOverview = *minimized;
         });
         reader.table("animations", [&] {
             auto& animations = config.animations;
@@ -260,6 +262,8 @@ bool saveSessionConfig(const SessionConfig& config, const QString& path)
         u"        -- does: \"overview\" opens it, as Super does, \"desktop\" shows the desktop, and again"_s,
         u"        -- brings the windows back, \"off\" leaves the corner alone."_s,
         u"        corner = %1,"_s.arg(tde::luaString(tde::choiceName<Corner>(corners, config.windows.corner))),
+        u"        -- Whether minimized windows show in the overview; otherwise only the bar brings them back."_s,
+        u"        minimized_in_overview = %1,"_s.arg(boolText(config.windows.minimizedInOverview)),
         u"    },"_s,
         u"    animations = {"_s,
         u"        -- How long they take, in milliseconds, up to %1; 0 leaves them out."_s.arg(MaxDuration),

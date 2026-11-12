@@ -27,6 +27,7 @@ private slots:
         config.switcher.style = shell::SessionConfig::Switcher::Style::Icons;
         config.clock.seconds = true;
         config.windows.corner = shell::SessionConfig::Windows::Corner::Desktop;
+        config.windows.minimizedInOverview = true;
         config.power = {.blank = 0, .suspend = 45, .suspendOnBattery = 10};
         config.animations = {.overview = 0, .flip = 600, .flipStep = 90, .windows = 120};
         config.input.keyboard.numLock = shell::SessionConfig::Input::Keyboard::NumLock::On;
