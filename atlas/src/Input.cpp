@@ -28,6 +28,13 @@ namespace {
 constexpr uint32_t BindingModifiers = WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO;
 constexpr int SnapEdge = 4; // pixels from the screen edge where a dragged window snaps
 
+// How far behind its own serial a copy is remembered. A copy asked for with a serial older than
+// the remembered one is dropped without a word to the one asking, which then believes the
+// clipboard its own and pastes that old text for as long as it runs. A terminal copying for a
+// program, well after the last key it was given, asks so; and a clipboard tool takes a serial
+// newer than any key. With this much slack the copy that arrives last is the one kept.
+constexpr uint32_t SelectionSerialSlack = 1u << 30;
+
 // What changes to a watched folder are of interest: files written, moved in, made or removed.
 constexpr uint32_t WatchedChanges = IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE;
 
@@ -220,11 +227,11 @@ void Server::setUpInput()
         });
     m_requestSelection.connect<wlr_seat_request_set_selection_event>(
         seat->events.request_set_selection, [this](wlr_seat_request_set_selection_event* event) {
-            wlr_seat_set_selection(seat, event->source, event->serial);
+            wlr_seat_set_selection(seat, event->source, event->serial - SelectionSerialSlack);
         });
     m_requestPrimarySelection.connect<wlr_seat_request_set_primary_selection_event>(
         seat->events.request_set_primary_selection, [this](wlr_seat_request_set_primary_selection_event* event) {
-            wlr_seat_set_primary_selection(seat, event->source, event->serial);
+            wlr_seat_set_primary_selection(seat, event->source, event->serial - SelectionSerialSlack);
         });
 
     // Drag and drop between windows; the dragged icon follows the pointer.
