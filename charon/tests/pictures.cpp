@@ -29,6 +29,13 @@ int main(int argc, char** argv)
     const std::string folder = argc > 1 ? argv[1] : ".";
     Screen screen;
     screen.clock = "Wed 4 Nov  12:34";
+    screen.time = "12:34";
+    screen.date = "Wednesday, 4 November";
+    save(screen, folder + "/curtain.png");
+
+    // Under the curtain from here on.
+    screen.curtain = false;
+    screen.lift = 1;
     screen.people = {{"Žan Skamljič"}, {"Guest"}, {"Ana"}};
     screen.selected = 0;
     screen.powerActions = {"Suspend", "Restart", "Power Off"};
@@ -44,6 +51,17 @@ int main(int argc, char** argv)
     screen.question = "Password";
     screen.typed = 6;
     save(screen, folder + "/password.png");
+
+    screen.answerSelected = true;
+    save(screen, folder + "/selected.png");
+    screen.answerSelected = false;
+
+    // Halfway up, the clock going and the password coming.
+    screen.curtain = true;
+    screen.lift = 0.5;
+    save(screen, folder + "/lifting.png");
+    screen.curtain = false;
+    screen.lift = 1;
 
     screen.typed = 0;
     screen.wrong = true;
@@ -65,6 +83,8 @@ int main(int argc, char** argv)
 
     screen = {};
     screen.clock = "Wed 4 Nov  12:34";
+    screen.curtain = false;
+    screen.lift = 1;
     screen.stage = Screen::Stage::Username;
     screen.question = "Username";
     screen.secret = false;

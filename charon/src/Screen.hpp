@@ -34,6 +34,11 @@ struct Screen {
 
     Stage stage = Stage::Users;
     std::string clock; // the day and the time, at the top
+    // The clock alone, as when the login screen comes; a key or a click lifts it.
+    bool curtain = true;
+    double lift = 0; // how far up the curtain is as it goes, from 0 down to 1 up
+    std::string time; // large on the curtain
+    std::string date;
     std::vector<Person> people;
     int selected = 0; // of the people, whom Enter picks
     Target hover; // under the pointer
@@ -43,6 +48,7 @@ struct Screen {
     std::string question; // as PAM asks it, such as "Password"
     bool secret = true; // typed as dots
     std::size_t typed = 0; // characters of a secret answer
+    bool answerSelected = false; // all of the answer, as Ctrl+A selects it
     std::string text; // what is typed of an answer that may be seen
     bool checking = false; // what was typed is with PAM
     unsigned pulse = 0;

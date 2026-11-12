@@ -78,7 +78,9 @@ or log in with TDE's own.
 ## Logging in
 
 **Charon** (`tde-charon`) is TDE's login screen, for [greetd](https://sr.ht/~kennylevinsen/greetd/),
-in place of GDM; it looks like the lock screen. It lists the people who can log in, by name and
+in place of GDM; it looks like the lock screen, and as there, the clock shows first, until a key
+or a click lifts it, and comes back after half a minute with nothing typed or with Escape at the
+list. It lists the people who can log in, by name and
 picture as AccountsService knows them, with "Not listed?" to type a name; the one who logged in
 last is asked for their password at once, and the arrow beside it goes back to the list. Under the
 password is the session to start, TDE or any other Wayland session, and X11 ones when

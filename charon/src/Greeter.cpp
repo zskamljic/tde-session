@@ -1,6 +1,7 @@
 #include "Greeter.hpp"
 
 #include "Greetd.hpp"
+#include "Lift.hpp"
 #include "Power.hpp"
 #include "Screen.hpp"
 #include "Sessions.hpp"
@@ -174,6 +175,8 @@ private:
     void stopRepeat();
     void updateCaret(bool restart);
     void tickClock();
+    // Shows what is under the curtain, or the curtain again.
+    void setCurtain(bool down);
     void pointerAt(wl_surface* surface, double x, double y);
     void click();
     void setScreensOn(bool on);
@@ -222,6 +225,8 @@ private:
     FileDescriptor m_caretTimer;
     bool m_blinking = false;
     bool m_pulsing = false;
+    cerberus::Lift m_lift; // of the curtain, as it goes up and down
+    int m_idle = 0; // seconds with nothing typed while the curtain is up, until it falls
 
     Greetd m_greetd;
     // What was asked of greetd, for what its reply means.
@@ -401,6 +406,7 @@ void Greeter::draw(Output& output)
         const bool main = &output == mainOutput();
         if (main)
             m_targets.clear();
+        m_screen.lift = m_lift.value();
         charon::draw(cr.get(), output.width, output.height, m_screen, main, main ? &m_targets : nullptr);
     }
     static const wl_buffer_listener listener {
@@ -610,6 +616,13 @@ void Greeter::press(xkb_keysym_t sym, uint32_t key)
     const bool enter = sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter;
     const bool up = sym == XKB_KEY_Up || sym == XKB_KEY_KP_Up;
     const bool down = sym == XKB_KEY_Down || sym == XKB_KEY_KP_Down;
+    m_idle = 0;
+    // The first key lifts the curtain; one that types something types it into the answer too.
+    if (m_screen.curtain) {
+        setCurtain(false);
+        if (enter || up || down || sym == XKB_KEY_BackSpace || sym == XKB_KEY_Escape)
+            return;
+    }
 
     // An open menu has the keys.
     if (m_screen.powerOpen || m_screen.sessionsOpen) {
@@ -629,6 +642,10 @@ void Greeter::press(xkb_keysym_t sym, uint32_t key)
 
     if (m_screen.stage == Screen::Stage::Users) {
         const int count = int(m_users.size());
+        if (sym == XKB_KEY_Escape) {
+            setCurtain(true);
+            return;
+        }
         if (up || down) {
             m_screen.selected = std::clamp(m_screen.selected + (up ? -1 : 1), 0, std::max(0, count - 1));
         } else if (enter && m_screen.selected < count) {
@@ -645,7 +662,20 @@ void Greeter::press(xkb_keysym_t sym, uint32_t key)
             back();
         return;
     }
+    const bool control = xkb_state_mod_name_is_active(m_state.get(), XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0;
+    // All of the answer, selected: what is typed next takes its place, and Backspace or Delete
+    // takes it away.
+    if (std::exchange(m_screen.answerSelected, false) && !control) {
+        if (sym == XKB_KEY_BackSpace || sym == XKB_KEY_Delete || sym == XKB_KEY_KP_Delete) {
+            clearAnswer();
+            sym = XKB_KEY_NoSymbol;
+        } else if (!enter && sym != XKB_KEY_Escape) {
+            clearAnswer();
+        }
+    }
     switch (sym) {
+    case XKB_KEY_NoSymbol:
+        break;
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
         submit();
@@ -670,9 +700,11 @@ void Greeter::press(xkb_keysym_t sym, uint32_t key)
         clearAnswer();
         break;
     default: {
-        if (xkb_state_mod_name_is_active(m_state.get(), XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        if (control) {
             if (sym == XKB_KEY_u)
                 clearAnswer();
+            else if (sym == XKB_KEY_a)
+                m_screen.answerSelected = !m_secret.empty() || !m_screen.text.empty();
             break;
         }
         char text[64];
@@ -697,6 +729,7 @@ void Greeter::press(xkb_keysym_t sym, uint32_t key)
 
 void Greeter::clearAnswer()
 {
+    m_screen.answerSelected = false;
     m_secret.clear();
     explicit_bzero(m_screen.text.data(), m_screen.text.size());
     m_screen.text.clear();
@@ -726,7 +759,7 @@ void Greeter::updateCaret(bool restart)
 {
     const bool checking = m_screen.checking;
     const bool typing = m_screen.stage != Screen::Stage::Users;
-    const bool wanted = typing && (m_screen.focused || checking);
+    const bool wanted = typing && !m_screen.curtain && (m_screen.focused || checking);
     if (restart)
         m_screen.caret = true;
     if (wanted == m_blinking && checking == m_pulsing && !restart)
@@ -743,11 +776,34 @@ void Greeter::updateCaret(bool restart)
 
 void Greeter::tickClock()
 {
+    // Left alone with nothing typed, all goes behind the curtain again.
+    const bool menus = m_screen.powerOpen || m_screen.sessionsOpen;
+    if (!m_screen.curtain && m_secret.empty() && m_screen.text.empty() && !m_screen.checking && !menus
+        && ++m_idle >= 30)
+        setCurtain(true);
     std::string clock = cerberus::formatted("%a %-d %b") + "  " + cerberus::timeText(false);
-    if (clock != m_screen.clock) {
+    std::string time = cerberus::timeText(false);
+    std::string date = cerberus::formatted("%A, %-d %B");
+    if (clock != m_screen.clock || time != m_screen.time || date != m_screen.date) {
         m_screen.clock = std::move(clock);
+        m_screen.time = std::move(time);
+        m_screen.date = std::move(date);
         drawAll();
     }
+}
+
+void Greeter::setCurtain(bool down)
+{
+    if (m_screen.curtain == down)
+        return;
+    m_screen.curtain = down;
+    m_screen.answerSelected = false;
+    m_screen.powerOpen = m_screen.sessionsOpen = false;
+    m_screen.hover = {};
+    m_idle = 0;
+    m_lift.set(!down);
+    updateCaret(true);
+    drawAll();
 }
 
 void Greeter::pointerAt(wl_surface* surface, double x, double y)
@@ -780,6 +836,12 @@ void Greeter::pointerAt(wl_surface* surface, double x, double y)
 
 void Greeter::click()
 {
+    m_idle = 0;
+    // A click lifts the curtain, and does nothing more.
+    if (m_screen.curtain) {
+        setCurtain(false);
+        return;
+    }
     const Target target = m_screen.hover;
     // A click anywhere else closes a menu.
     const bool inMenu = target.kind == Target::Kind::PowerItem || target.kind == Target::Kind::SessionItem;
@@ -1090,6 +1152,7 @@ int Greeter::run()
             {m_repeatTimer.get(), POLLIN, 0},
             {m_clockTimer.get(), POLLIN, 0},
             {m_caretTimer.get(), POLLIN, 0},
+            {m_lift.fd(), POLLIN, 0},
         };
         if (poll(fds, std::size(fds), -1) < 0) {
             wl_display_cancel_read(m_display);
@@ -1120,6 +1183,10 @@ int Greeter::run()
         }
         if ((fds[3].revents & POLLIN) && read(m_clockTimer.get(), &expirations, sizeof(expirations)) > 0)
             tickClock();
+        if (fds[5].revents & POLLIN) {
+            m_lift.step();
+            drawAll();
+        }
         if ((fds[4].revents & POLLIN) && read(m_caretTimer.get(), &expirations, sizeof(expirations)) > 0
             && m_blinking) {
             if (m_pulsing)

@@ -1,5 +1,7 @@
 #include "Screen.hpp"
 
+#include "Lift.hpp"
+
 #include <Paint.hpp>
 
 #include <cairo.h>
@@ -135,6 +137,7 @@ double drawField(cairo_t* cr, const Screen& screen, double centreX, double y, st
     Entry field;
     field.placeholder = screen.question;
     field.typed = screen.typed;
+    field.selected = screen.answerSelected;
     field.text = screen.text;
     field.visible = !screen.secret;
     field.focused = screen.focused;
@@ -217,46 +220,65 @@ void draw(cairo_t* cr, int width, int height, const Screen& screen, bool main, s
         return;
     const double centreX = width / 2.0;
 
-    setColor(cr, DimText);
-    centred(cr, screen.clock, "Sans Bold 13", centreX, 24);
-
-    // Suspending, restarting and turning off, in a menu at the top right, as GNOME has it.
-    constexpr double Button = 36;
-    const double powerX = width - 20 - Button / 2;
-    const double powerY = 20 + Button / 2;
-    if (!screen.powerActions.empty()) {
-        roundButton(cr, powerX, powerY, Button, hovered(screen, Target::Kind::Power) || screen.powerOpen);
-        powerSymbol(cr, powerX, powerY, 7);
-        addTarget(targets, Target::Kind::Power, 0, powerX - Button / 2, powerY - Button / 2, Button, Button);
-    }
-
-    if (screen.stage == Screen::Stage::Users)
-        drawUsers(cr, width, height, screen, targets);
-    else
-        drawPrompt(cr, width, height, screen, targets);
-
-    if (!screen.notice.empty()) {
+    // The clock and how to go on, rising and fading as what is under it rises into its place.
+    const double rise = height * 0.12;
+    const cerberus::Shown clock = cerberus::clockShown(screen.lift, rise);
+    cerberus::faded(cr, clock.alpha, clock.dy, [&] {
+        double y = height * 0.30;
+        setColor(cr, Text);
+        y += centred(cr, screen.time, "Sans Light 80", centreX, y);
         setColor(cr, DimText);
-        centred(cr, screen.notice, "Sans 10", centreX, height - 40);
-    }
+        centred(cr, screen.date, "Sans 17", centreX, y + 4);
+        centred(cr, "Press a key or click to log in", "Sans 11", centreX, height * 0.85);
+    });
 
-    // Menus over the rest, and taking clicks before it.
-    if (screen.sessionsOpen && targets) {
-        const auto pill = std::ranges::find(*targets, Target::Kind::Session, &Target::kind);
-        if (pill != targets->end()) {
-            constexpr double MenuWidth = 260;
-            const double menuHeight = screen.sessions.size() * MenuItem + 12;
-            const double below = pill->y + pill->height + 6;
-            const double top = below + menuHeight <= height - 8 ? below : pill->y - 6 - menuHeight;
-            menu(cr, screen, centreX - MenuWidth / 2, top, MenuWidth, screen.sessions, screen.session,
-                Target::Kind::SessionItem, targets);
+    // What can be clicked only once it is in its place.
+    std::vector<Target> moving;
+    if (screen.lift < 1)
+        targets = targets ? &moving : nullptr;
+    const cerberus::Shown under = cerberus::underShown(screen.lift, rise);
+    cerberus::faded(cr, under.alpha, under.dy, [&] {
+        setColor(cr, DimText);
+        centred(cr, screen.clock, "Sans Bold 13", centreX, 24);
+
+        // Suspending, restarting and turning off, in a menu at the top right, as GNOME has it.
+        constexpr double Button = 36;
+        const double powerX = width - 20 - Button / 2;
+        const double powerY = 20 + Button / 2;
+        if (!screen.powerActions.empty()) {
+            roundButton(cr, powerX, powerY, Button, hovered(screen, Target::Kind::Power) || screen.powerOpen);
+            powerSymbol(cr, powerX, powerY, 7);
+            addTarget(targets, Target::Kind::Power, 0, powerX - Button / 2, powerY - Button / 2, Button, Button);
         }
-    }
-    if (screen.powerOpen) {
-        constexpr double MenuWidth = 200;
-        menu(cr, screen, width - 20 - MenuWidth, powerY + Button / 2 + 8, MenuWidth, screen.powerActions, -1,
-            Target::Kind::PowerItem, targets);
-    }
+
+        if (screen.stage == Screen::Stage::Users)
+            drawUsers(cr, width, height, screen, targets);
+        else
+            drawPrompt(cr, width, height, screen, targets);
+
+        if (!screen.notice.empty()) {
+            setColor(cr, DimText);
+            centred(cr, screen.notice, "Sans 10", centreX, height - 40);
+        }
+
+        // Menus over the rest, and taking clicks before it.
+        if (screen.sessionsOpen && targets) {
+            const auto pill = std::ranges::find(*targets, Target::Kind::Session, &Target::kind);
+            if (pill != targets->end()) {
+                constexpr double MenuWidth = 260;
+                const double menuHeight = screen.sessions.size() * MenuItem + 12;
+                const double below = pill->y + pill->height + 6;
+                const double top = below + menuHeight <= height - 8 ? below : pill->y - 6 - menuHeight;
+                menu(cr, screen, centreX - MenuWidth / 2, top, MenuWidth, screen.sessions, screen.session,
+                    Target::Kind::SessionItem, targets);
+            }
+        }
+        if (screen.powerOpen) {
+            constexpr double MenuWidth = 200;
+            menu(cr, screen, width - 20 - MenuWidth, powerY + Button / 2 + 8, MenuWidth, screen.powerActions, -1,
+                Target::Kind::PowerItem, targets);
+        }
+    });
 }
 
 } // namespace charon
