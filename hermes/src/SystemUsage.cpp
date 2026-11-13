@@ -8,7 +8,9 @@
 namespace hermes {
 namespace {
 
-constexpr qint64 Fresh = 250; // ms that a reading is told again rather than taken anew
+// ms that a reading is told again rather than taken anew, as when two applets ask in the same
+// moment; well under the shortest interval, or a timer going off a little early repeats one.
+constexpr qint64 Fresh = 50;
 
 QByteArray readProc(const char* path)
 {
