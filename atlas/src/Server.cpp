@@ -682,6 +682,18 @@ void Server::popupDestroyed(Popup& popup)
     std::erase_if(m_popups, [&](const auto& p) { return p.get() == &popup; });
 }
 
+void Server::closePopupsOutside(wl_client* client)
+{
+    // One at a time, as closing one takes those opened from it along and out of the list.
+    for (std::size_t left = m_popups.size(); left > 0; --left) {
+        const auto other = std::ranges::find_if(
+            m_popups, [client](const auto& p) { return wl_resource_get_client(p->popup->resource) != client; });
+        if (other == m_popups.end())
+            return;
+        wlr_xdg_popup_destroy((*other)->popup);
+    }
+}
+
 View* Server::focusedView() const
 {
     wlr_surface* surface = seat->keyboard_state.focused_surface;
@@ -760,6 +772,11 @@ void Server::focusSurface(wlr_surface* surface)
     // While locked, the keyboard is the lock screen's alone.
     if (m_locked && !(m_lock && m_lock->owns(surface)))
         return;
+    // A menu open in another program holds on to the keyboard, and wlroots keeps it there
+    // whatever is given it meanwhile, so that a screenshot or the lock screen would come up
+    // deaf to keys: the menu closes, as menus do when something else comes to the front.
+    if (seat->keyboard_state.grab != seat->keyboard_state.default_grab)
+        closePopupsOutside(wl_resource_get_client(surface->resource));
     if (wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat)) {
         // A key a binding took, such as the Tab of Alt+Tab, may still be down as the window
         // comes back; its release never reaches the window, so its press must not either, or

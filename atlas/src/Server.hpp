@@ -135,6 +135,8 @@ public:
     void turnOn(Output& output);
     void newPopup(wlr_xdg_popup* popup);
     void popupDestroyed(Popup& popup);
+    // Closes the menus of every program but `client`'s.
+    void closePopupsOutside(wl_client* client);
     void keyboardDestroyed(Keyboard& keyboard);
     void pointerDestroyed(Pointer& pointer);
     void unmanagedDestroyed(Unmanaged& surface);
