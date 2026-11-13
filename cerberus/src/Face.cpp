@@ -24,7 +24,7 @@ void draw(cairo_t* cr, int width, int height, const Face& face, bool main)
     // The clock and how to go on, rising and fading as the password rises into its place.
     const double rise = height * 0.12;
     const Shown clock = clockShown(face.lift, rise);
-    faded(cr, clock.alpha, clock.dy, [&] {
+    faded(cr, clock.alpha, clock.dy, [&](cairo_t* cr) {
         double y = height * 0.30;
         setColor(cr, Text);
         y += centred(cr, face.time, "Sans Light 80", centreX, y);
@@ -36,7 +36,7 @@ void draw(cairo_t* cr, int width, int height, const Face& face, bool main)
     });
 
     const Shown under = underShown(face.lift, rise);
-    faded(cr, under.alpha, under.dy, [&] {
+    faded(cr, under.alpha, under.dy, [&](cairo_t* cr) {
         setColor(cr, DimText);
         centred(cr, face.time, "Sans Bold 13", centreX, 24);
 

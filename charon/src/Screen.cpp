@@ -223,7 +223,7 @@ void draw(cairo_t* cr, int width, int height, const Screen& screen, bool main, s
     // The clock and how to go on, rising and fading as what is under it rises into its place.
     const double rise = height * 0.12;
     const cerberus::Shown clock = cerberus::clockShown(screen.lift, rise);
-    cerberus::faded(cr, clock.alpha, clock.dy, [&] {
+    cerberus::faded(cr, clock.alpha, clock.dy, [&](cairo_t* cr) {
         double y = height * 0.30;
         setColor(cr, Text);
         y += centred(cr, screen.time, "Sans Light 80", centreX, y);
@@ -237,7 +237,7 @@ void draw(cairo_t* cr, int width, int height, const Screen& screen, bool main, s
     if (screen.lift < 1)
         targets = targets ? &moving : nullptr;
     const cerberus::Shown under = cerberus::underShown(screen.lift, rise);
-    cerberus::faded(cr, under.alpha, under.dy, [&] {
+    cerberus::faded(cr, under.alpha, under.dy, [&](cairo_t* cr) {
         setColor(cr, DimText);
         centred(cr, screen.clock, "Sans Bold 13", centreX, 24);
 

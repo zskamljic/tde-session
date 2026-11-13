@@ -34,8 +34,8 @@ private:
     long long m_started = 0; // ms, monotonic
 };
 
-// Draws what `paint` draws, faded to `alpha` and moved down by `dy`, or nothing when it would
-// not be seen.
+// Draws what `paint` draws on the cairo_t it is given, faded to `alpha` and moved down by
+// `dy`, or nothing when it would not be seen.
 template <typename Paint> void faded(cairo_t* cr, double alpha, double dy, Paint paint);
 
 // How far a lift has gone, as each part shows it: the clock fades out and rises by `rise`,
@@ -51,6 +51,8 @@ Shown underShown(double lift, double rise);
 
 #include <cairo.h>
 
+#include <cmath>
+
 namespace cerberus {
 
 template <typename Paint> void faded(cairo_t* cr, double alpha, double dy, Paint paint)
@@ -58,14 +60,43 @@ template <typename Paint> void faded(cairo_t* cr, double alpha, double dy, Paint
     if (alpha <= 0.001)
         return;
     if (alpha >= 0.999 && dy == 0) {
-        paint();
+        paint(cr);
         return;
     }
-    cairo_push_group(cr);
+    cairo_save(cr);
     cairo_translate(cr, 0, dy);
-    paint();
+    // Faded as a whole, but only over as much of the screen as it covers: a group the size of
+    // the screen, twice over every frame, is more than a laptop draws in time. What it covers
+    // is found by drawing it first where nothing is painted.
+    cairo_matrix_t matrix;
+    cairo_get_matrix(cr, &matrix);
+    cairo_surface_t* recording = cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, nullptr);
+    cairo_t* measure = cairo_create(recording);
+    cairo_set_matrix(measure, &matrix);
+    paint(measure);
+    cairo_destroy(measure);
+    double x = 0;
+    double y = 0;
+    double width = 0;
+    double height = 0;
+    cairo_recording_surface_ink_extents(recording, &x, &y, &width, &height);
+    cairo_surface_destroy(recording);
+    if (width <= 0 || height <= 0) {
+        cairo_restore(cr);
+        return;
+    }
+    // Text there is laid out without hinting, so a little to spare.
+    constexpr double Margin = 16;
+    cairo_identity_matrix(cr);
+    cairo_rectangle(cr, std::floor(x - Margin), std::floor(y - Margin), std::ceil(width + 2 * Margin),
+        std::ceil(height + 2 * Margin));
+    cairo_clip(cr);
+    cairo_set_matrix(cr, &matrix);
+    cairo_push_group(cr);
+    paint(cr);
     cairo_pop_group_to_source(cr);
     cairo_paint_with_alpha(cr, alpha);
+    cairo_restore(cr);
 }
 
 } // namespace cerberus

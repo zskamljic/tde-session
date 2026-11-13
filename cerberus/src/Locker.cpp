@@ -64,6 +64,9 @@ struct Buffer {
     Owned<wl_buffer, wl_buffer_destroy> buffer;
     void* data = nullptr;
     std::size_t size = 0;
+    int width = 0;
+    int height = 0;
+    bool busy = false; // with the compositor, to be drawn on again once it lets go
 
     ~Buffer()
     {
@@ -242,19 +245,40 @@ void Locker::draw(Output& output)
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width);
     const std::size_t size = std::size_t(stride) * std::size_t(height);
 
-    const FileDescriptor fd(memfd_create("tde-cerberus", MFD_CLOEXEC));
-    if (!fd || ftruncate(fd.get(), off_t(size)) < 0)
-        return;
-    auto buffer = std::make_unique<Buffer>();
-    buffer->owner = this;
-    buffer->size = size;
-    buffer->data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd.get(), 0);
-    if (buffer->data == MAP_FAILED) {
-        buffer->data = nullptr;
-        return;
+    // A picture the compositor is done with is drawn on again: one made anew for each frame,
+    // in memory fresh from the kernel, and the compositor taking each in as new, made the
+    // curtain stutter as it went up.
+    const auto spare = std::ranges::find_if(
+        m_buffers, [&](const auto& b) { return !b->busy && b->width == width && b->height == height; });
+    Buffer* buffer = spare != m_buffers.end() ? spare->get() : nullptr;
+    if (!buffer) {
+        const FileDescriptor fd(memfd_create("tde-cerberus", MFD_CLOEXEC));
+        if (!fd || ftruncate(fd.get(), off_t(size)) < 0)
+            return;
+        auto made = std::make_unique<Buffer>();
+        made->owner = this;
+        made->size = size;
+        made->width = width;
+        made->height = height;
+        made->data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd.get(), 0);
+        if (made->data == MAP_FAILED) {
+            made->data = nullptr;
+            return;
+        }
+        const Owned<wl_shm_pool, wl_shm_pool_destroy> pool(wl_shm_create_pool(m_shm.get(), fd.get(), int(size)));
+        made->buffer.reset(wl_shm_pool_create_buffer(pool.get(), 0, width, height, stride, WL_SHM_FORMAT_ARGB8888));
+        static const wl_buffer_listener listener {
+            .release =
+                [](void* data, wl_buffer*) {
+                    auto* buffer = static_cast<Buffer*>(data);
+                    buffer->owner->released(*buffer);
+                },
+        };
+        wl_buffer_add_listener(made->buffer.get(), &listener, made.get());
+        buffer = made.get();
+        m_buffers.push_back(std::move(made));
     }
-    const Owned<wl_shm_pool, wl_shm_pool_destroy> pool(wl_shm_create_pool(m_shm.get(), fd.get(), int(size)));
-    buffer->buffer.reset(wl_shm_pool_create_buffer(pool.get(), 0, width, height, stride, WL_SHM_FORMAT_ARGB8888));
+    buffer->busy = true;
 
     {
         const Owned<cairo_surface_t, cairo_surface_destroy> surface(cairo_image_surface_create_for_data(
@@ -265,19 +289,10 @@ void Locker::draw(Output& output)
         cerberus::draw(cr.get(), output.width, output.height, m_face, &output == mainOutput());
     }
 
-    static const wl_buffer_listener listener {
-        .release =
-            [](void* data, wl_buffer*) {
-                auto* buffer = static_cast<Buffer*>(data);
-                buffer->owner->released(*buffer);
-            },
-    };
-    wl_buffer_add_listener(buffer->buffer.get(), &listener, buffer.get());
     wl_surface_set_buffer_scale(output.surface.get(), output.scale);
     wl_surface_attach(output.surface.get(), buffer->buffer.get(), 0, 0);
     wl_surface_damage_buffer(output.surface.get(), 0, 0, width, height);
     wl_surface_commit(output.surface.get());
-    m_buffers.push_back(std::move(buffer));
 }
 
 void Locker::drawAll()
@@ -316,7 +331,13 @@ void Locker::setMainOutput(wl_surface* surface)
 
 void Locker::released(Buffer& buffer)
 {
-    std::erase_if(m_buffers, [&](const auto& b) { return b.get() == &buffer; });
+    buffer.busy = false;
+    // Kept while some screen is still of its size, for the next picture there.
+    const bool needed = std::ranges::any_of(m_outputs, [&](const auto& output) {
+        return output->width * output->scale == buffer.width && output->height * output->scale == buffer.height;
+    });
+    if (!needed)
+        std::erase_if(m_buffers, [&](const auto& b) { return b.get() == &buffer; });
 }
 
 void Locker::setUpSeat(uint32_t capabilities)
@@ -720,7 +741,9 @@ int Locker::run()
         }
         if (fds[6].revents & POLLIN) {
             m_lift.step();
-            drawAll();
+            // The other screens show none of it.
+            if (Output* main = mainOutput())
+                draw(*main);
         }
         if (fds[1].revents & POLLIN) {
             if (const auto accepted = m_auth->result())
